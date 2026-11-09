@@ -1,0 +1,191 @@
+{
+  "utc": "2026-11-09T20:42:16.069536+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "36bc9591bccab78fd3e9383ade888467cad82f345e3511e15b93fbf46df6ec7b"
+  },
+  "repeats": 7,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "scalar_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let i:=0;let total:=0;while i<500000{total+=add_one(i);i+=1;}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "125000250000\n",
+          "cpp_sha256": "47f98ffb7ebde2c318fee18857ded89a1f8a908abe817c6b5ac4fddf4edc4257",
+          "runs_ms": [
+            9.910317,
+            9.428846,
+            9.101045,
+            9.410926,
+            9.438627,
+            9.530416,
+            9.381351
+          ],
+          "allocations": 500007,
+          "shared_ptr_copies": 2000002,
+          "median_ms": 9.428846
+        },
+        "current": {
+          "output": "125000250000\n",
+          "cpp_sha256": "01c01ae3fd47e449cc5ebc77e55c9e5ae50183a9853e28794005141ea9553cd5",
+          "runs_ms": [
+            9.707121,
+            9.758007,
+            9.389907,
+            9.551885,
+            9.86312,
+            10.360423,
+            9.506464
+          ],
+          "allocations": 500007,
+          "shared_ptr_copies": 2000002,
+          "median_ms": 9.707121
+        }
+      },
+      "speedup": 0.9713329008673117
+    },
+    "element_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let a:=[1;100000];let total:=0;for i in 0..20{for x in a{total+=add_one(x);}}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "4000000\n",
+          "cpp_sha256": "4c7b29ba6b987530ee0ba0067e0d4930f4d8f2fc34547d0b3ce0210d3e166bc3",
+          "runs_ms": [
+            26.962311,
+            26.967986,
+            27.022455,
+            26.755524,
+            27.627884,
+            26.861932,
+            26.971088
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 26.967986
+        },
+        "current": {
+          "output": "4000000\n",
+          "cpp_sha256": "209ef4103077ea4bef8674e54e9a472feb7f326ecb9e1bf68859bf2227d22454",
+          "runs_ms": [
+            27.00111,
+            27.053804,
+            26.942008,
+            27.327358,
+            29.009707,
+            27.205426,
+            26.84021
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 27.053804
+        }
+      },
+      "speedup": 0.9968278767747412
+    },
+    "extern_reductions": {
+      "source": "let a:=[1;10000];let total:=0;for i in 0..50{total+=fold(a,0,(x:Int,y:Int)=>x+y);let prefix:=scan(a,0,(x:Int,y:Int)=>x+y);total+=prefix.len();total+=to_vec(a).len();}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "1500050\n",
+          "cpp_sha256": "8b064842299abc2db4d5cf86ef8e105cf2af64c76dbb9c51feba143ee2cb62ce",
+          "runs_ms": [
+            38.560293,
+            40.144342,
+            37.584363,
+            38.447696,
+            39.454851,
+            37.96245,
+            38.306945
+          ],
+          "allocations": 3012264,
+          "shared_ptr_copies": 6501206,
+          "median_ms": 38.447696
+        },
+        "current": {
+          "output": "1500050\n",
+          "cpp_sha256": "0cd641ad989213c32f608de99faed9d57ad8fdaecf5e9b8ff38b8bb7940806a0",
+          "runs_ms": [
+            39.316766,
+            38.108539,
+            37.979913,
+            38.035774,
+            39.970782,
+            39.843143,
+            38.039643
+          ],
+          "allocations": 3012264,
+          "shared_ptr_copies": 6501206,
+          "median_ms": 38.108539
+        }
+      },
+      "speedup": 1.008899763908556
+    }
+  },
+  "assembly_equivalence": {
+    "method": "Compile both generated sources from the identical program.cpp path using g++ -std=c++20 -O2 -S -fno-ident, then assemble/link with g++. Compare the complete assembly and executables, and use objcopy to compare the .text, .rodata, .gcc_except_table and .eh_frame sections without normalization. Generated function names and assembler labels can differ.",
+    "cases": {
+      "scalar_call": {
+        "identical_assembly": false,
+        "assembly_sha256": [
+          "34f1e3140e350affa599c2db6c34f5c72881c8d6eb05bef654cd2a69356caa6b",
+          "41f38b967d78098d4ecc867d726a298a45f6e2a6144a55edad54a37dac038033"
+        ],
+        "identical_executables": false,
+        "executable_sha256": [
+          "0b871cecee9fabc745897aab0b2e881f6642d053fff12295cfe87965f6063eca",
+          "629aebabe1c01021d503ef13216077a8b9ef377376dfd84f49d1be1ff66dd6ab"
+        ],
+        "equal_runtime_sections": true,
+        "runtime_section_sha256": [
+          {
+            ".text": "5535c7f7e8233087c4b4c914f735fd769ee6c589082f3283a2fc216da170737f",
+            ".rodata": "0ae817dbded349abe550c38069c7c7bc056b1e9c8a346352ac41cf3824fbb8ee",
+            ".gcc_except_table": "a941a9b4efde7dd84684730dbdf537fa03f6021491cff945987a2e38095c1dc1",
+            ".eh_frame": "b5ea3afa13669bb01fdecb7bb0ae13cbaba0834d50c223f263d78eeb571802ec"
+          },
+          {
+            ".text": "5535c7f7e8233087c4b4c914f735fd769ee6c589082f3283a2fc216da170737f",
+            ".rodata": "0ae817dbded349abe550c38069c7c7bc056b1e9c8a346352ac41cf3824fbb8ee",
+            ".gcc_except_table": "a941a9b4efde7dd84684730dbdf537fa03f6021491cff945987a2e38095c1dc1",
+            ".eh_frame": "b5ea3afa13669bb01fdecb7bb0ae13cbaba0834d50c223f263d78eeb571802ec"
+          }
+        ]
+      },
+      "element_call": {
+        "identical_assembly": false,
+        "assembly_sha256": [
+          "5496b6896c1c732604a1d4899beaade97a273580a5dc3a52fd4a795ed7081fd7",
+          "dfd9d5a99b10b88899bfc14d27254bf46bc7ba736134517f086ff7e089273e65"
+        ],
+        "identical_executables": false,
+        "executable_sha256": [
+          "1522657006c49f9e4a2bba12991401d223d95cce73ee58aa4ce023b1fe8ff97c",
+          "1c5df31e47b50f2ba65a2835d0c9795f0574dabaa1e06bb02714a00514786bd2"
+        ],
+        "equal_runtime_sections": true,
+        "runtime_section_sha256": [
+          {
+            ".text": "502da0d1f4b4097c38f3e56ec6c23e21bffbea8c2d5aa363b1974b0edb8f864f",
+            ".rodata": "347365e0bc35ccb9b81db28152318f77ea838cd209c6c17f1632fa42c1f0960b",
+            ".gcc_except_table": "88e32b70d209adc27243764bc8d75fd821991c17a237335cfcdf080f58ab2dba",
+            ".eh_frame": "c4b62e2ab1c1897def5d87ffcfec4abcce33170594ad12bbb32f7463eeb6e352"
+          },
+          {
+            ".text": "502da0d1f4b4097c38f3e56ec6c23e21bffbea8c2d5aa363b1974b0edb8f864f",
+            ".rodata": "347365e0bc35ccb9b81db28152318f77ea838cd209c6c17f1632fa42c1f0960b",
+            ".gcc_except_table": "88e32b70d209adc27243764bc8d75fd821991c17a237335cfcdf080f58ab2dba",
+            ".eh_frame": "c4b62e2ab1c1897def5d87ffcfec4abcce33170594ad12bbb32f7463eeb6e352"
+          }
+        ]
+      }
+    }
+  }
+}

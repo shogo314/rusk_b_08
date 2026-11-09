@@ -617,16 +617,14 @@ impl Compiler {
         let native_iterator = format!("RuskIter<{native_element}>");
         self.types.insert(ty.into(), native.clone());
         self.types.insert(iterator.clone(), native_iterator.clone());
-        let prefix = format!("vector_{}_", self.functions.len());
-        let source = include_str!("../lib/vec.rusk")
-            .replace("NativeIterator", &native_iterator)
-            .replace("NativeElement", &native_element)
-            .replace("NativeVec", &native)
-            .replace("Iterator", &iterator)
-            .replace("Element", inner)
-            .replace("Vector", ty)
-            .replace("vector_function_", &prefix);
-        for statement in crate::parse(&source, "<stdlib/vec.rusk>")? {
+        let bindings = [
+            ("Element".into(), inner.into()),
+            ("Vector".into(), ty.into()),
+            ("Iterator".into(), iterator),
+        ]
+        .into();
+        let source = include_str!("../lib/vec_compat.rusk");
+        for statement in crate::parse(source, "<stdlib/vec_compat.rusk>")? {
             if let Stmt::Function(name, params, result, properties) = statement {
                 if name.text == "__read__"
                     && (vector_element(inner).is_some()
@@ -657,9 +655,11 @@ impl Compiler {
                 }
                 let parameters = params
                     .into_iter()
-                    .map(|(_, ty)| ty.text)
+                    .map(|(_, ty)| generics::substitute(&ty.text, &bindings))
                     .collect::<Vec<_>>();
-                let result = result.map_or("Unit".into(), |ty| ty.text);
+                let result = result.map_or("Unit".into(), |ty| {
+                    generics::substitute(&ty.text, &bindings)
+                });
                 if let Some(effects) = self.declared_native_effects(
                     &name,
                     &parameters,
@@ -677,9 +677,17 @@ impl Compiler {
                     &properties,
                     Origin::StandardLibrary,
                 )?;
+                let cpp = format!("rusk_vector_compat_{}", self.functions.len());
+                let code = self.render_native(
+                    &property(&name, &properties, "code")?,
+                    &bindings,
+                    Some(&cpp),
+                    &name.span,
+                    true,
+                )?;
                 self.functions.push(Function {
-                    cpp: property(&name, &properties, "cpp_name")?,
-                    code: property(&name, &properties, "code")?,
+                    cpp,
+                    code,
                     name,
                     params: parameters,
                     result,

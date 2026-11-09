@@ -2,6 +2,74 @@ mod support;
 use support::Case;
 
 #[test]
+fn vector_operations_are_generic_declarations_with_independent_names() {
+    // User declarations cannot assert the standard library's effect/lowering contracts.
+    let mut declarations = include_str!("../lib/vec.rusk")
+        .lines()
+        .filter(|line| {
+            !["effects:", "lower:", "lower_owned:", "lower_borrowed:"]
+                .iter()
+                .any(|property| line.trim_start().starts_with(property))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    for name in [
+        "__vec_new__",
+        "__vec_repeat__",
+        "len",
+        "push_back",
+        "__getitem__",
+        "__setitem__",
+        "copy",
+        "__assign__",
+        "__bool__",
+        "reverse",
+        "__add__",
+        "__iadd__",
+        "__iter__",
+        "__iter_has_next__",
+        "__iter_next__",
+        "__not__",
+        "Bool",
+        "pop_back",
+    ] {
+        declarations =
+            declarations.replace(&format!("fn {name}<"), &format!("fn migrated_{name}<"));
+    }
+    let case = Case::new(&format!(
+        r#"{declarations}
+let empty:=migrated___vec_new__::<Int>();
+wt migrated_len(empty),migrated___bool__(empty),migrated___not__(empty),migrated_Bool(empty);
+migrated_push_back(empty,4);wt migrated___getitem__(empty,0);
+let seed:=[1];let values:=migrated___vec_repeat__(seed,2);
+seed[0]=8;values[0][0]=3;wt seed,values;
+let snapshot:=migrated_copy(values);snapshot[0][0]=9;wt values,snapshot;
+let joined:=migrated___add__(values,snapshot);joined[0][0]=6;wt values;
+migrated___iadd__(empty,empty);wt migrated_len(empty),migrated_pop_back(empty);
+migrated___assign__(values,values);wt values;
+migrated_reverse(values);let cursor:=migrated___iter__(values);
+while migrated___iter_has_next__(cursor){{wt migrated___iter_next__(cursor);}}
+wt migrated___setitem__(empty,0,7),empty;
+struct Row{{value:Int;}}
+let rows:=migrated___vec_repeat__(Row{{value:2}},2);rows[0].value=5;
+wt rows[0].value,rows[1].value,migrated_len(rows);
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\n"
+        );
+    }
+}
+
+#[test]
 fn key_sort_checks_structural_changes_inside_user_key_operations_and_cleanup() {
     let source = r#"
 extern symbol watched_source {code:"Obj<RuskVec<std::int64_t>> watched;",}

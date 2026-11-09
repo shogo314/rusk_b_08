@@ -132,6 +132,10 @@ fn run() -> Result<(), String> {
         &[
             compiler::Source::standard(core),
             compiler::Source::standard(collections),
+            compiler::Source::standard(parse(
+                include_str!("../lib/vec.rusk"),
+                "<stdlib/vec.rusk>",
+            )?),
             compiler::Source::standard(algorithms),
             compiler::Source::user(source),
         ],

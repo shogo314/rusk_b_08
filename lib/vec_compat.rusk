@@ -1,0 +1,66 @@
+// Remaining type-dependent operations. Signature parameters are bound as AST types;
+// native code uses only explicit references. These operations still need migration.
+extern fn __write__(a: Vector) {
+    effects: "deep_io_write",
+    code: "void @{fn}(Obj<@{Vector}> a, [[maybe_unused]] Loc loc) { write_value(a); }",
+}
+
+extern fn sort(a: Vector) {
+    code: "void @{fn}(Obj<@{Vector}> a, [[maybe_unused]] Loc loc) { std::stable_sort(a->begin(),a->end(),[](const auto& x,const auto& y){return value_less(x,y);}); ++a->version; }",
+}
+
+extern fn sorted(a: Vector) -> Vector {
+    code: "Obj<@{Vector}> @{fn}(Obj<@{Vector}> a, [[maybe_unused]] Loc loc) { auto result=make_obj<@{Vector}>(*a); std::stable_sort(result->begin(),result->end(),[](const auto& x,const auto& y){return value_less(x,y);}); return result; }",
+}
+
+extern fn bisect_left(a: Vector, x: Element) -> Int {
+    code: "Obj<std::int64_t> @{fn}(Obj<@{Vector}> a, Obj<@{Element}> x, [[maybe_unused]] Loc loc) { auto it=std::lower_bound(a->begin(),a->end(),x,[](const auto& y,const auto& z){return value_less(y,z);}); return make_obj<std::int64_t>(it-a->begin()); }",
+}
+
+extern fn bisect_right(a: Vector, x: Element) -> Int {
+    code: "Obj<std::int64_t> @{fn}(Obj<@{Vector}> a, Obj<@{Element}> x, [[maybe_unused]] Loc loc) { auto it=std::upper_bound(a->begin(),a->end(),x,[](const auto& y,const auto& z){return value_less(y,z);}); return make_obj<std::int64_t>(it-a->begin()); }",
+}
+
+extern fn contains(a: Vector, x: Element) -> Bool {
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Element}> x, [[maybe_unused]] Loc loc) { return make_obj<bool>(std::any_of(a->begin(),a->end(),[&](const auto& y){return value_equal(y,x);})); }",
+}
+
+extern fn __read__(count: Int) -> Vector {
+    code: "Obj<@{Vector}> @{fn}(Obj<std::int64_t> count, [[maybe_unused]] Loc loc) { if(*count<0) fail(loc,\"negative array length\"); auto a=make_obj<@{Vector}>(@{Vector}{}); if(static_cast<__int128>(*count)>static_cast<__int128>(a->max_size())) fail(loc,\"array length out of range\"); a->reserve(static_cast<std::size_t>(*count)); for(std::int64_t i=0;i<*count;++i) a->push_back(read_value<@{Element}>(loc)); return a; }",
+}
+
+extern fn __eq__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "value_equal($0,$1)",
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_equal(a,b)); }",
+}
+
+extern fn __ne__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "!value_equal($0,$1)",
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_equal(a,b)); }",
+}
+
+extern fn __lt__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "value_less($0,$1)",
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_less(a,b)); }",
+}
+
+extern fn __le__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "!value_less($1,$0)",
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(b,a)); }",
+}
+
+extern fn __gt__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "value_less($1,$0)",
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_less(b,a)); }",
+}
+
+extern fn __ge__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "!value_less($0,$1)",
+    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(a,b)); }",
+}
