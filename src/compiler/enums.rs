@@ -124,15 +124,6 @@ impl Compiler {
             &name.span,
         )?;
         self.native_function("__assign__",vec![ty.clone();2],"Unit",|cpp|format!("void {cpp}(Obj<{native}> x,Obj<{native}> y,Loc loc){{auto snapshot=deep_copy(y,loc);x->value=std::move(snapshot->value);}}"),&name.span)?;
-        if base == "Option" {
-            let dummy = Value {
-                ty: ty.clone(),
-                id: ValueId::Probe,
-            };
-            for op in ["is_some", "is_none", "__bool__", "__not__", "value"] {
-                self.option_operation(op, std::slice::from_ref(&dummy), &name.span)?;
-            }
-        }
         Ok(true)
     }
     fn constructor_parts(&self, name: &str) -> Option<(String, String)> {
@@ -274,67 +265,6 @@ impl Compiler {
             .get(ty)
             .filter(|e| e.definition == "Option")
             .map(|e| e.arguments[0].clone())
-    }
-    pub(super) fn option_operation(
-        &mut self,
-        name: &str,
-        args: &[Value],
-        span: &Span,
-    ) -> Result<Option<usize>, String> {
-        let Some(first) = args.first() else {
-            return Ok(None);
-        };
-        let Some(element) = self.option_element(&first.ty) else {
-            return Ok(None);
-        };
-        let result = match name {
-            "is_some" | "is_none" | "__bool__" | "__not__" => "Bool".to_string(),
-            "value" => element,
-            _ => return Ok(None),
-        };
-        if args.len() != 1 {
-            return Err(span.error("Option operation takes one receiver"));
-        }
-        let native = self.types[&first.ty].clone();
-        let result_native = self.types[&result].clone();
-        let body = if name == "value" {
-            format!(
-                "if(rusk_enum_index<{native}>(x->value)!=0)fail(loc,\"absent Option value\");return rusk_enum_payload<{native},0>(x->value).field_0;"
-            )
-        } else {
-            format!(
-                "return make_obj<bool>(rusk_enum_index<{native}>(x->value){}0);",
-                if matches!(name, "is_none" | "__not__") {
-                    "!="
-                } else {
-                    "=="
-                }
-            )
-        };
-        let function = self.cached_native(
-            name,
-            vec![first.ty.clone()],
-            &result,
-            |cpp| {
-                format!(
-                    "Obj<{result_native}> {cpp}(Obj<{native}> x,[[maybe_unused]] Loc loc){{{body}}}"
-                )
-            },
-            span,
-        )?;
-        let contract = crate::native_effects::contract(
-            if name == "value" {
-                "option_value"
-            } else {
-                "read_fresh"
-            },
-            std::slice::from_ref(&first.ty),
-            &result,
-            &self.ir_types(),
-        )
-        .map_err(|error| span.error(error))?;
-        self.native_contracts.insert(function, contract);
-        Ok(Some(function))
     }
     pub(super) fn prepare_enum_copies(&mut self) -> Result<(), String> {
         let todo = self

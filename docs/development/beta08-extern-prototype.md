@@ -253,3 +253,12 @@ extern type<T> Sequence {
 
 
 標準の`Vec<T>`も`cpp_name:"RuskVec<{T}>"`と`representation:"vector<T>"`を持つ通常のジェネリック型宣言となった。具体化・型引数の検査・IRの要素情報は他の外部型と共通で、Vec専用のC++型登録・IR分類・要素型の列挙を行わない。Unitや不透明な外部型も格納でき、各操作が必要とするcopy・比較等は利用時に通常の候補から解決する。Unitを返す取得・置換・反復・popもオブジェクトABIを宣言し、通常のRusk呼び出しで結果の共有値を維持する。
+
+
+## enumの構築とフィールドの契約
+
+標準宣言の`effects:"variant_constructor:N"`はenumのvariant Nを構築し、各引数を対応するpayloadへ共有して格納することを表す。結果がenumであることと、variantの存在・payloadの個数・論理型を照合し、返却した各フィールドの別名を記録する。`Some`という名前やvariant 0に固定した契約ではない。
+
+`effects:"checked_variant_field:N:I"`は、enumである第一引数のvariant N・フィールドIへの共有を返し、取り出し時に失敗し得ることを表す。variant・フィールドの存在と返却型を検査する。Optionのvalueはこの契約を通常のジェネリックexternに付け、Unitの場合も`return_abi:"object"`で格納されている共有値を返す。これらの信頼契約は、他のeffectsと同じく埋め込み標準宣言だけが指定できる。
+
+Optionの構築・検査・値取得・try_readは、通常のジェネリック宣言から解決する。try_readの型付き入力参照は通常のRusk関数・extern・構造化入力を選び、参照先の効果が契約を満たすまでは外側も不透明にする。言語構文の`??`・`?!`に残るOptionの型・役割判定は、G5として引き続き整理する。

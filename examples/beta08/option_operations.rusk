@@ -1,0 +1,25 @@
+let text:="ab";
+let held:Option<Char>:=None;
+{
+    let original:=Some(text[0]);
+    held:=Some(original.value());
+    original=None;
+}
+held.value()='Z';
+wt text,held.is_some(),!held;
+held=None;
+text.push_back('!');
+wt text;
+fn __read__()->(Int,Str) {in number:Int,word:Str;return (number,word);}
+let pair:=try_read::<(Int,Str)>();
+wt pair.value(),try_read::<(Int,Str)>().is_none();
+extern fn token(n:Int)->Unit {
+    return_abi:"object",cpp_name:"unit_token",
+    code:"Obj<Unit> unit_token(Obj<std::int64_t> n,Loc){return Obj<Unit>(new Unit{},[n](auto* p){++*n;delete p;});}",
+}
+extern fn same(a:Unit,b:Unit)->Bool {
+    cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",
+}
+let count:=0;
+{let original:=token(count);let option:=Some(original);let saved:=option.value();option=None;wt same(original,saved),count;}
+wt count;

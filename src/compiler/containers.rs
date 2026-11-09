@@ -15,21 +15,7 @@ pub(super) struct Container {
 }
 
 impl Compiler {
-    pub(super) fn container_argument_hint(
-        &self,
-        name: &str,
-        count: usize,
-        values: &[Value],
-        expected: Option<&str>,
-    ) -> Option<String> {
-        let (base, args) = type_parts(name).unwrap_or((name, vec![]));
-        if base == "Some" && count == 1 && values.is_empty() {
-            return if args.len() == 1 {
-                Some(args[0].into())
-            } else {
-                expected.and_then(|ty| self.option_element(ty))
-            };
-        }
+    pub(super) fn container_argument_hint(&self, name: &str, values: &[Value]) -> Option<String> {
         let first = values.first()?;
         let c = self.containers.get(&first.ty)?;
         if matches!(c.shape, Shape::Dict | Shape::Set) {
@@ -228,44 +214,23 @@ impl Compiler {
         let (base, explicit) = type_parts(name).map_or((name, vec![]), |(n, a)| {
             (n, a.iter().map(|s| s.to_string()).collect())
         });
-        if !matches!(
-            base,
-            "Some" | "None" | "Option" | "Dict" | "Set" | "try_read"
-        ) {
+        if !matches!(base, "Dict" | "Set") {
             return Ok(None);
         }
-        let result = if base == "Some" {
-            if args.len() != 1 {
-                return Err(span.error("Some requires one value"));
-            }
-            if !explicit.is_empty() && explicit != [args[0].ty.clone()] {
-                return Err(span.error("Some type argument mismatch"));
-            }
-            format!("Option<{}>", args[0].ty)
-        } else if !explicit.is_empty() {
-            let constructor = if matches!(base, "None" | "try_read") {
-                "Option"
-            } else {
-                base
-            };
-            format!("{constructor}<{}>", explicit.join(","))
+        let result = if !explicit.is_empty() {
+            format!("{base}<{}>", explicit.join(","))
         } else {
             let ty = expected.ok_or_else(|| {
                 span.error(format!(
                     "{base} requires type arguments or a type annotation"
                 ))
             })?;
-            let wanted = if matches!(base, "None" | "try_read") {
-                "Option"
-            } else {
-                base
-            };
-            if type_parts(ty).is_none_or(|(b, _)| b != wanted) {
-                return Err(span.error(format!("{base} requires a {wanted} type context")));
+            if type_parts(ty).is_none_or(|(b, _)| b != base) {
+                return Err(span.error(format!("{base} requires a {base} type context")));
             }
             ty.into()
         };
-        if base != "Some" && !args.is_empty() {
+        if !args.is_empty() {
             return Err(span.error("constructor requires no arguments"));
         }
         self.check_type(&Name {
@@ -273,46 +238,16 @@ impl Compiler {
             span: span.clone(),
         })?;
         let native = self.types[&result].clone();
-        let params = args.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
-        let code = if base == "Some" {
-            let value = &self.types[&args[0].ty];
-            format!(
-                "Obj<{native}> $fn(Obj<{value}> value,Loc){{return rusk_enum_make<{native},0>(value);}}"
-            )
-        } else if base == "try_read" {
-            let element = self.option_element(&result).unwrap();
-            if !matches!(element.as_str(), "Int" | "Bool" | "Char" | "Str") {
-                return Err(span.error("try_read currently supports basic input types"));
-            }
-            let read = self.read_function(&element, 0, span)?;
-            self.used.insert(read);
-            let read = &self.functions[read].cpp;
-            format!(
-                "Obj<{native}> $fn(Loc loc){{while(ascii_space(rusk_peek()))rusk_get();if(rusk_peek()==std::char_traits<char>::eof())return rusk_enum_make<{native},1>();auto value={read}(loc);return rusk_enum_make<{native},0>(value);}}"
-            )
-        } else if self.option_element(&result).is_some() {
-            format!("Obj<{native}> $fn(Loc){{return rusk_enum_make<{native},1>();}}")
-        } else {
-            format!("Obj<{native}> $fn(Loc){{return make_obj<{native}>({native}{{}});}}")
-        };
         let function = self.cached_native(
             &format!("$constructor_{base}"),
-            params,
+            vec![],
             &result,
-            |cpp| code.replace("$fn", cpp),
+            |cpp| format!("Obj<{native}> {cpp}(Loc){{return make_obj<{native}>({native}{{}});}}"),
             span,
         )?;
-        let contract = crate::native_effects::contract(
-            match base {
-                "Some" => "option_some",
-                "try_read" => "io_read_fresh",
-                _ => "read_fresh",
-            },
-            &self.functions[function].params,
-            &result,
-            &self.ir_types(),
-        )
-        .map_err(|error| span.error(error))?;
+        let contract =
+            crate::native_effects::contract("read_fresh", &[], &result, &self.ir_types())
+                .map_err(|e| span.error(e))?;
         self.native_contracts.insert(function, contract);
         Ok(Some(function))
     }
@@ -331,9 +266,6 @@ impl Compiler {
         let Some(first) = args.first() else {
             return Ok(None);
         };
-        if let Some(index) = self.option_operation(name, args, span)? {
-            return Ok(Some(index));
-        }
         let Some(c) = self.containers.get(&first.ty).cloned() else {
             return Ok(None);
         };

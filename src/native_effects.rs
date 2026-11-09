@@ -138,50 +138,63 @@ pub(crate) fn contract(
                 });
             }
         }
-        "option_some" => {
-            if parameters.len() != 1 {
-                return Err("native Some contract requires one value".into());
-            }
+        specification if specification.starts_with("variant_constructor:") => {
+            let variant = specification
+                .strip_prefix("variant_constructor:")
+                .and_then(|n| n.parse::<usize>().ok())
+                .ok_or("invalid native enum constructor contract")?;
             let Some(crate::hir::Type::Enum(variants)) = types.get(result) else {
-                return Err("native Some contract requires an enum result".into());
+                return Err("native enum constructor contract requires an enum result".into());
             };
             if variants
-                .first()
-                .is_none_or(|(name, fields)| name != "Some" || fields != parameters)
+                .get(variant)
+                .is_none_or(|(_, fields)| fields != parameters)
             {
-                return Err("native Some contract has an invalid payload".into());
+                return Err("native enum constructor contract has an invalid payload".into());
             }
-            summary.parameters[0].escape = Effect::May;
-            summary.returned.aliases.insert(ReturnAlias {
-                result_path: vec![crate::effects::Projection::VariantField {
-                    variant: 0,
-                    field: 0,
-                }],
-                parameter: 0,
-                parameter_path: vec![],
-            });
+            for parameter in 0..parameters.len() {
+                summary.parameters[parameter].escape = Effect::May;
+                summary.returned.aliases.insert(ReturnAlias {
+                    result_path: vec![crate::effects::Projection::VariantField {
+                        variant,
+                        field: parameter,
+                    }],
+                    parameter,
+                    parameter_path: vec![],
+                });
+            }
         }
-        "option_value" => {
+        specification if specification.starts_with("checked_variant_field:") => {
+            let mut parts = specification.split(':').skip(1);
+            let mut number = || {
+                parts
+                    .next()
+                    .and_then(|p| p.parse::<usize>().ok())
+                    .ok_or("invalid native enum field contract")
+            };
+            let variant = number()?;
+            let field = number()?;
+            if parts.next().is_some() {
+                return Err("invalid native enum field contract".into());
+            }
             if parameters.len() != 1 {
-                return Err("native Option value contract requires one receiver".into());
+                return Err("native enum field contract requires one receiver".into());
             }
             let Some(crate::hir::Type::Enum(variants)) = types.get(&parameters[0]) else {
-                return Err("native Option value contract requires an enum".into());
+                return Err("native enum field contract requires an enum".into());
             };
             if variants
-                .first()
-                .is_none_or(|(name, fields)| name != "Some" || fields.as_slice() != [result])
+                .get(variant)
+                .and_then(|(_, fields)| fields.get(field))
+                .is_none_or(|ty| ty != result)
             {
-                return Err("native Option value contract has an invalid payload".into());
+                return Err("native enum field contract has an invalid payload".into());
             }
             summary.returned.fresh = false;
             summary.returned.aliases.insert(ReturnAlias {
                 result_path: vec![],
                 parameter: 0,
-                parameter_path: vec![crate::effects::Projection::VariantField {
-                    variant: 0,
-                    field: 0,
-                }],
+                parameter_path: vec![crate::effects::Projection::VariantField { variant, field }],
             });
             summary.parameters[0].escape = Effect::May;
             summary.may_fail = Effect::May;
@@ -345,7 +358,7 @@ mod tests {
         );
     }
     #[test]
-    fn option_value_returns_a_checked_payload_alias_without_external_retention() {
+    fn enum_field_returns_a_checked_payload_alias_without_external_retention() {
         let mut types = types();
         types.insert(
             "Option<Int>".into(),
@@ -354,7 +367,13 @@ mod tests {
                 ("None".into(), vec![]),
             ]),
         );
-        let summary = contract("option_value", &["Option<Int>".into()], "Int", &types).unwrap();
+        let summary = contract(
+            "checked_variant_field:0:0",
+            &["Option<Int>".into()],
+            "Int",
+            &types,
+        )
+        .unwrap();
         assert_eq!(summary.parameters[0].escape, Effect::May);
         assert_eq!(summary.parameters[0].retained, Effect::No);
         assert_eq!(summary.parameters[0].write, Effect::No);
@@ -366,19 +385,76 @@ mod tests {
             }]
         );
         assert_eq!(summary.may_fail, Effect::May);
-        let constructor = contract("option_some", &["Int".into()], "Option<Int>", &types).unwrap();
+        assert!(
+            contract(
+                "checked_variant_field:0:0",
+                &["Option<Int>".into()],
+                "Str",
+                &types
+            )
+            .is_err()
+        );
+        types.insert(
+            "Choice".into(),
+            Type::Enum(vec![
+                ("Empty".into(), vec![]),
+                ("Pair".into(), vec!["Str".into(), "Int".into()]),
+            ]),
+        );
+        let constructor = contract(
+            "variant_constructor:1",
+            &["Str".into(), "Int".into()],
+            "Choice",
+            &types,
+        )
+        .unwrap();
         assert!(constructor.returned.fresh);
-        assert_eq!(constructor.parameters[0].escape, Effect::May);
+        assert_eq!(constructor.returned.aliases.len(), 2);
         assert_eq!(constructor.parameters[0].retained, Effect::No);
+        let field = contract(
+            "checked_variant_field:1:1",
+            &["Choice".into()],
+            "Int",
+            &types,
+        )
+        .unwrap();
         assert_eq!(
-            constructor.returned.aliases.first().unwrap().result_path,
+            field.returned.aliases.first().unwrap().parameter_path,
             vec![Projection::VariantField {
-                variant: 0,
-                field: 0
+                variant: 1,
+                field: 1
             }]
         );
-        assert!(contract("option_some", &["Str".into()], "Option<Int>", &types).is_err());
-        assert!(contract("option_value", &["Option<Int>".into()], "Str", &types).is_err());
-        assert!(contract("option_value", &["Int".into()], "Int", &types).is_err());
+        for specification in [
+            "variant_constructor:",
+            "variant_constructor:x",
+            "variant_constructor:3",
+        ] {
+            assert!(
+                contract(specification, &[], "Choice", &types).is_err(),
+                "{specification}"
+            );
+        }
+        for specification in [
+            "checked_variant_field:1:x",
+            "checked_variant_field:1:1:0",
+            "checked_variant_field:0:0",
+            "checked_variant_field:1:2",
+        ] {
+            assert!(
+                contract(specification, &["Choice".into()], "Int", &types).is_err(),
+                "{specification}"
+            );
+        }
+        assert!(
+            contract(
+                "variant_constructor:1",
+                &["Int".into(), "Str".into()],
+                "Choice",
+                &types
+            )
+            .is_err()
+        );
+        assert!(contract("checked_variant_field:0:0", &["Int".into()], "Int", &types).is_err());
     }
 }

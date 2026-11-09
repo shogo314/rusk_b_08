@@ -814,3 +814,129 @@ let rows:=[risky(),2];watch(rows);wt "before";rows=[3,4];
         }
     }
 }
+
+#[test]
+fn option_operations_and_constructors_are_independent_generic_declarations() {
+    let source = include_str!("../lib/collections.rusk");
+    let mut declarations = source[source.find("extern fn Some").unwrap()..]
+        .lines()
+        .filter(|line| {
+            !["effects:", "lower:"]
+                .iter()
+                .any(|p| line.trim_start().starts_with(p))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    for name in [
+        "Some", "None", "Option", "is_some", "is_none", "__bool__", "__not__", "value", "try_read",
+    ] {
+        declarations =
+            declarations.replace(&format!("fn {name}<"), &format!("fn migrated_{name}<"));
+    }
+    let case = Case::new(&format!(
+        r#"{declarations}
+let x:=3;let present:=migrated_Some(x);migrated_value(present)=8;
+wt x,migrated_is_some(present),migrated_is_none(present),migrated___bool__(present),migrated___not__(present);
+let absent:Option<Int>:=migrated_None();let empty:=migrated_Option::<Int>();wt migrated_is_none(absent),migrated_is_none(empty);
+let array:Option<Vec<Int>>:=migrated_Some([]);wt migrated_value(array).len();
+let pair:=migrated_try_read::<(Int,Str)>();wt migrated_value(pair);
+struct Row{{value:Int;}}
+fn __read__()->Row{{in n:Int;return Row{{value:n}};}}
+let row:=migrated_try_read::<Row>();wt migrated_value(row).value;
+fn __read__()->Unit{{in n:Int;}}
+let unit:=migrated_try_read::<Unit>();wt migrated_is_some(unit),migrated_try_read::<Unit>().is_none();
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("4 hi 7 8", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"8 Yes No Yes No\nYes Yes\n0\n4 hi\n7\nYes Yes\n"
+        );
+    }
+}
+
+#[test]
+fn option_unit_values_keep_identity_and_tokens_and_checked_access_locations() {
+    let source = r#"
+extern fn token(n:Int)->Unit{return_abi:"object",cpp_name:"token",code:"Obj<Unit> token(Obj<std::int64_t> n,Loc){return Obj<Unit>(new Unit{},[n](auto* p){++*n;delete p;});}",}
+extern fn same(a:Unit,b:Unit)->Bool{cpp_name:"same",code:"Obj<bool> same(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+let count:=0;
+{let original:=token(count);let option:=Some(original);let held:=option.value();wt same(original,held),count;option=None::<Unit>();wt same(original,held),count;}
+wt count;
+fn inspect(readonly noescape option:Option<Int>)->Int{return copy(option.value());}
+wt inspect(Some(7));
+"#;
+    let case = Case::new(source);
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes 0\nYes 0\n1\n7\n");
+    }
+    let escaped=Case::new(r#"
+extern fn retain(x:Unit){cpp_name:"retain_unit",code:"Obj<Unit> saved_unit;void retain_unit(Obj<Unit> x,Loc){saved_unit=x;}",}
+fn blocked(noescape option:Option<Unit>){retain(option.value());}
+blocked(Some({}));
+"#).compile();
+    assert!(!escaped.status.success());
+    assert!(String::from_utf8_lossy(&escaped.stderr).contains("noescape"));
+    for source in [
+        "wt \"before\";\nlet empty:=None::<Unit>();empty.value();",
+        "wt \"before\";\nlet empty:=Option::<Int>();empty?!;",
+    ] {
+        let case = Case::new(source);
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains("main.rusk:2:") && error.contains("absent Option value"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn try_read_checks_eof_before_custom_and_structured_readers() {
+    let custom = Case::new(
+        r#"
+fn __read__()->Unit{wt "reader";in n:Int;}
+let first:=try_read::<Unit>();wt first.is_some();let second:=try_read::<Unit>();wt second.is_none();
+"#,
+    );
+    let structured =
+        Case::new("wt \"before\";\nlet pair:=try_read::<(Int,Str)>();wt pair.is_some();");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = custom.run_with_options("3", &options);
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"reader\nYes\nYes\n");
+        let out = custom.execute("");
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"No\nYes\n");
+        let out = structured.run_with_options("3 hi", &options);
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"before\nYes\n");
+        let out = structured.execute("");
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"before\nNo\n");
+        let out = structured.execute("3");
+        assert!(!out.status.success());
+        assert_eq!(out.stdout, b"before\n");
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("main.rusk:2:") && error.contains("unexpected end of input"),
+            "{error}"
+        );
+    }
+}

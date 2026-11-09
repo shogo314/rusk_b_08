@@ -18,6 +18,13 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'option_input': ('let total:=0;while let Some(value)=try_read::<Int>(){total+=value;}wt total;'),
+    'option_construction': ('let total:=0;for i in 0..200000{let option:=Some(i);'
+                            'match option{Some(value)=>{total+=value;},None=>{},};}wt total;'),
+    'option_operations': ('let total:=0;for i in 0..100000{let option:=Some(i);'
+                          'if option.is_some(){total+=option.value();}'
+                          'let empty:=Option::<Int>();if empty.is_none(){total+=1;}'
+                          'if !empty{total+=1;}}wt total;'),
     'record_vector_copy': ('struct Row{value:Int;text:Str;}let a:=[Row{value:1,text:"ab"};1000];'
                            'let total:=0;for round in 0..100{let b=a;total+=b[0].value;}wt total;'),
     'vector_copy': ('let a:=[[1,2,3,4];500];let total:=0;for round in 0..200{'
@@ -67,7 +74,7 @@ CASES = {
     'sum_rusk': ('fn rusk_total(a:Vec<Int>)->Int{let total:=0;for x in a{total+=x;}return total;}'
                  'let a:=[1;1000000];let total:=0;for i in 0..20{total+=rusk_total(a);}wt total;'),
 }
-INPUTS = {'vector_input': b'1 '*500000}
+INPUTS = {'vector_input': b'1 '*500000, 'option_input': b'1 '*200000}
 ALLOCATION_COUNTER = r'''
 #include <new>
 #include <cstdio>

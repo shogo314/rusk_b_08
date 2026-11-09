@@ -1430,11 +1430,9 @@ impl Compiler {
                 for arg in args {
                     // Use a context only when every remaining overload agrees.
                     let hints = self.argument_hints(&n.text, args.len(), &values, expected);
-                    let builtin_hint =
-                        self.enum_argument_hint(&n.text, &values, expected)
-                            .or_else(|| {
-                                self.container_argument_hint(&n.text, args.len(), &values, expected)
-                            });
+                    let builtin_hint = self
+                        .enum_argument_hint(&n.text, &values, expected)
+                        .or_else(|| self.container_argument_hint(&n.text, &values));
                     let hint = if hints.len() == 1 {
                         hints.first().map(String::as_str)
                     } else {

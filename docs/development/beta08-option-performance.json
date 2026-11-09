@@ -1,0 +1,182 @@
+{
+  "utc": "2026-11-09T23:47:20.459150+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "1fd19702c77c168a3e7f9548415e7c678d1920621e16deda3a1cc4f44b859b26"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "option_construction": {
+      "source": "let total:=0;for i in 0..200000{let option:=Some(i);match option{Some(value)=>{total+=value;},None=>{},};}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "788505b569c1f8ff8cc4566e16d0d98332a64aa9418d793721f3813bdea8e895",
+          "runs_ms": [
+            9.496314,
+            10.23497,
+            9.25669,
+            9.183954,
+            9.231203,
+            9.371585,
+            9.169977,
+            9.199012,
+            9.283571,
+            9.396862,
+            9.349207,
+            9.403634,
+            9.371003,
+            9.190987,
+            9.335157
+          ],
+          "output": "19999900000\n",
+          "allocations": 600010,
+          "shared_ptr_copies": 2600003,
+          "median_ms": 9.335157
+        },
+        "current": {
+          "cpp_sha256": "e903b3a674f9b22357f628b811be115dfcdd61ee5cb7907e3ef6227d931fb519",
+          "runs_ms": [
+            10.585007,
+            9.198043,
+            9.164256,
+            9.355165,
+            9.380732,
+            10.467526,
+            9.244708,
+            9.224097,
+            9.177801,
+            9.4391,
+            10.139569,
+            9.471392,
+            9.531545,
+            9.24577,
+            9.207538
+          ],
+          "output": "19999900000\n",
+          "allocations": 600010,
+          "shared_ptr_copies": 2600003,
+          "median_ms": 9.355165
+        }
+      },
+      "speedup": 0.9978612883898895
+    },
+    "option_operations": {
+      "source": "let total:=0;for i in 0..100000{let option:=Some(i);if option.is_some(){total+=option.value();}let empty:=Option::<Int>();if empty.is_none(){total+=1;}if !empty{total+=1;}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "8d4f4e020e59c1a4f335ccdd4f349b238ee7abf9d3e529c7a46a7c0744e2e90d",
+          "runs_ms": [
+            6.767053,
+            6.699833,
+            6.900893,
+            6.775377,
+            6.92865,
+            7.753397,
+            6.943251,
+            6.892248,
+            6.682504,
+            6.760794,
+            6.732106,
+            6.832012,
+            6.896704,
+            7.566418,
+            6.730443
+          ],
+          "output": "5000150000\n",
+          "allocations": 600010,
+          "shared_ptr_copies": 1500003,
+          "median_ms": 6.832012
+        },
+        "current": {
+          "cpp_sha256": "678c326e992e3706963038a433c44323c9ab074983f4ed4c311c37e15dfa71a3",
+          "runs_ms": [
+            5.631727,
+            5.352817,
+            5.479631,
+            5.306339,
+            5.517588,
+            5.55808,
+            5.376601,
+            6.171826,
+            5.391998,
+            5.297159,
+            5.289457,
+            5.768382,
+            5.52153,
+            5.418176,
+            5.558421
+          ],
+          "output": "5000150000\n",
+          "allocations": 300010,
+          "shared_ptr_copies": 1200003,
+          "median_ms": 5.479631
+        }
+      },
+      "speedup": 1.2468014725809091
+    },
+    "option_input": {
+      "source": "let total:=0;while let Some(value)=try_read::<Int>(){total+=value;}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "a27efeea82d8f043e7734366d73ad4bdb29d2e3ea212059f9106780314afe22d",
+          "runs_ms": [
+            7.723582,
+            7.727569,
+            8.33176,
+            7.747745,
+            7.812758,
+            8.173854,
+            7.491276,
+            7.913757,
+            7.457163,
+            7.6644,
+            8.872401,
+            7.983868,
+            7.572589,
+            8.507608,
+            8.432804
+          ],
+          "output": "200000\n",
+          "allocations": 600007,
+          "shared_ptr_copies": 1200000,
+          "median_ms": 7.812758
+        },
+        "current": {
+          "cpp_sha256": "00134728b4f0bca1c4eb444e6f3b798b9a9ca52c3e0f6891e12486c7a0529f66",
+          "runs_ms": [
+            8.087822,
+            8.281784,
+            7.475322,
+            7.557307,
+            7.816415,
+            7.821754,
+            7.80908,
+            7.800506,
+            7.435713,
+            7.58879,
+            7.550687,
+            7.542923,
+            7.427798,
+            7.985433,
+            7.881296
+          ],
+          "output": "200000\n",
+          "allocations": 600007,
+          "shared_ptr_copies": 1200000,
+          "median_ms": 7.800506
+        }
+      },
+      "input_bytes": 400000,
+      "input_sha256": "5b0f35b40f319d4e49c65df174a5a4b59b6c5c142483df86de1680ee449265d3",
+      "speedup": 1.0015706673387597
+    }
+  }
+}
