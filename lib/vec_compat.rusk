@@ -1,5 +1,0 @@
-// Remaining type-dependent output. This operation still needs migration.
-extern fn __write__(a: Vector) {
-    effects: "deep_io_write",
-    code: "void @{fn}(Obj<@{Vector}> a, [[maybe_unused]] Loc loc) { write_value(a); }",
-}

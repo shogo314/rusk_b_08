@@ -99,17 +99,18 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
     }
     for id in &context.native_value_references {
         let f = &program.functions[*id];
+        let result = if f.result == "Unit" {
+            "void"
+        } else {
+            &context.types[&f.result]
+        };
         let mut params = f
             .params
             .iter()
             .map(|ty| format!("const Obj<{}>&", context.types[ty]))
             .collect::<Vec<_>>();
         params.push("Loc".into());
-        out += &format!(
-            "{} rusk_value_ref_{id}({});\n",
-            context.types[&f.result],
-            params.join(",")
-        );
+        out += &format!("{} rusk_value_ref_{id}({});\n", result, params.join(","));
     }
     for id in &context.native_value_references {
         let f = &program.functions[*id];
@@ -133,11 +134,21 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             .unwrap_or_else(|| {
                 let mut call_args = args.clone();
                 call_args.push("rusk_loc".into());
-                format!("*{}({})", info.cpp, call_args.join(","))
+                let call = format!("{}({})", info.cpp, call_args.join(","));
+                if f.result == "Unit" {
+                    call
+                } else {
+                    format!("*{call}")
+                }
             });
+        let (result, expression) = if f.result == "Unit" {
+            ("void", format!("static_cast<void>({expression})"))
+        } else {
+            (context.types[&f.result].as_str(), expression)
+        };
         out += &format!(
             "{} rusk_value_ref_{id}({}){{return {expression};}}\n",
-            context.types[&f.result],
+            result,
             params.join(",")
         );
     }

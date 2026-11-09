@@ -651,62 +651,6 @@ impl Compiler {
         let native_element = self.types[inner].clone();
         let native = format!("RuskVec<{native_element}>");
         self.types.insert(ty.into(), native.clone());
-        let bindings = [
-            ("Element".into(), inner.into()),
-            ("Vector".into(), ty.into()),
-        ]
-        .into();
-        let source = include_str!("../lib/vec_compat.rusk");
-        for statement in crate::parse(source, "<stdlib/vec_compat.rusk>")? {
-            if let Stmt::Function(name, params, result, properties) = statement {
-                if self.record_element(inner) && name.text == "__write__" {
-                    continue;
-                }
-                let parameters = params
-                    .into_iter()
-                    .map(|(_, ty)| generics::substitute(&ty.text, &bindings))
-                    .collect::<Vec<_>>();
-                let result = result.map_or("Unit".into(), |ty| {
-                    generics::substitute(&ty.text, &bindings)
-                });
-                if let Some(effects) = self.declared_native_effects(
-                    &name,
-                    &parameters,
-                    &result,
-                    &properties,
-                    Origin::StandardLibrary,
-                )? {
-                    self.native_contracts.insert(self.functions.len(), effects);
-                }
-                self.register_native_lowering(
-                    self.functions.len(),
-                    &name,
-                    &parameters,
-                    &result,
-                    &properties,
-                    Origin::StandardLibrary,
-                )?;
-                let cpp = format!("rusk_vector_compat_{}", self.functions.len());
-                let code = self.render_native(
-                    &property(&name, &properties, "code")?,
-                    &bindings,
-                    Some(&cpp),
-                    &name.span,
-                    true,
-                    None,
-                )?;
-                self.functions.push(Function {
-                    cpp,
-                    code,
-                    name,
-                    params: parameters,
-                    result,
-                    body: None,
-                    origin: Origin::StandardLibrary,
-                    checked: None,
-                });
-            }
-        }
         Ok(())
     }
     fn temp(&mut self) -> ValueId {

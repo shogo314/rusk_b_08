@@ -18,6 +18,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'vector_output': ('let values:=[123;1000];let matrix:=[values,values];'
+                      'let rows:=[(1,2);1000];for round in 0..500{wt matrix,rows;}'),
     'vector_input': ('in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;'
                      'wt values.len(),values[-1],rows.len(),rows[-1][1];'),
     'vector_ordering': ('let a:=[0;4000];let total:=0;for round in 0..60{'
@@ -123,7 +125,12 @@ def main():
                 if expected is None:
                     expected = output
                 assert output == expected, (name, variant, output, expected)
-                data = {'output': output.decode(), 'cpp_sha256': hashlib.sha256(cpp.read_bytes()).hexdigest(), 'runs_ms': []}
+                data = {'cpp_sha256': hashlib.sha256(cpp.read_bytes()).hexdigest(), 'runs_ms': []}
+                if len(output) <= 4096:
+                    data['output'] = output.decode()
+                else:
+                    data['output_bytes'] = len(output)
+                    data['output_sha256'] = hashlib.sha256(output).hexdigest()
                 row['variants'][variant] = data
                 instrumented = cpp.read_text().replace('#include <limits>', '#include <limits>\n'+ALLOCATION_COUNTER, 1)
                 counted = directory/(name+'-'+variant+'-alloc.cpp')

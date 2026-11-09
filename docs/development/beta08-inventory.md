@@ -17,7 +17,7 @@
 | ID | 現在の処理と所在 | 分類・移行先／残す理由 | 依存 | 検証 |
 |---|---|---|---|---|
 | N01 | `compiler.rs::compile`の外部型・関数登録、`rusk.par::ExternType/ExternFn` | 移行：具体型限定の登録を外部ジェネリクスと共通化。通常の型検査は残す | G1、G2 | `generics`、`e2e`＋外部型・関数の新規例 |
-| N02 | `compiler.rs::check_type/specialize_vector`のVec要素制限、入出力の選別 | 移行中：入力・比較・探索・ソートを含む30操作と配列反復型を通常のジェネリックexternへ移し広域置換を削除。Vecの型宣言と残る出力操作の型条件を移す | G1、G2、G4 | `e2e`、`records`、`enums`、`beta06`、`library_migration`、`extern_generics` |
+| N02 | `compiler.rs::check_type/specialize_vector`のVec型の専用登録と要素制限 | 移行中：入出力・比較・探索・ソートを含む31操作と配列反復型を通常のジェネリックexternへ移し広域置換を削除。入出力の選別と操作の専用登録も撤去。残るVecの型宣言と要素制限を移す | G1、G2、G4 | `e2e`、`records`、`enums`、`beta06`、`library_migration`、`extern_generics` |
 | N03 | `compiler.rs::call`のenum→container→通常解決→collection→higher_orderという専用経路 | 移行：ライブラリ関数は共通の候補解決へ。enumの言語構文との接続だけはN07と分けて残す | G1〜G5 | `generics`、`higher_order`、`beta05`、`enums` |
 | N04 | `compiler.rs::return_selected`、`containers.rs::container_argument_hint`のread・Vec構築・Some・Dict操作に固有の型ヒント | 移行：宣言の型パラメータと期待型に基づく推論へ | G1、G2 | `generics`、`beta05`、`enums`＋期待型だけで決まるextern |
 | N05 | `compiler.rs::compile`、`enums.rs::register_enum`の標準型・構築関数の予約名 | 要設計：内部生成名の保護は残す。標準型・関数の予約は重複宣言と構文上の必要性を個別に確認 | G1、G5 | `generics`、`records`、`enums`の不正宣言 |
@@ -92,7 +92,7 @@
 
 | 対象 | 状態 | 実装と残る仕事 |
 |---|---|---|
-| N02 | 入力・比較・探索・ソートを含む30操作と配列反復型を通常の宣言へ移行、広域置換を撤去 | `lib/vec.rusk`をpreludeのジェネリックexternとして読み込む。比較・探索・ソートは要素の通常の操作を解決し、未知の効果には保持と変更検査を保つ。配列反復型も`Iter<Vec<T>>`の型パターンへ接続。配列入力は要素の入力を通常の型付き参照で解決する。残る出力操作は`lib/vec_compat.rusk`でASTの型引数と明示したC++参照だけを展開。Vec型の登録、要素型制限、出力の選別・補助定義、Tuple・多次元配列の入力生成は引き続き移行する |
+| N02 | 入出力・比較・探索・ソートを含む31操作と配列反復型を通常の宣言へ移行、広域置換を撤去 | `lib/vec.rusk`をpreludeのジェネリックexternとして読み込む。比較・探索・ソートは要素の通常の操作を解決し、未知の効果には保持と変更検査を保つ。配列反復型も`Iter<Vec<T>>`の型パターンへ接続。配列入力は要素の入力を通常の型付き参照で解決する。配列出力も要素のUnit操作を通常の参照で解決し、操作の専用登録と`lib/vec_compat.rusk`を削除。Vec型の登録、要素型制限、コピー・入出力等のC++補助、Tuple・多次元配列の入力生成は引き続き移行する |
 | A01 | 基本型・RangeIter・配列反復型を宣言へ接続、コンテナの専用登録は未完了 | 標準の具体・ジェネリック外部型に`representation`を付け、IRへスカラーの種類・要素・キー等を渡す。coreの基本型とRangeIter、`Iter<Vec<T>>`の名前による分類を削除。Vec・Dict/Set・遅延反復の既存登録は残る |
 | A02 | バッファ要素・整数添字を接続、他の契約は未完了 | Str→Charという射影を、宣言されたバッファ要素へ変更。要素契約の添字はスカラー表現で検証し、ネイティブ深いコピーの分類も表現を使う。Optionのvariant等に依存する契約の移行は残る |
 | A04 | 集約値の判定をIRの型情報へ接続 | effectsとreadonlyのInt/Bool/Char/Unitの列挙を削除。内部に共有値を持たない型か、宣言・IRから判断する。未知の外部型と不明な共有先は保守的に扱う |

@@ -1,0 +1,12 @@
+struct Row {ch:Char;}
+fn __write__(row:Row) {__write__(row.ch);}
+fn show(readonly noescape rows:Vec<Row>) {wt rows;}
+let text:="ab";
+{
+    let rows:=[Row{ch:text[0]},Row{ch:text[1]}];
+    show(rows);
+    let nested:=[rows,rows];
+    wt nested;
+}
+text.push_back('!');
+wt text;

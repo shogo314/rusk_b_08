@@ -118,14 +118,6 @@ impl Compiler {
         Ok(())
     }
 
-    pub(super) fn record_element(&self, ty: &str) -> bool {
-        let mut inner = ty;
-        while let Some(element) = vector_element(inner) {
-            inner = element;
-        }
-        !self.automatic_value(inner)
-    }
-
     pub(super) fn record_cpp(&self) -> String {
         let mut code = String::new();
         for name in self.records.keys() {

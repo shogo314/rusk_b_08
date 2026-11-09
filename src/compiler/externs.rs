@@ -547,13 +547,14 @@ impl Compiler {
                         continue;
                     }
                     if matches!(kind, template::CallKind::Value)
+                        && result != "Unit"
                         && !self
                             .ir_types()
                             .get(&result)
                             .is_some_and(crate::hir::Type::scalar_value)
                     {
                         return Err(span.error(
-                            "native value references require a declared non-Unit scalar result",
+                            "native value references require Unit or a declared scalar result",
                         ));
                     }
                     if self.functions[index].body.is_none()

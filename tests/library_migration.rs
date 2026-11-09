@@ -216,6 +216,7 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
         .collect::<Vec<_>>()
         .join("\n");
     for name in [
+        "__write__",
         "__read__",
         "__vec_new__",
         "__vec_repeat__",
@@ -252,6 +253,7 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
     }
     let case = Case::new(&format!(
         r#"{declarations}
+let printed:Vec<Vec<Int>>:=[[1,2],[],[3]];migrated___write__(printed);wt "done";
 wt migrated___read__::<Int>(2);
 let empty:=migrated___vec_new__::<Int>();
 wt migrated_len(empty),migrated___bool__(empty),migrated___not__(empty),migrated_Bool(empty);
@@ -281,7 +283,7 @@ let ordered:=migrated_sorted([3,1,2]);migrated_sort(ordered);wt ordered,migrated
         );
         assert_eq!(
             out.stdout,
-            b"4 5\n0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n1 2 3 1 2 Yes\n"
+            b"1 2  3done\n4 5\n0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n1 2 3 1 2 Yes\n"
         );
     }
 }
@@ -652,6 +654,87 @@ fn vector_input_reports_scalar_reader_errors_at_the_input_site() {
                     "{ty}: {error}"
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn vector_output_resolves_user_writers_and_proves_readonly_noescape_only_when_covered() {
+    let pure = r#"
+struct Row{ch:Char;}
+fn __write__(row:Row){__write__(row.ch);}
+fn show(readonly noescape rows:Vec<Row>){wt rows;}
+let text:="ab";{let rows:=[Row{ch:text[0]},Row{ch:text[1]}];show(rows);}
+text.push_back('!');wt text;
+let matrix:Vec<Vec<Int>>:=[[],[1,2],[],[3],[]];wt matrix;
+wt [true,false],["a","b"],['x','y'];
+struct Number{value:Int;}
+fn __write__(row:Number){__write__(row.value+1);}
+fn show_numbers(readonly noescape rows:Vec<Number>){wt rows;}
+show_numbers([Number{value:1},Number{value:2}]);
+"#;
+    let changing = r#"
+struct Row{value:Int;}
+fn __write__(row:Row){__write__(row.value);row.value+=1;}
+let rows:=[Row{value:1},Row{value:2}];wt rows;wt rows;
+"#;
+    for (source, expected) in [
+        (pure, "a b\nab!\n 1 2  3 \nYes No a b x y\n2 3\n"),
+        (changing, "1 2\n2 3\n"),
+    ] {
+        let case = Case::new(source);
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(out.stdout, expected.as_bytes());
+        }
+    }
+    for restriction in ["readonly", "noescape"] {
+        let source = format!(
+            r#"
+struct Row{{value:Int;}}
+extern fn __write__(row:Row){{cpp_name:"opaque_writer",code:"void opaque_writer(Obj<RuskRecord0>,Loc){{}}",}}
+fn show({restriction} rows:Vec<Row>){{wt rows;}}
+show([Row{{value:1}}]);
+"#
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains(restriction));
+    }
+}
+
+#[test]
+fn vector_output_checks_mutations_in_writers_return_cleanup_and_element_release() {
+    let definitions = r#"
+extern symbol output_state {code:"Obj<RuskVec<RuskVec<std::int64_t>>> watched;",}
+extern fn watch(a:Vec<Vec<Int>>) {cpp_name:"watch",code:"void watch(Obj<RuskVec<RuskVec<std::int64_t>>> a,Loc){watched=a;}",}
+extern fn inner()->Vec<Int>{cpp_name:"inner",code:"Obj<RuskVec<std::int64_t>> inner(Loc){return Obj<RuskVec<std::int64_t>>(new RuskVec<std::int64_t>{},[](auto* p){delete p;if(watched){watched->clear();++watched->version;}});}",}
+extern fn __write__(a:Vec<Int>)->Unit {
+    return_abi:"object",cpp_name:"native::write_inner",
+    code:"namespace native {Obj<Unit> write_inner(Obj<RuskVec<std::int64_t>> a,Loc){rusk_write('x');ACTION}}",
+}
+let rows:=[inner(),[2]];watch(rows);wt "before";wt rows;
+"#;
+    for action in [
+        "watched->clear();++watched->version;return make_obj<Unit>(Unit{});",
+        "return Obj<Unit>(new Unit{},[](auto* p){delete p;watched->clear();++watched->version;});",
+        "(*watched)[0]=make_obj<RuskVec<std::int64_t>>(RuskVec<std::int64_t>{});return make_obj<Unit>(Unit{});",
+    ] {
+        let case = Case::new(&definitions.replace("ACTION", action));
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\nx");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains("main.rusk:") && error.contains("container changed during output"),
+                "{error}"
+            );
         }
     }
 }

@@ -77,7 +77,7 @@ pub(crate) fn contract(
                 return Err("native write contract requires Unit result".into());
             }
         }
-        "io_read_fresh" | "io_write" => {
+        "io_read_fresh" | "io_write" | "checked_io_write" => {
             summary.io = Effect::May;
             summary.may_diverge = Effect::May; // IO can block.
             if specification == "io_read_fresh" {
@@ -85,8 +85,15 @@ pub(crate) fn contract(
                 if result == "Unit" {
                     return Err("native input contract requires a result".into());
                 }
-            } else if result != "Unit" {
-                return Err("native output contract requires Unit result".into());
+            } else {
+                if result != "Unit" {
+                    return Err("native output contract requires Unit result".into());
+                }
+                summary.may_fail = if specification == "checked_io_write" {
+                    Effect::May
+                } else {
+                    Effect::No
+                };
             }
         }
         "resize_retain_second" | "replace_element" => {
@@ -284,6 +291,7 @@ mod tests {
             ("write_first", vec![], "Unit"),
             ("write_first", vec!["Int".into()], "Int"),
             ("io_write", vec!["Int".into()], "Int"),
+            ("checked_io_write", vec!["Int".into()], "Int"),
             ("io_read_fresh", vec![], "Unit"),
             ("element", vec!["Int".into(), "Int".into()], "Int"),
             ("element", vec!["Str".into(), "Int".into()], "Int"),

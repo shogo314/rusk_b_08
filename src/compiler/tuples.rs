@@ -187,6 +187,28 @@ impl Compiler {
             self.functions.push(Function { name: Name { text:name.into(), span:record.name.span.clone() }, params:vec![ty.clone();2], result:"Bool".into(), cpp:cpp.clone(), code:format!("Obj<bool> {cpp}(Obj<{native}> a, Obj<{native}> b, Loc) {{ return make_obj<bool>({expression}); }}"), body:None, origin:Origin::Generated,checked:None });
         }
         let cpp = format!("write_{native}");
+        // This writer is generated only for recursively standard values and
+        // calls the same read-only helper as its body. Expose that expression
+        // through the common Unit reference ABI without copying each Tuple.
+        self.native_lowerings.insert(
+            self.functions.len(),
+            crate::native_lowering::Lowering {
+                scalar: Some(
+                    crate::native_lowering::Template::parse("write_value($0)", 1)
+                        .expect("generated tuple output expression"),
+                ),
+                ..Default::default()
+            },
+        );
+        self.native_contracts.insert(
+            self.functions.len(),
+            crate::native_effects::contract(
+                "io_write",
+                std::slice::from_ref(ty),
+                "Unit",
+                &self.ir_types(),
+            )?,
+        );
         self.functions.push(Function {
             name: Name {
                 text: "__write__".into(),

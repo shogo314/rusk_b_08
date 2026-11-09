@@ -312,8 +312,8 @@ wt unit_copy_safe::<Unit>(),unknown_metadata::<Int>();
 }
 
 #[test]
-fn native_value_references_reject_aggregate_and_unit_results() {
-    for (ty, body) in [("Str", "return \"text\";"), ("Unit", "")] {
+fn native_value_references_reject_aggregate_results() {
+    for (ty, body) in [("Str", "return \"text\";"), ("Vec<Int>", "return [1];")] {
         let source = format!(
             r#"
 fn produce()->{ty}{{{body}}}
@@ -325,7 +325,7 @@ native::<{ty}>();
         assert!(!out.status.success());
         let error = String::from_utf8_lossy(&out.stderr);
         assert!(
-            error.contains("native value references require a declared non-Unit scalar result"),
+            error.contains("native value references require Unit or a declared scalar result"),
             "{error}"
         );
     }
@@ -890,5 +890,34 @@ let n:=3;wt exercise(n),n;
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(out.stdout, b"12 5\n");
+    }
+}
+
+#[test]
+fn unit_value_references_preserve_calls_cleanup_assignment_and_recursion() {
+    let case = Case::new(
+        r#"
+fn touch(x:Int){x+=1;}
+extern fn token(x:Int)->Unit {
+    return_abi:"object",cpp_name:"native::token",
+    code:"namespace native {Obj<Unit> token(Obj<std::int64_t> x,Loc){return Obj<Unit>(new Unit{},[x](Unit* p){++*x;delete p;});}}",
+}
+extern fn actions<T>(x:T) {
+    code:"void @{fn}(Obj<@{T}> x,Loc loc){@{value_call touch(T)->Unit}(x,loc);@{value_call token(T)->Unit}(x,loc);@{value_call __assign__(T,T)->Unit}(x,make_obj<@{T}>(*x+5),loc);}",
+}
+extern fn descend<T>(x:T,n:Int) {
+    code:"void @{fn}(Obj<@{T}> x,Obj<@{Int}> n,Loc loc){if(*n==0)return;@{value_call touch(T)->Unit}(x,loc);@{value_call descend(T,Int)->Unit}(x,make_obj<@{Int}>(*n-1),loc);}",
+}
+let count:=3;actions(count);wt count;descend(count,3);wt count;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"10\n13\n");
     }
 }

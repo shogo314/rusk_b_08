@@ -1,0 +1,74 @@
+{
+  "utc": "2026-11-09T22:55:02.627311+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "5eb2ea57048032d1315e64a37645f1f227460ab16a22468b9bc948fd8aae01b6"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "vector_output": {
+      "source": "let values:=[123;1000];let matrix:=[values,values];let rows:=[(1,2);1000];for round in 0..500{wt matrix,rows;}",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "1fd784ad4bed40bbe628c1786a96a9ffab32e9c3bae5685698047124355e2c17",
+          "runs_ms": [
+            15.256899,
+            16.620489,
+            16.096469,
+            15.434872,
+            16.265255,
+            17.42199,
+            17.144371,
+            15.245811,
+            16.003566,
+            15.988931,
+            15.05941,
+            15.355174,
+            14.906303,
+            16.221144,
+            17.575317
+          ],
+          "output_bytes": 6000000,
+          "output_sha256": "2533202b9cdb6aa1127237d1df9ae5111ddbbccb36bb4d1692bb0e9a11732e22",
+          "allocations": 4023,
+          "shared_ptr_copies": 4020,
+          "median_ms": 16.003566
+        },
+        "current": {
+          "cpp_sha256": "1afd4b2d97374b21c4def77b8a0aa0316143deb56a32e50bf21f274e20434b27",
+          "runs_ms": [
+            14.088114,
+            13.906638,
+            13.856439,
+            15.109594,
+            15.408253,
+            15.21973,
+            13.518138,
+            14.996633,
+            14.054037,
+            14.23575,
+            14.555395,
+            13.685119,
+            13.641518,
+            13.977536,
+            14.101228
+          ],
+          "output_bytes": 6000000,
+          "output_sha256": "2533202b9cdb6aa1127237d1df9ae5111ddbbccb36bb4d1692bb0e9a11732e22",
+          "allocations": 4023,
+          "shared_ptr_copies": 3020,
+          "median_ms": 14.088114
+        }
+      },
+      "speedup": 1.1359622728776897
+    }
+  }
+}

@@ -4,6 +4,12 @@ extern type<T> Iter<Vec<T>> {
     representation: "iterator<T>",
 }
 
+extern fn __write__<T>(a:Vec<T>) {
+    effects: "checked_io_write",
+    lower: "([&](){auto emit=[&](const auto& a){[[maybe_unused]]const auto version=a->version;const auto size=a->size();auto guard=[&](){if constexpr(@{writes __write__(T)->Unit}){if(a->version!=version||a->size()!=size)fail($loc,\"container changed during output\");}};for(std::size_t i=0;i<size;++i){guard();if(i)rusk_write(' ');if constexpr(@{writes __write__(T)->Unit}){{auto item=(*a)[i];@{value_call __write__(T)->Unit}(item,$loc);guard();}}else{@{value_call __write__(T)->Unit}((*a)[i],$loc);}guard();}};if constexpr(@{writes __write__(T)->Unit}){auto owner=$0;emit(owner);}else emit($0);}())",
+    code: "void @{fn}(Obj<@{Vec<T>}> a,Loc loc){([&](){auto emit=[&](const auto& a){[[maybe_unused]]const auto version=a->version;const auto size=a->size();auto guard=[&](){if constexpr(@{writes __write__(T)->Unit}){if(a->version!=version||a->size()!=size)fail(loc,\"container changed during output\");}};for(std::size_t i=0;i<size;++i){guard();if(i)rusk_write(' ');if constexpr(@{writes __write__(T)->Unit}){{auto item=(*a)[i];@{value_call __write__(T)->Unit}(item,loc);guard();}}else{@{value_call __write__(T)->Unit}((*a)[i],loc);}guard();}};if constexpr(@{writes __write__(T)->Unit}){auto owner=a;emit(owner);}else emit(a);}());}",
+}
+
 extern fn __read__<T>(count:Int)->Vec<T> {
     code: "Obj<@{Vec<T>}> @{fn}(Obj<@{Int}> count,Loc loc){const auto size=*count;if(size<0)fail(loc,\"negative array length\");auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{ });if(static_cast<__int128>(size)>static_cast<__int128>(result->max_size()))fail(loc,\"array length out of range\");result->reserve(static_cast<std::size_t>(size));for(std::int64_t i=0;i<size;++i)result->push_back(@{call __read__()->T}(loc));return result;}",
 }
