@@ -2,6 +2,129 @@ mod support;
 use support::Case;
 
 #[test]
+fn native_type_patterns_bind_nested_arguments_and_preserve_disjoint_concrete_types() {
+    let case = Case::new(
+        r#"
+extern type<T> Slot<Vec<T>> {cpp_name:"std::shared_ptr<{T}>",}
+extern type Slot<Int> {cpp_name:"std::int64_t",}
+extern type<A,B> PairCell<Tuple<A,B>> {cpp_name:"std::pair<Obj<{A}>,Obj<{B}>>",}
+extern fn cell<T>(x:T)->Slot<Vec<T>> {
+    code:"Obj<@{Slot<Vec<T>>}> @{fn}(Obj<@{T}> x,Loc){return make_obj<@{Slot<Vec<T>>}>(x);}",
+}
+extern fn value<T>(x:Slot<Vec<T>>)->T {
+    code:"Obj<@{T}> @{fn}(Obj<@{Slot<Vec<T>>}> x,Loc){return *x;}",
+}
+extern fn pair<A,B>(a:A,b:B)->PairCell<Tuple<A,B>> {
+    code:"Obj<@{PairCell<Tuple<A,B>>}> @{fn}(Obj<@{A}> a,Obj<@{B}> b,Loc){return make_obj<@{PairCell<Tuple<A,B>>}>(@{PairCell<Tuple<A,B>>}{a,b});}",
+}
+extern fn first<A,B>(x:PairCell<Tuple<A,B>>)->A {
+    code:"Obj<@{A}> @{fn}(Obj<@{PairCell<Tuple<A,B>>}> x,Loc){return x->first;}",
+}
+extern fn number(x:Int)->Slot<Int> {cpp_name:"make_number",code:"Obj<std::int64_t> make_number(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn number_value(x:Slot<Int>)->Int {cpp_name:"number_value",code:"Obj<std::int64_t> number_value(Obj<std::int64_t> x,Loc){return x;}",}
+let original:=3;let held:=cell(original);value(held)=9;
+wt original,value(cell("ok")),first(pair(7,"pair")),number_value(number(11));
+extern type Iter<Int>{cpp_name:"std::int64_t",}
+for x in [1,2]{wt x;}
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"9 ok 7 11\n1\n2\n");
+    }
+}
+
+#[test]
+fn native_type_patterns_reject_finite_overlap_in_both_orders() {
+    for (a, b) in [
+        (
+            r#"extern type<T> Family<Vec<T>>{cpp_name:"{T}",}"#,
+            r#"extern type<U> Family<Vec<U>>{cpp_name:"{U}",}"#,
+        ),
+        (
+            r#"extern type<T> Family<Vec<T>>{cpp_name:"{T}",}"#,
+            r#"extern type Family<Vec<Int>>{cpp_name:"std::int64_t",}"#,
+        ),
+        (
+            r#"extern type<T> Family<T,Int>{cpp_name:"{T}",}"#,
+            r#"extern type<T> Family<Str,T>{cpp_name:"{T}",}"#,
+        ),
+        (
+            r#"extern type<T> Family<T,T,T>{cpp_name:"{T}",}"#,
+            r#"extern type<A,B> Family<A,B,A>{cpp_name:"{A}",}"#,
+        ),
+    ] {
+        for source in [format!("{a}\n{b}"), format!("{b}\n{a}")] {
+            let out = Case::new(&source).compile();
+            assert!(!out.status.success());
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(error.contains("duplicate type family 'Family'"), "{error}");
+        }
+    }
+    let out = Case::new(
+        r#"
+extern type<T> Finite<T,Vec<T>>{cpp_name:"{T}",}
+extern type<U> Finite<Vec<U>,U>{cpp_name:"{U}",}
+extern type<T> Repeated<T,T>{cpp_name:"{T}",}
+extern type Repeated<Int,Str>{cpp_name:"std::int64_t",}
+wt 1;
+"#,
+    )
+    .run("");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"1\n");
+}
+
+#[test]
+fn invalid_and_expensive_native_type_patterns_fail_before_cpp_output() {
+    for (source, expected) in [
+        (
+            r#"extern type<A,B> Bad<Vec<A>>{cpp_name:"{A}",}"#,
+            "not bound",
+        ),
+        (
+            r#"extern type<T> Bad<Missing<T>>{cpp_name:"{T}",}"#,
+            "unknown type constructor",
+        ),
+        (
+            r#"extern type T<Int>{cpp_name:"std::int64_t",} extern type<T> Bad<T<Int>>{cpp_name:"{T}",}"#,
+            "not bound",
+        ),
+        (
+            r#"extern type<A,B> Bad<Tuple<A,B>>{cpp_name:"{A}",} fn unused(x:Bad<Int,Int>){}"#,
+            "expects 1 type arguments",
+        ),
+        (
+            r#"extern type<T> Bad<Vec<T>>{cpp_name:"{T}",} fn unused(x:Bad<Vec<Unit>>){}"#,
+            "vectors require",
+        ),
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(error.contains(expected), "{error}");
+    }
+    let a = vec!["T"; 3000].join(",");
+    let b = vec!["U"; 3000].join(",");
+    let out=Case::new(&format!("extern type<T> Wide<{a}>{{cpp_name:\"{{T}}\",}} extern type<U> Wide<{b}>{{cpp_name:\"{{U}}\",}} ")).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("native type pattern comparison limit exceeded"),
+        "{error}"
+    );
+}
+
+#[test]
 fn object_unit_returns_preserve_cleanup_and_opaque_holder_retention() {
     let definitions = r#"
 extern type<T> Cell {cpp_name:"std::shared_ptr<{T}>",}

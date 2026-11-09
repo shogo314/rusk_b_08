@@ -613,14 +613,10 @@ impl Compiler {
     fn specialize_vector(&mut self, ty: &str, inner: &str) -> Result<(), String> {
         let native_element = self.types[inner].clone();
         let native = format!("RuskVec<{native_element}>");
-        let iterator = format!("Iter<{ty}>");
-        let native_iterator = format!("RuskIter<{native_element}>");
         self.types.insert(ty.into(), native.clone());
-        self.types.insert(iterator.clone(), native_iterator.clone());
         let bindings = [
             ("Element".into(), inner.into()),
             ("Vector".into(), ty.into()),
-            ("Iterator".into(), iterator),
         ]
         .into();
         let source = include_str!("../lib/vec_compat.rusk");

@@ -49,12 +49,6 @@ impl Compiler {
                     Type::Iterator {
                         element: it.element.clone(),
                     }
-                } else if let Some(("Iter", args)) = tuples::type_parts(name)
-                    && let Some(element) = args.first().and_then(|arg| vector_element(arg))
-                {
-                    Type::Iterator {
-                        element: element.into(),
-                    }
                 } else {
                     Type::Opaque
                 };

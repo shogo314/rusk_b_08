@@ -1,4 +1,9 @@
 // Ordinary generic extern declarations for vector operations.
+extern type<T> Iter<Vec<T>> {
+    cpp_name: "RuskIter<{T}>",
+    representation: "iterator<T>",
+}
+
 extern fn __vec_new__<T>() -> Vec<T> {
     effects: "read_fresh",
     code: "Obj<@{Vec<T>}> @{fn}([[maybe_unused]] Loc loc) { return make_obj<@{Vec<T>}>(@{Vec<T>}{}); }",

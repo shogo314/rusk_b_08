@@ -1,10 +1,12 @@
 //! Initial generic extern prototype: opaque native types and static native bodies.
 use super::*;
 mod template;
+pub(super) mod type_patterns;
 use template::Part;
 
 #[derive(Clone)]
 pub(super) struct ExternalType {
+    pattern: String,
     parameters: Vec<Name>,
     native: String,
     span: Span,
@@ -72,10 +74,9 @@ impl Compiler {
     ) -> Result<(), String> {
         generics::parameters_valid(parameters)?;
         if name.text.starts_with("__Rusk")
-            || tuples::type_parts(&name.text).is_some()
             || matches!(
-                name.text.as_str(),
-                "Vec" | "Tuple" | "Iter" | "Option" | "Dict" | "Set"
+                tuples::type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base),
+                "Vec" | "Tuple" | "Option" | "Dict" | "Set"
             )
         {
             return Err(name
@@ -90,9 +91,20 @@ impl Compiler {
         }
         validate(name, properties, &["cpp_name", "representation"])?;
         let representation = type_metadata::parse_properties(name, properties, origin)?;
+        let pattern = type_patterns::pattern(name, parameters);
+        let mut bound = BTreeMap::new();
+        generics::unify(&pattern, &pattern, parameters, &mut bound);
+        for parameter in parameters {
+            if !bound.contains_key(&parameter.text) {
+                return Err(parameter
+                    .span
+                    .error("native type parameter is not bound by the type pattern"));
+            }
+        }
         self.generic_extern_types.insert(
             name.text.clone(),
             ExternalType {
+                pattern,
                 parameters: parameters.to_vec(),
                 native: property(name, properties, "cpp_name")?,
                 span: name.span.clone(),
@@ -194,30 +206,35 @@ impl Compiler {
         let Some((base, args)) = tuples::type_parts(&name.text) else {
             return Ok(false);
         };
-        let Some(template) = self.generic_extern_types.get(base).cloned() else {
+        let Some(arity) = self.external_type_arity(base) else {
             return Ok(false);
         };
-        if args.len() != template.parameters.len() {
-            return Err(name.span.error(format!(
-                "type '{base}' expects {} type arguments",
-                template.parameters.len()
-            )));
+        if args.len() != arity {
+            return Err(name
+                .span
+                .error(format!("type '{base}' expects {} type arguments", arity)));
         }
+        let Some((template, bindings)) = self.generic_extern_types.values().find_map(|template| {
+            let mut bindings = BTreeMap::new();
+            generics::unify(
+                &template.pattern,
+                &name.text,
+                &template.parameters,
+                &mut bindings,
+            )
+            .then(|| (template.clone(), bindings))
+        }) else {
+            return Ok(false);
+        };
         if self.preparing_extern_types.len() >= 64
             || !self.preparing_extern_types.insert(name.text.clone())
         {
             return Err(name.span.error("recursive generic extern type expansion"));
         }
         let result = (|| {
-            let bindings = template
-                .parameters
-                .iter()
-                .zip(args)
-                .map(|(p, arg)| (p.text.clone(), arg.to_string()))
-                .collect::<BTreeMap<_, _>>();
-            for ty in bindings.values() {
+            for ty in args {
                 self.check_type(&Name {
-                    text: ty.clone(),
+                    text: ty.into(),
                     span: name.span.clone(),
                 })?;
             }
@@ -252,6 +269,14 @@ impl Compiler {
         })
     }
 
+    fn external_type_arity(&self, base: &str) -> Option<usize> {
+        self.generic_extern_types.values().find_map(|definition| {
+            tuples::type_parts(&definition.pattern)
+                .filter(|(name, _)| *name == base)
+                .map(|(_, args)| args.len())
+        })
+    }
+
     // Check symbolic patterns without choosing arbitrary types for their parameters.
     fn validate_symbolic_type(
         &self,
@@ -268,8 +293,8 @@ impl Compiler {
         let Some((base, args)) = tuples::type_parts(ty) else {
             return Err(span.error(format!("unknown type '{ty}'")));
         };
-        let arity = if let Some(d) = self.generic_extern_types.get(base) {
-            Some(d.parameters.len())
+        let arity = if let Some(arity) = self.external_type_arity(base) {
+            Some(arity)
         } else if let Some(d) = self.generic_records.get(base) {
             Some(d.parameters.len())
         } else if let Some(d) = self.enum_definitions.get(base) {
@@ -341,6 +366,11 @@ impl Compiler {
                 Ok(())
             };
         for definition in self.generic_extern_types.values() {
+            self.validate_symbolic_type(
+                &definition.pattern,
+                &definition.parameters,
+                &definition.span,
+            )?;
             if let Some(kind) = &definition.representation {
                 for child in type_metadata::references(kind) {
                     self.validate_symbolic_type(child, &definition.parameters, &definition.span)?;

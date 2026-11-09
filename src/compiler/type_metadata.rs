@@ -276,6 +276,32 @@ let values:=bucket();
         assert!(error.contains("Number") && error.contains("Int"), "{error}");
     }
     #[test]
+    fn patterned_iterator_shapes_follow_declarations_with_unrelated_names() {
+        let definitions = r#"
+extern type<T> Envelope {cpp_name:"std::shared_ptr<{T}>",}
+extern type<T> Cursor<Envelope<T>> {cpp_name:"std::shared_ptr<{T}>",representation:"iterator<T>",}
+extern fn cursor()->Cursor<Envelope<Number>> {cpp_name:"cursor",code:"unused",}
+let iterator:=cursor();
+"#;
+        let hir = compile(
+            &format!("{TYPES}{definitions}"),
+            Origin::StandardLibrary,
+            crate::backend::Emit::Hir,
+        )
+        .unwrap();
+        assert!(
+            hir.contains(
+                "\"Cursor<Envelope<Number>>\": Iterator {\n            element: \"Number\""
+            ),
+            "{hir}"
+        );
+        let error = compile(definitions, Origin::User, crate::backend::Emit::Hir).unwrap_err();
+        assert!(
+            error.contains("native type representations are reserved"),
+            "{error}"
+        );
+    }
+    #[test]
     fn untrusted_and_invalid_representations_are_rejected_even_when_unused() {
         for declaration in [
             "extern type Hidden {cpp_name:\"int\",representation:\"i64\",}",

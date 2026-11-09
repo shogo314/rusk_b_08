@@ -4,7 +4,8 @@ use support::Case;
 #[test]
 fn vector_operations_are_generic_declarations_with_independent_names() {
     // User declarations cannot assert the standard library's effect/lowering contracts.
-    let mut declarations = include_str!("../lib/vec.rusk")
+    let source = include_str!("../lib/vec.rusk");
+    let mut declarations = source[source.find("extern fn").unwrap()..]
         .lines()
         .filter(|line| {
             !["effects:", "lower:", "lower_owned:", "lower_borrowed:"]

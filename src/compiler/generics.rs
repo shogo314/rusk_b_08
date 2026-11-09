@@ -222,30 +222,42 @@ fn explicit_bindings(name: &str, parameters: &[Name]) -> Option<BTreeMap<String,
     }
 }
 
-// A constructor owns its whole family. Concrete foreign instantiations may
-// coexist with each other, but cannot override part of a declared constructor.
+// Ordinary constructors own their whole family. Patterned native declarations
+// can coexist only when no concrete type can match both patterns.
 pub(super) fn validate_type_declarations(sources: &[Source]) -> Result<(), String> {
-    let mut families: BTreeMap<&str, Vec<(&Name, bool)>> = BTreeMap::new();
+    type Declaration<'a> = (&'a Name, &'a [Name], bool);
+    let mut families: BTreeMap<&str, Vec<Declaration<'_>>> = BTreeMap::new();
     for statement in sources.iter().flat_map(|s| &s.statements) {
-        let (name, concrete) = match statement {
-            Stmt::Type(name, _) => (name, type_parts(&name.text).is_some()),
-            Stmt::Struct(name, ..) | Stmt::Enum(name, ..) | Stmt::GenericExternType(name, ..) => {
-                (name, false)
+        let (name, parameters, whole_family) = match statement {
+            Stmt::Type(name, _) => (name, &[][..], type_parts(&name.text).is_none()),
+            Stmt::Struct(name, parameters, _) | Stmt::Enum(name, parameters, _) => {
+                (name, parameters.as_slice(), true)
             }
+            Stmt::GenericExternType(name, parameters, _) => (
+                name,
+                parameters.as_slice(),
+                type_parts(&name.text).is_none(),
+            ),
             _ => continue,
         };
+        externs::type_patterns::validate(name, parameters)?;
         let base = type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base);
         let previous = families.entry(base).or_default();
-        if let Some((old, _)) = previous
-            .iter()
-            .find(|(old, was_concrete)| old.text == name.text || !concrete || !was_concrete)
-        {
-            return Err(name.span.error(format!(
-                "duplicate type family '{base}'; previous definition at {}:{}:{}",
-                old.span.file, old.span.line, old.span.column
-            )));
+        for (old, old_parameters, old_whole) in previous.iter() {
+            if whole_family
+                || *old_whole
+                || externs::type_patterns::overlap(old, old_parameters, name, parameters)?
+                || ((!parameters.is_empty() || !old_parameters.is_empty())
+                    && type_parts(&old.text).map(|(_, a)| a.len())
+                        != type_parts(&name.text).map(|(_, a)| a.len()))
+            {
+                return Err(name.span.error(format!(
+                    "duplicate type family '{base}'; previous definition at {}:{}:{}",
+                    old.span.file, old.span.line, old.span.column
+                )));
+            }
         }
-        previous.push((name, concrete));
+        previous.push((name, parameters, whole_family));
     }
     Ok(())
 }
