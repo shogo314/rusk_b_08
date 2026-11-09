@@ -109,6 +109,7 @@ pub struct Compiler {
     generic_calls: BTreeMap<usize, Span>,
     functions: Vec<Function>,
     native_contracts: BTreeMap<usize, crate::effects::Summary>,
+    native_contract_dependencies: BTreeMap<usize, BTreeSet<usize>>,
     native_lowerings: BTreeMap<usize, crate::native_lowering::Lowering>,
     native_references: BTreeSet<usize>,
     native_value_references: BTreeSet<usize>,
@@ -494,10 +495,46 @@ impl Compiler {
             main: std::mem::take(&mut self.body),
         };
         hir.prune_unreachable();
+        let mut conditional = self
+            .native_contract_dependencies
+            .keys()
+            .copied()
+            .filter(|id| {
+                self.native_contracts
+                    .get(id)
+                    .is_some_and(|s| s.source == crate::effects::SummarySource::NativeContract)
+            })
+            .collect::<BTreeSet<_>>();
+        for &id in &conditional {
+            hir.functions[id].effects =
+                crate::effects::Summary::unanalyzed(hir.functions[id].params.len());
+        }
         hir.validate()?;
         let mut lir = crate::lir::lower_program(&hir);
         lir.validate()?;
-        let summaries = crate::effects::analyze(&lir);
+        let mut summaries = crate::effects::analyze(&lir);
+        loop {
+            let proven = conditional
+                .iter()
+                .copied()
+                .filter(|id| {
+                    let base = &self.native_contracts[id];
+                    self.native_contract_dependencies[id]
+                        .iter()
+                        .all(|dependency| {
+                            crate::native_effects::dependency_covered(base, &summaries[*dependency])
+                        })
+                })
+                .collect::<Vec<_>>();
+            if proven.is_empty() {
+                break;
+            }
+            for id in proven {
+                conditional.remove(&id);
+                lir.functions[id].effects = self.native_contracts[&id].clone();
+            }
+            summaries = crate::effects::analyze(&lir);
+        }
         for (id, summary) in summaries.into_iter().enumerate() {
             hir.functions[id].effects = summary.clone();
             lir.functions[id].effects = summary;
@@ -639,12 +676,6 @@ impl Compiler {
                             | "bisect_left"
                             | "bisect_right"
                             | "contains"
-                            | "__eq__"
-                            | "__ne__"
-                            | "__lt__"
-                            | "__le__"
-                            | "__gt__"
-                            | "__ge__"
                     )
                 {
                     continue;
@@ -680,6 +711,7 @@ impl Compiler {
                     Some(&cpp),
                     &name.span,
                     true,
+                    None,
                 )?;
                 self.functions.push(Function {
                     cpp,

@@ -600,6 +600,7 @@ impl Compiler {
                 Some(&cpp),
                 &definition.name.span,
                 true,
+                Some(index),
             )
             .map_err(|error| {
                 format!(
@@ -622,12 +623,26 @@ impl Compiler {
             self.native_contracts.insert(index, effects);
         }
         if let Some(properties) = &definition.foreign {
+            let mut properties = properties.clone();
+            for key in ["lower", "lower_owned", "lower_borrowed"] {
+                if let Some(expression) = properties.get(key).cloned() {
+                    let expression = self.render_native(
+                        &expression,
+                        &bindings,
+                        Some(&cpp),
+                        &definition.name.span,
+                        true,
+                        Some(index),
+                    )?;
+                    properties.insert(key.into(), expression);
+                }
+            }
             self.register_native_lowering(
                 index,
                 &definition.name,
                 &self.functions[index].params.clone(),
                 &self.functions[index].result.clone(),
-                properties,
+                &properties,
                 definition.origin,
             )?;
         }

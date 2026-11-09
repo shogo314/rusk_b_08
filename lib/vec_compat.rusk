@@ -28,39 +28,3 @@ extern fn contains(a: Vector, x: Element) -> Bool {
 extern fn __read__(count: Int) -> Vector {
     code: "Obj<@{Vector}> @{fn}(Obj<std::int64_t> count, [[maybe_unused]] Loc loc) { if(*count<0) fail(loc,\"negative array length\"); auto a=make_obj<@{Vector}>(@{Vector}{}); if(static_cast<__int128>(*count)>static_cast<__int128>(a->max_size())) fail(loc,\"array length out of range\"); a->reserve(static_cast<std::size_t>(*count)); for(std::int64_t i=0;i<*count;++i) a->push_back(read_value<@{Element}>(loc)); return a; }",
 }
-
-extern fn __eq__(a: Vector, b: Vector) -> Bool {
-    effects: "read_fresh",
-    lower: "value_equal($0,$1)",
-    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_equal(a,b)); }",
-}
-
-extern fn __ne__(a: Vector, b: Vector) -> Bool {
-    effects: "read_fresh",
-    lower: "!value_equal($0,$1)",
-    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_equal(a,b)); }",
-}
-
-extern fn __lt__(a: Vector, b: Vector) -> Bool {
-    effects: "read_fresh",
-    lower: "value_less($0,$1)",
-    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_less(a,b)); }",
-}
-
-extern fn __le__(a: Vector, b: Vector) -> Bool {
-    effects: "read_fresh",
-    lower: "!value_less($1,$0)",
-    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(b,a)); }",
-}
-
-extern fn __gt__(a: Vector, b: Vector) -> Bool {
-    effects: "read_fresh",
-    lower: "value_less($1,$0)",
-    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_less(b,a)); }",
-}
-
-extern fn __ge__(a: Vector, b: Vector) -> Bool {
-    effects: "read_fresh",
-    lower: "!value_less($0,$1)",
-    code: "Obj<bool> @{fn}(Obj<@{Vector}> a, Obj<@{Vector}> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(a,b)); }",
-}

@@ -147,8 +147,13 @@ impl Compiler {
                 .error("native effect contracts are reserved for the embedded standard library"));
         }
         self.validate_lowering_source(name, properties, origin)?;
-        let parts = template::parse(&property(name, properties, "code")?, true)
-            .map_err(|e| name.span.error(e))?;
+        property(name, properties, "code")?;
+        let mut parts = Vec::new();
+        for key in ["code", "lower", "lower_owned", "lower_borrowed"] {
+            if let Some(text) = properties.get(key) {
+                parts.extend(template::parse(text, true).map_err(|e| name.span.error(e))?);
+            }
+        }
         let calls = parts
             .iter()
             .filter_map(|part| match part {
@@ -238,8 +243,14 @@ impl Compiler {
                     span: name.span.clone(),
                 })?;
             }
-            let native =
-                self.render_native(&template.native, &bindings, None, &template.span, false)?;
+            let native = self.render_native(
+                &template.native,
+                &bindings,
+                None,
+                &template.span,
+                false,
+                None,
+            )?;
             self.types.insert(name.text.clone(), native);
             if let Some(kind) = template.representation {
                 let kind = type_metadata::substitute(&kind, &bindings);
@@ -394,12 +405,15 @@ impl Compiler {
             {
                 self.validate_symbolic_type(&ty.text, &definition.parameters, &ty.span)?;
             }
-            validate_parts(
-                template::parse(&property(&definition.name, properties, "code")?, true)
-                    .map_err(|e| definition.name.span.error(e))?,
-                &definition.parameters,
-                &definition.name.span,
-            )?;
+            for key in ["code", "lower", "lower_owned", "lower_borrowed"] {
+                if let Some(text) = properties.get(key) {
+                    validate_parts(
+                        template::parse(text, true).map_err(|e| definition.name.span.error(e))?,
+                        &definition.parameters,
+                        &definition.name.span,
+                    )?;
+                }
+            }
         }
         Ok(())
     }
@@ -411,6 +425,7 @@ impl Compiler {
         function: Option<&str>,
         span: &Span,
         body: bool,
+        owner: Option<usize>,
     ) -> Result<String, String> {
         let mut output = String::new();
         for part in template::parse(text, body).map_err(|e| span.error(e))? {
@@ -480,6 +495,12 @@ impl Compiler {
                             .insert((callback.function, crate::effects::Query::Writes));
                         output.push_str(&format!("rusk_writes_{}", callback.function));
                     } else {
+                        if let Some(owner) = owner {
+                            self.native_contract_dependencies
+                                .entry(owner)
+                                .or_default()
+                                .insert(callback.function);
+                        }
                         output.push_str(&self.abi_reference(
                             callback.function,
                             matches!(kind, template::InvokeKind::Boxed),
@@ -542,6 +563,12 @@ impl Compiler {
                         self.native_references.insert(index);
                     }
                     self.used.insert(index);
+                    if let Some(owner) = owner {
+                        self.native_contract_dependencies
+                            .entry(owner)
+                            .or_default()
+                            .insert(index);
+                    }
                     match kind {
                         template::CallKind::Effect(query) => {
                             unreachable!("effect query handled above: {query:?}");

@@ -57,36 +57,6 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             query.evaluate(&program.functions[*id].effects)
         );
     }
-    for id in &context.native_value_references {
-        let f = &program.functions[*id];
-        let info = &context.functions[*id];
-        let args = (0..f.params.len())
-            .map(|i| format!("rusk_a{i}"))
-            .collect::<Vec<_>>();
-        let mut params = f
-            .params
-            .iter()
-            .zip(&args)
-            .map(|(ty, arg)| format!("const Obj<{}>& {arg}", context.types[ty]))
-            .collect::<Vec<_>>();
-        params.push("[[maybe_unused]] Loc rusk_loc".into());
-        let expression = info
-            .lowering
-            .as_ref()
-            .filter(|_| info.trusted)
-            .and_then(|l| l.scalar.as_ref())
-            .map(|t| t.render(&args, "rusk_loc"))
-            .unwrap_or_else(|| {
-                let mut call_args = args.clone();
-                call_args.push("rusk_loc".into());
-                format!("*{}({})", info.cpp, call_args.join(","))
-            });
-        out += &format!(
-            "{} rusk_value_ref_{id}({}){{return {expression};}}\n",
-            context.types[&f.result],
-            params.join(",")
-        );
-    }
     for (id, bridge) in &context.native_unit_bridges {
         let f = &program.functions[*id];
         let args = (0..f.params.len())
@@ -118,6 +88,50 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             params.join(","),
             context.functions[*id].cpp,
             actual.join(",")
+        );
+    }
+    for id in &context.native_value_references {
+        let f = &program.functions[*id];
+        let mut params = f
+            .params
+            .iter()
+            .map(|ty| format!("const Obj<{}>&", context.types[ty]))
+            .collect::<Vec<_>>();
+        params.push("Loc".into());
+        out += &format!(
+            "{} rusk_value_ref_{id}({});\n",
+            context.types[&f.result],
+            params.join(",")
+        );
+    }
+    for id in &context.native_value_references {
+        let f = &program.functions[*id];
+        let info = &context.functions[*id];
+        let args = (0..f.params.len())
+            .map(|i| format!("rusk_a{i}"))
+            .collect::<Vec<_>>();
+        let mut params = f
+            .params
+            .iter()
+            .zip(&args)
+            .map(|(ty, arg)| format!("const Obj<{}>& {arg}", context.types[ty]))
+            .collect::<Vec<_>>();
+        params.push("[[maybe_unused]] Loc rusk_loc".into());
+        let expression = info
+            .lowering
+            .as_ref()
+            .filter(|_| info.trusted)
+            .and_then(|l| l.scalar.as_ref())
+            .map(|t| t.render(&args, "rusk_loc"))
+            .unwrap_or_else(|| {
+                let mut call_args = args.clone();
+                call_args.push("rusk_loc".into());
+                format!("*{}({})", info.cpp, call_args.join(","))
+            });
+        out += &format!(
+            "{} rusk_value_ref_{id}({}){{return {expression};}}\n",
+            context.types[&f.result],
+            params.join(",")
         );
     }
     for native in &context.foreign_definitions {

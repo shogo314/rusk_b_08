@@ -3,6 +3,20 @@
 use crate::effects::{Effect, ReturnAlias, Summary};
 use std::collections::BTreeMap;
 
+/// Parameter writes/retention and returned aliases require projection mappings;
+/// until those are declared, such native dependencies remain opaque.
+pub(crate) fn dependency_covered(base: &Summary, dependency: &Summary) -> bool {
+    dependency.external_write == Effect::No
+        && dependency.io <= base.io
+        && dependency.may_fail <= base.may_fail
+        && dependency.may_diverge <= base.may_diverge
+        && !dependency.returned.unknown
+        && dependency.returned.aliases.is_empty()
+        && dependency.parameters.iter().all(|p| {
+            p.write == Effect::No && p.structural == Effect::No && p.retained == Effect::No
+        })
+}
+
 pub(crate) fn contract(
     specification: &str,
     parameters: &[String],

@@ -1,0 +1,25 @@
+struct Mark { ch:Char; calls:Vec<Int>; }
+fn __eq__(a:Mark,b:Mark)->Bool {
+    a.calls[0]+=1;
+    return a.ch==b.ch;
+}
+fn __lt__(a:Mark,b:Mark)->Bool {
+    a.calls[0]+=1;
+    return a.ch<b.ch;
+}
+let text:="ab";
+let calls:=[0];
+let held:Char;
+{
+    let left:=[Mark{ch:text[0],calls:calls},Mark{ch:text[1],calls:calls}];
+    let right:=[Mark{ch:text[0],calls:calls},Mark{ch:text[1],calls:calls}];
+    wt left==right,left<right,calls[0];
+    held:=left[1].ch;
+    left=[];
+    right=[];
+}
+held='Z';
+wt text;
+held:='q';
+text.push_back('!');
+wt text;

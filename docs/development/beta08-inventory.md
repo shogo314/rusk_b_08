@@ -17,7 +17,7 @@
 | ID | 現在の処理と所在 | 分類・移行先／残す理由 | 依存 | 検証 |
 |---|---|---|---|---|
 | N01 | `compiler.rs::compile`の外部型・関数登録、`rusk.par::ExternType/ExternFn` | 移行：具体型限定の登録を外部ジェネリクスと共通化。通常の型検査は残す | G1、G2 | `generics`、`e2e`＋外部型・関数の新規例 |
-| N02 | `compiler.rs::check_type/specialize_vector`のVec要素制限、操作の選別 | 移行中：基本18操作と配列反復型を通常のジェネリックexternへ移し広域置換を削除。Vecの型宣言と残る13操作の型条件を移す | G1、G2、G4 | `e2e`、`records`、`enums`、`beta06`、`library_migration`、`extern_generics` |
+| N02 | `compiler.rs::check_type/specialize_vector`のVec要素制限、操作の選別 | 移行中：比較を含む24操作と配列反復型を通常のジェネリックexternへ移し広域置換を削除。Vecの型宣言と残る7操作の型条件を移す | G1、G2、G4 | `e2e`、`records`、`enums`、`beta06`、`library_migration`、`extern_generics` |
 | N03 | `compiler.rs::call`のenum→container→通常解決→collection→higher_orderという専用経路 | 移行：ライブラリ関数は共通の候補解決へ。enumの言語構文との接続だけはN07と分けて残す | G1〜G5 | `generics`、`higher_order`、`beta05`、`enums` |
 | N04 | `compiler.rs::return_selected`、`containers.rs::container_argument_hint`のread・Vec構築・Some・Dict操作に固有の型ヒント | 移行：宣言の型パラメータと期待型に基づく推論へ | G1、G2 | `generics`、`beta05`、`enums`＋期待型だけで決まるextern |
 | N05 | `compiler.rs::compile`、`enums.rs::register_enum`の標準型・構築関数の予約名 | 要設計：内部生成名の保護は残す。標準型・関数の予約は重複宣言と構文上の必要性を個別に確認 | G1、G5 | `generics`、`records`、`enums`の不正宣言 |
@@ -92,13 +92,13 @@
 
 | 対象 | 状態 | 実装と残る仕事 |
 |---|---|---|
-| N02 | 基本18操作と配列反復型を通常の宣言へ移行、広域置換を撤去 | `lib/vec.rusk`をpreludeのジェネリックexternとして読み込む。配列反復型も`Iter<Vec<T>>`の型パターンへ接続。型ごとの選別が残る13操作は`lib/vec_compat.rusk`でASTの型引数と明示したC++参照だけを展開。Vec型の登録、要素型制限、残る操作の選別・補助定義は引き続き移行する |
+| N02 | 比較を含む24操作と配列反復型を通常の宣言へ移行、広域置換を撤去 | `lib/vec.rusk`をpreludeのジェネリックexternとして読み込む。比較は要素の通常の操作を解決し、未知の効果には変更検査を保つ。配列反復型も`Iter<Vec<T>>`の型パターンへ接続。型ごとの選別が残る7操作は`lib/vec_compat.rusk`でASTの型引数と明示したC++参照だけを展開。Vec型の登録、要素型制限、残る操作の選別・補助定義は引き続き移行する |
 | A01 | 基本型・RangeIter・配列反復型を宣言へ接続、コンテナの専用登録は未完了 | 標準の具体・ジェネリック外部型に`representation`を付け、IRへスカラーの種類・要素・キー等を渡す。coreの基本型とRangeIter、`Iter<Vec<T>>`の名前による分類を削除。Vec・Dict/Set・遅延反復の既存登録は残る |
 | A02 | バッファ要素・整数添字を接続、他の契約は未完了 | Str→Charという射影を、宣言されたバッファ要素へ変更。要素契約の添字はスカラー表現で検証し、ネイティブ深いコピーの分類も表現を使う。Optionのvariant等に依存する契約の移行は残る |
 | A04 | 集約値の判定をIRの型情報へ接続 | effectsとreadonlyのInt/Bool/Char/Unitの列挙を削除。内部に共有値を持たない型か、宣言・IRから判断する。未知の外部型と不明な共有先は保守的に扱う |
 | A03 | 信頼元の共通化を実装 | `Compiler`への入力で標準・利用者の由来を区別し、関数・具体化へ保持。効果契約とbackendの信頼判定から表示ファイル名への依存を削除。生成物も別の由来として保持する |
 | A09のUnit返却ABI | 共通の参照へ接続 | Unitの通常のvoid返却と、保存するObj<Unit>をアダプタで接続。実装のオブジェクトABIは宣言に明記し、型付き参照・コールバック・自動コピーから共通に利用。coreコピーの前方宣言の不整合を修正。コンテナ等の依存組立ての専用処理は引き続き残る |
-| A02・L04の効果参照 | 共通基盤を追加、型・保持情報の移行は未完了 | `writes`・`writes_invoke`・`fails`で通常の操作と静的コールバックを解決し、LIRの効果解析後に保守的な結果を参照。未知のexternには安全性を与えず、標準契約とRusk本体の推論を利用する。型表現・共有先・保持契約の宣言化は引き続き残る |
+| A02・L04の効果参照と依存 | 共通基盤を追加、型・保持情報の移行は未完了 | `writes`・`writes_invoke`・`fails`で通常の操作と静的コールバックを解決し、LIRの効果解析後に保守的な結果を参照。標準externの型付き参照・コールバックを依存として記録し、参照先の効果が明示した契約を満たすまで外側を不透明にする。未知・循環・保持・別名を楽観的に安全としない。共有先の射影を伴う効果・保持の合成は引き続き残る |
 | L03 | 移行済み | first_true・sort_by_key・sort_by_compを`lib/algorithms.rusk`の通常のジェネリックexternへ移し、`higher_order.rs`の専用分岐を削除。別名の利用者定義でも実行する。キーのコピー・比較は型付き参照を使い、基本型に限定する専用判定も削除 |
 | A05 | 宣言に生成情報を接続 | 基本演算・入出力・反復・添字の式をcore/vec宣言の`lower`・`lower_owned`・`lower_borrowed`へ移し、backendの関数名別テーブルを削除。所有・借用の証明は従来の解析で行う。Vecの基本操作も通常のジェネリック宣言へ接続し、広域置換を削除 |
 | A06 | 表現と代入の情報を接続 | `operation:"assign"`に加え、IRのスカラー表現で直接保持・共有の候補を選ぶ。scalar_aliasesとcppの基本型名の列挙を削除。Unit返却・Bool条件等の言語上の規約はA08の検査として維持する |

@@ -18,6 +18,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'vector_comparisons': ('let a:=[1;2000];let b:=[1;2000];let total:=0;'
+                           'for round in 0..20000{b[-1]=round%3;'
+                           'if a==b{total+=1;}if a<b{total+=1;}}wt total;'),
     'extern_key_sort': ('let a:=[0;2000];let total:=0;for round in 0..200{'
                        'for i in 0..a.len(){a[i]=(i*7919+round)%2003;}'
                        'sort_by_key(a,(x:Int)=>x%97);total+=a[1000];}wt total;'),

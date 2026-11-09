@@ -1,0 +1,214 @@
+{
+  "utc": "2026-11-09T21:35:22.343383+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "05e8ebf1cc5bf7bdac068d0f04890d4f5b6bce1d5e9b96f173e4f5be671d3f54"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "vector_comparisons": {
+      "source": "let a:=[1;2000];let b:=[1;2000];let total:=0;for round in 0..20000{b[-1]=round%3;if a==b{total+=1;}if a<b{total+=1;}}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "13333\n",
+          "cpp_sha256": "e14a0c2c34db08327706e2d5eeb2fb041ccffc6fc5bbbc732395e1102a5a3113",
+          "runs_ms": [
+            38.408905,
+            36.272379,
+            36.180385,
+            36.213818,
+            36.127927,
+            36.190905,
+            36.44985,
+            36.297304,
+            36.454869,
+            36.286132,
+            36.115174,
+            37.763145,
+            37.67348,
+            36.439548,
+            35.946659
+          ],
+          "allocations": 44018,
+          "shared_ptr_copies": 200009,
+          "median_ms": 36.286132
+        },
+        "current": {
+          "output": "13333\n",
+          "cpp_sha256": "001dc111a541afab2320d570187f6f05658936718ada145c70c788b257529d63",
+          "runs_ms": [
+            38.268722,
+            35.829539,
+            35.950075,
+            35.964613,
+            35.836122,
+            36.01141,
+            37.234628,
+            35.977717,
+            37.145341,
+            35.931232,
+            37.390989,
+            37.84674,
+            36.326568,
+            36.276869,
+            37.25625
+          ],
+          "allocations": 4018,
+          "shared_ptr_copies": 120009,
+          "median_ms": 36.276869
+        }
+      },
+      "speedup": 1.0002553417716398
+    },
+    "extern_aggregate_key_sort": {
+      "source": "let a:=[0;1000];let total:=0;for round in 0..200{for i in 0..a.len(){a[i]=(i*7919+round)%1009;}sort_by_key(a,(x:Int)=>(x%97,-x));total+=a[500];sort_by_key(a,(x:Int)=>[x%97,-x]);total+=a[500];}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "161572\n",
+          "cpp_sha256": "3cd363f088842ddce7dc40fa0a4d54f8d986a5930d7d1fbae829391f57c358d4",
+          "runs_ms": [
+            54.432695,
+            51.231702,
+            51.414925,
+            51.410727,
+            52.12368,
+            51.416257,
+            54.614207,
+            51.733859,
+            54.273118,
+            51.364038,
+            54.458926,
+            53.86068,
+            51.453216,
+            52.362225,
+            54.565473
+          ],
+          "allocations": 3003013,
+          "shared_ptr_copies": 5802602,
+          "median_ms": 52.12368
+        },
+        "current": {
+          "output": "161572\n",
+          "cpp_sha256": "9ee674c5a3e3326811e1f5017be614eb6e658bed7200bbfd20ca947f9bef52bf",
+          "runs_ms": [
+            54.523286,
+            52.23648,
+            52.02339,
+            52.330005,
+            52.138126,
+            51.853694,
+            54.836392,
+            52.4339,
+            52.154508,
+            52.097932,
+            54.334614,
+            54.015084,
+            52.050403,
+            52.561057,
+            52.4556
+          ],
+          "allocations": 3003013,
+          "shared_ptr_copies": 5802602,
+          "median_ms": 52.330005
+        }
+      },
+      "speedup": 0.996057233321495
+    },
+    "element_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let a:=[1;100000];let total:=0;for i in 0..20{for x in a{total+=add_one(x);}}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "4000000\n",
+          "cpp_sha256": "957c9f953c7a45d363a9295c1fe0727641da4d3b99a21c8583c156aac27ed096",
+          "runs_ms": [
+            28.690099,
+            27.619017,
+            27.360322,
+            27.502949,
+            27.225831,
+            28.691231,
+            29.041406,
+            27.985301,
+            27.415126,
+            27.11857,
+            28.116289,
+            27.487844,
+            27.260816,
+            27.085489,
+            27.274262
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 27.487844
+        },
+        "current": {
+          "output": "4000000\n",
+          "cpp_sha256": "4725a40259f06b2fd68d2ff2065121b14f9b7f7e743c20bde4197c96fd45a180",
+          "runs_ms": [
+            28.490418,
+            28.416277,
+            27.042519,
+            27.023813,
+            27.203711,
+            26.941479,
+            27.836654,
+            27.724103,
+            27.176911,
+            27.075058,
+            28.022368,
+            28.185175,
+            27.153886,
+            27.047458,
+            27.529449
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 27.203711
+        }
+      },
+      "speedup": 1.01044464117414
+    }
+  },
+  "unit_bridge_order_verification": {
+    "before_compiler_sha256": "05e8ebf1cc5bf7bdac068d0f04890d4f5b6bce1d5e9b96f173e4f5be671d3f54",
+    "after_compiler_sha256": "f57d3f61bec28cd924a417f0e086f0f4b7414a86fa5310d4c87094efc1e195e0",
+    "method": "Compile the identical sources at identical paths with both compilers after moving Unit bridge definitions before value adapters; compare complete generated C++ bytes. Groups include every public verification program, every sanitizer source, and every timed benchmark source in this report.",
+    "groups": {
+      "public": {
+        "count": 51,
+        "identical": 51,
+        "changed": [],
+        "combined_cpp_sha256": [
+          "013eb7ddbf554a42509866181e227fe1ca29a3b9eb28247c27b6c34faba73301",
+          "013eb7ddbf554a42509866181e227fe1ca29a3b9eb28247c27b6c34faba73301"
+        ]
+      },
+      "sanitizers": {
+        "count": 39,
+        "identical": 39,
+        "changed": [],
+        "combined_cpp_sha256": [
+          "c263d4d64b0c315352b7ca64cf99b1eaf29c91427e03687a45eb6be9e324ba99",
+          "c263d4d64b0c315352b7ca64cf99b1eaf29c91427e03687a45eb6be9e324ba99"
+        ]
+      },
+      "benchmarks": {
+        "count": 3,
+        "identical": 3,
+        "changed": [],
+        "combined_cpp_sha256": [
+          "19b6372f5f63457e8540e831d6dfb44a4b085fb7540c1b9637931f5dfad26244",
+          "19b6372f5f63457e8540e831d6dfb44a4b085fb7540c1b9637931f5dfad26244"
+        ]
+      }
+    }
+  }
+}

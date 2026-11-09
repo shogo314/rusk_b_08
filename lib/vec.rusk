@@ -94,3 +94,39 @@ extern fn Bool<T>(a: Vec<T>) -> Bool {
 extern fn pop_back<T>(a: Vec<T>) -> T {
     code: "Obj<@{T}> @{fn}(Obj<@{Vec<T>}> a,Loc loc){ if(a->empty()) fail(loc,\"pop from empty array\"); auto value=a->back();a->pop_back();++a->version;return value; }",
 }
+
+extern fn __eq__<T>(a:Vec<T>,b:Vec<T>)->Bool {
+    effects: "read_fresh",
+    lower: "([&](){auto compare=[&](const auto& left,const auto& right){const auto left_size=left->size();const auto right_size=right->size();if(left_size!=right_size)return false;[[maybe_unused]]const auto left_version=left->version;[[maybe_unused]]const auto right_version=right->version;auto guard=[&](){if constexpr(@{writes __eq__(T,T)->Bool}){if(left->version!=left_version||right->version!=right_version)fail($loc,\"container changed during comparison\");}};for(std::size_t i=0;i<std::min(left_size,right_size);++i){guard();int decision=0;if constexpr(@{writes __eq__(T,T)->Bool}){{auto x=(*left)[i];auto y=(*right)[i];if(!@{value_call __eq__(T,T)->Bool}(x,y,$loc)) decision=-1;guard();}}else{if(!@{value_call __eq__(T,T)->Bool}((*left)[i],(*right)[i],$loc)) decision=-1;guard();}guard();if(decision)return false;}guard();return true;};if constexpr(@{writes __eq__(T,T)->Bool}){auto left=$0;auto right=$1;return compare(left,right);}else return compare($0,$1);}())",
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(([&](){auto compare=[&](const auto& left,const auto& right){const auto left_size=left->size();const auto right_size=right->size();if(left_size!=right_size)return false;[[maybe_unused]]const auto left_version=left->version;[[maybe_unused]]const auto right_version=right->version;auto guard=[&](){if constexpr(@{writes __eq__(T,T)->Bool}){if(left->version!=left_version||right->version!=right_version)fail(loc,\"container changed during comparison\");}};for(std::size_t i=0;i<std::min(left_size,right_size);++i){guard();int decision=0;if constexpr(@{writes __eq__(T,T)->Bool}){{auto x=(*left)[i];auto y=(*right)[i];if(!@{value_call __eq__(T,T)->Bool}(x,y,loc)) decision=-1;guard();}}else{if(!@{value_call __eq__(T,T)->Bool}((*left)[i],(*right)[i],loc)) decision=-1;guard();}guard();if(decision)return false;}guard();return true;};if constexpr(@{writes __eq__(T,T)->Bool}){auto left=a;auto right=b;return compare(left,right);}else return compare(a,b);}()));}",
+}
+
+extern fn __ne__<T>(a:Vec<T>,b:Vec<T>)->Bool {
+    effects: "read_fresh",
+    lower: "!@{value_call __eq__(Vec<T>,Vec<T>)->Bool}($0,$1,$loc)",
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(!@{value_call __eq__(Vec<T>,Vec<T>)->Bool}(a,b,loc));}",
+}
+
+extern fn __lt__<T>(a:Vec<T>,b:Vec<T>)->Bool {
+    effects: "read_fresh",
+    lower: "([&](){auto compare=[&](const auto& left,const auto& right){const auto left_size=left->size();const auto right_size=right->size();[[maybe_unused]]const auto left_version=left->version;[[maybe_unused]]const auto right_version=right->version;auto guard=[&](){if constexpr(@{writes __lt__(T,T)->Bool}){if(left->version!=left_version||right->version!=right_version)fail($loc,\"container changed during comparison\");}};for(std::size_t i=0;i<std::min(left_size,right_size);++i){guard();int decision=0;if constexpr(@{writes __lt__(T,T)->Bool}){{auto x=(*left)[i];auto y=(*right)[i];if(@{value_call __lt__(T,T)->Bool}(x,y,$loc)) decision=1;guard();if(!decision){if(@{value_call __lt__(T,T)->Bool}(y,x,$loc)) decision=-1;guard();}}}else{if(@{value_call __lt__(T,T)->Bool}((*left)[i],(*right)[i],$loc)) decision=1;guard();if(!decision){if(@{value_call __lt__(T,T)->Bool}((*right)[i],(*left)[i],$loc)) decision=-1;guard();}}guard();if(decision)return decision>0;}guard();return left_size<right_size;};if constexpr(@{writes __lt__(T,T)->Bool}){auto left=$0;auto right=$1;return compare(left,right);}else return compare($0,$1);}())",
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(([&](){auto compare=[&](const auto& left,const auto& right){const auto left_size=left->size();const auto right_size=right->size();[[maybe_unused]]const auto left_version=left->version;[[maybe_unused]]const auto right_version=right->version;auto guard=[&](){if constexpr(@{writes __lt__(T,T)->Bool}){if(left->version!=left_version||right->version!=right_version)fail(loc,\"container changed during comparison\");}};for(std::size_t i=0;i<std::min(left_size,right_size);++i){guard();int decision=0;if constexpr(@{writes __lt__(T,T)->Bool}){{auto x=(*left)[i];auto y=(*right)[i];if(@{value_call __lt__(T,T)->Bool}(x,y,loc)) decision=1;guard();if(!decision){if(@{value_call __lt__(T,T)->Bool}(y,x,loc)) decision=-1;guard();}}}else{if(@{value_call __lt__(T,T)->Bool}((*left)[i],(*right)[i],loc)) decision=1;guard();if(!decision){if(@{value_call __lt__(T,T)->Bool}((*right)[i],(*left)[i],loc)) decision=-1;guard();}}guard();if(decision)return decision>0;}guard();return left_size<right_size;};if constexpr(@{writes __lt__(T,T)->Bool}){auto left=a;auto right=b;return compare(left,right);}else return compare(a,b);}()));}",
+}
+
+extern fn __le__<T>(a:Vec<T>,b:Vec<T>)->Bool {
+    effects: "read_fresh",
+    lower: "!@{value_call __lt__(Vec<T>,Vec<T>)->Bool}($1,$0,$loc)",
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(!@{value_call __lt__(Vec<T>,Vec<T>)->Bool}(b,a,loc));}",
+}
+
+extern fn __gt__<T>(a:Vec<T>,b:Vec<T>)->Bool {
+    effects: "read_fresh",
+    lower: "@{value_call __lt__(Vec<T>,Vec<T>)->Bool}($1,$0,$loc)",
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(@{value_call __lt__(Vec<T>,Vec<T>)->Bool}(b,a,loc));}",
+}
+
+extern fn __ge__<T>(a:Vec<T>,b:Vec<T>)->Bool {
+    effects: "read_fresh",
+    lower: "!@{value_call __lt__(Vec<T>,Vec<T>)->Bool}($0,$1,$loc)",
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(!@{value_call __lt__(Vec<T>,Vec<T>)->Bool}(a,b,loc));}",
+}

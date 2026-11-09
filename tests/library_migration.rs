@@ -2,6 +2,110 @@ mod support;
 use support::Case;
 
 #[test]
+fn vector_comparisons_resolve_user_operations_and_preserve_lexicographic_order() {
+    let case = Case::new(
+        r#"
+struct Key{value:Int;log:Vec<Int>;}
+fn __eq__(a:Key,b:Key)->Bool{a.log.push_back(1);return a.value==b.value;}
+fn __lt__(a:Key,b:Key)->Bool{a.log.push_back(2);return a.value<b.value;}
+let log:Vec<Int>:=[];
+let a:=[Key{value:1,log:log},Key{value:2,log:log}];
+let b:=[Key{value:1,log:log},Key{value:3,log:log}];
+wt a==b,a!=b,a<b,a<=b,a>b,a>=b,log.len();
+let nested_a:Vec<Vec<Vec<Int>>>:=[[[1]],[]];
+let nested_b:Vec<Vec<Vec<Int>>>:=[[[2]],[]];
+let nested_c:Vec<Vec<Vec<Int>>>:=[[[1]],[]];
+wt nested_a<nested_b,nested_a==nested_c;
+let empty:Vec<Key>:=[];wt empty==empty,empty<empty,log.len();
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"No Yes Yes Yes No No 18\nYes Yes\nYes No 18\n");
+    }
+    let out = Case::new(
+        r#"
+struct Key{value:Int;}
+fn __eq__(a:Key,b:Key)->Int{return 1;}
+wt [Key{value:1}]==[Key{value:1}];
+"#,
+    )
+    .compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(error.contains("Int") && error.contains("Bool"), "{error}");
+}
+
+#[test]
+fn vector_comparison_dependencies_preserve_readonly_and_noescape_boundaries() {
+    let pure = r#"
+struct Key{value:Int;}
+fn __eq__(a:Key,b:Key)->Bool{return a.value==b.value;}
+fn compare(readonly noescape a:Vec<Key>,readonly noescape b:Vec<Key>)->Bool{return a==b;}
+wt compare([Key{value:1}],[Key{value:1}]);
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(pure).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes\n");
+    }
+    for equality in [
+        "fn __eq__(a:Key,b:Key)->Bool{a.value=2;return a.value==b.value;}",
+        "extern fn opaque(a:Int,b:Int)->Bool{cpp_name:\"opaque_equal\",code:\"Obj<bool> opaque_equal(Obj<std::int64_t> a,Obj<std::int64_t> b,Loc){return make_obj<bool>(*a==*b);}\",} fn __eq__(a:Key,b:Key)->Bool{return opaque(a.value,b.value);}",
+    ] {
+        for qualifier in ["readonly", "noescape"] {
+            let out=Case::new(&format!("struct Key{{value:Int;}} {equality} fn compare({qualifier} a:Vec<Key>,b:Vec<Key>)->Bool{{return a==b;}} compare([Key{{value:1}}],[Key{{value:1}}]);")).compile();
+            assert!(!out.status.success());
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(error.contains(qualifier), "{error}");
+        }
+    }
+}
+
+#[test]
+fn vector_comparisons_check_mutation_in_comparison_calls_and_cleanup() {
+    let definitions = r#"
+extern symbol watched {code:"Obj<RuskVec<RuskVec<std::int64_t>>> watched;",}
+extern fn watch(a:Vec<Vec<Int>>) {cpp_name:"watch",code:"void watch(Obj<RuskVec<RuskVec<std::int64_t>>> a,Loc){watched=a;}",}
+extern fn inner()->Vec<Int>{cpp_name:"inner",code:"Obj<RuskVec<std::int64_t>> inner(Loc){return Obj<RuskVec<std::int64_t>>(new RuskVec<std::int64_t>{},[](auto* p){delete p;if(watched){watched->clear();++watched->version;}});}",}
+extern fn __eq__(a:Vec<Int>,b:Vec<Int>)->Bool {cpp_name:"compare_equal",code:"Obj<bool> compare_equal(Obj<RuskVec<std::int64_t>> a,Obj<RuskVec<std::int64_t>> b,Loc){ACTION}",}
+extern fn __lt__(a:Vec<Int>,b:Vec<Int>)->Bool {cpp_name:"compare_less",code:"Obj<bool> compare_less(Obj<RuskVec<std::int64_t>> a,Obj<RuskVec<std::int64_t>> b,Loc){ACTION}",}
+"#;
+    for action in [
+        "watched->clear();++watched->version;return make_obj<bool>(false);",
+        "return Obj<bool>(new bool(false),[](bool* p){delete p;watched->clear();++watched->version;});",
+        "(*watched)[0]=make_obj<RuskVec<std::int64_t>>(RuskVec<std::int64_t>{});return make_obj<bool>(false);",
+    ] {
+        for operation in ["==", "!=", "<", "<=", ">", ">="] {
+            let source = format!(
+                "{} let a:=[inner()];let b:Vec<Vec<Int>>:=[[]];watch(a);wt \"before\";wt a{operation}b;",
+                definitions.replace("ACTION", action)
+            );
+            for options in [vec![], vec!["--no-opt"]] {
+                let out = Case::new(&source).run_with_options("", &options);
+                assert!(!out.status.success());
+                assert_eq!(out.stdout, b"before\n");
+                let error = String::from_utf8_lossy(&out.stderr);
+                assert!(
+                    error.contains("main.rusk:")
+                        && error.contains("container changed during comparison"),
+                    "{operation}: {action}\n{error}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn vector_operations_are_generic_declarations_with_independent_names() {
     // User declarations cannot assert the standard library's effect/lowering contracts.
     let source = include_str!("../lib/vec.rusk");
@@ -33,6 +137,12 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
         "__not__",
         "Bool",
         "pop_back",
+        "__eq__",
+        "__ne__",
+        "__lt__",
+        "__le__",
+        "__gt__",
+        "__ge__",
     ] {
         declarations =
             declarations.replace(&format!("fn {name}<"), &format!("fn migrated_{name}<"));
@@ -54,6 +164,7 @@ wt migrated___setitem__(empty,0,7),empty;
 struct Row{{value:Int;}}
 let rows:=migrated___vec_repeat__(Row{{value:2}},2);rows[0].value=5;
 wt rows[0].value,rows[1].value,migrated_len(rows);
+wt migrated___eq__([1,2],[1,2]),migrated___ne__([1],[2]),migrated___lt__([1],[2]),migrated___le__([1],[1]),migrated___gt__([2],[1]),migrated___ge__([1],[1]);
 "#
     ));
     for options in [vec![], vec!["--no-opt"]] {
@@ -65,7 +176,7 @@ wt rows[0].value,rows[1].value,migrated_len(rows);
         );
         assert_eq!(
             out.stdout,
-            b"0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\n"
+            b"0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n"
         );
     }
 }
