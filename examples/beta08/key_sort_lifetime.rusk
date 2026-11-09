@@ -1,0 +1,13 @@
+struct Row { key:Char; id:Int; }
+let text:="bab";
+{
+    let rows:=[Row{key:text[0],id:0},Row{key:text[1],id:1},Row{key:text[2],id:2}];
+    rows.sort_by_key((x:Row)=>([x.key],x.id));
+    wt rows[0].id,rows[1].id,rows[2].id;
+    let first:=rows[0].key;
+    rows=[];
+    first='Z';
+    wt text;
+}
+text.push_back('!');
+wt text;

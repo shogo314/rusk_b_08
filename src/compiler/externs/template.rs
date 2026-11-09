@@ -1,6 +1,13 @@
 //! Explicit native references, independent of C++ token spelling.
 use super::super::tuples::type_parts;
 
+#[derive(Clone, Copy)]
+pub(super) enum CallKind {
+    Owned,
+    Value,
+    Effect(crate::effects::Query),
+}
+
 pub(super) enum Part {
     Text(String),
     Type(String),
@@ -10,11 +17,13 @@ pub(super) enum Part {
         name: String,
         arguments: Vec<String>,
         result: String,
+        kind: CallKind,
     },
     Invoke {
         name: String,
         arguments: Vec<String>,
         result: String,
+        writes: bool,
     },
 }
 
@@ -52,7 +61,11 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
     if body
         && let Some(call) = text
             .strip_prefix("call ")
+            .or_else(|| text.strip_prefix("value_call "))
+            .or_else(|| text.strip_prefix("writes "))
+            .or_else(|| text.strip_prefix("fails "))
             .or_else(|| text.strip_prefix("invoke "))
+            .or_else(|| text.strip_prefix("writes_invoke "))
     {
         let call = call
             .chars()
@@ -82,19 +95,31 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                 .map(String::from)
                 .collect()
         };
-        return Ok(if text.starts_with("invoke ") {
-            Part::Invoke {
-                name,
-                arguments,
-                result: result.into(),
-            }
-        } else {
-            Part::Call {
-                name,
-                arguments,
-                result: result.into(),
-            }
-        });
+        return Ok(
+            if text.starts_with("invoke ") || text.starts_with("writes_invoke ") {
+                Part::Invoke {
+                    name,
+                    arguments,
+                    result: result.into(),
+                    writes: text.starts_with("writes_invoke "),
+                }
+            } else {
+                Part::Call {
+                    name,
+                    arguments,
+                    result: result.into(),
+                    kind: if text.starts_with("value_call ") {
+                        CallKind::Value
+                    } else if text.starts_with("writes ") {
+                        CallKind::Effect(crate::effects::Query::Writes)
+                    } else if text.starts_with("fails ") {
+                        CallKind::Effect(crate::effects::Query::Fails)
+                    } else {
+                        CallKind::Owned
+                    },
+                }
+            },
+        );
     }
     if !valid_type(text) {
         return Err("invalid native type reference".into());

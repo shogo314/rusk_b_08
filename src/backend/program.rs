@@ -8,6 +8,8 @@ pub(crate) struct Context {
     pub prelude: String,
     pub foreign_definitions: Vec<String>,
     pub native_declarations: std::collections::BTreeSet<usize>,
+    pub native_value_references: std::collections::BTreeSet<usize>,
+    pub native_effect_references: std::collections::BTreeSet<(usize, crate::effects::Query)>,
     pub epilogue: String,
 }
 fn signature(function: &ProgramFunction, context: &Context, optimize: bool) -> String {
@@ -44,6 +46,45 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             out += &signature(f, context, optimize);
             out += ";\n";
         }
+    }
+    // Native bodies may call these value-returning adapters, including adapters
+    // to Rusk bodies defined later. All ordinary prototypes precede them.
+    for (id, query) in &context.native_effect_references {
+        out += &format!(
+            "constexpr bool rusk_{}_{id} = {};\n",
+            query.name(),
+            query.evaluate(&program.functions[*id].effects)
+        );
+    }
+    for id in &context.native_value_references {
+        let f = &program.functions[*id];
+        let info = &context.functions[*id];
+        let args = (0..f.params.len())
+            .map(|i| format!("rusk_a{i}"))
+            .collect::<Vec<_>>();
+        let mut params = f
+            .params
+            .iter()
+            .zip(&args)
+            .map(|(ty, arg)| format!("const Obj<{}>& {arg}", context.types[ty]))
+            .collect::<Vec<_>>();
+        params.push("[[maybe_unused]] Loc rusk_loc".into());
+        let expression = info
+            .lowering
+            .as_ref()
+            .filter(|_| info.trusted)
+            .and_then(|l| l.scalar.as_ref())
+            .map(|t| t.render(&args, "rusk_loc"))
+            .unwrap_or_else(|| {
+                let mut call_args = args.clone();
+                call_args.push("rusk_loc".into());
+                format!("*{}({})", info.cpp, call_args.join(","))
+            });
+        out += &format!(
+            "{} rusk_value_ref_{id}({}){{return {expression};}}\n",
+            context.types[&f.result],
+            params.join(",")
+        );
     }
     for native in &context.foreign_definitions {
         out += native;

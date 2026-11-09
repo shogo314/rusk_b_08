@@ -83,6 +83,7 @@ impl Compiler {
                     name,
                     arguments,
                     result,
+                    ..
                 } => Some(generics::CallRequirement {
                     name: name.clone(),
                     arguments: arguments.clone(),
@@ -98,6 +99,7 @@ impl Compiler {
                     name,
                     arguments,
                     result,
+                    ..
                 } => Some(generics::CallbackRequirement {
                     ty: name,
                     parameters: arguments,
@@ -233,6 +235,7 @@ impl Compiler {
                             name,
                             arguments,
                             result,
+                            ..
                         } => {
                             self.validate_symbolic_type(&name, parameters, span)?;
                             for ty in arguments.iter().chain(std::iter::once(&result)) {
@@ -243,6 +246,7 @@ impl Compiler {
                             name,
                             arguments,
                             result,
+                            ..
                         } => {
                             if let Some((_, args)) = tuples::type_parts(&name) {
                                 for arg in args {
@@ -327,6 +331,7 @@ impl Compiler {
                     name,
                     arguments,
                     result,
+                    writes,
                 } => {
                     let ty = generics::substitute(&name, bindings);
                     let callback = self.callables.get(&ty).cloned().ok_or_else(|| {
@@ -345,12 +350,19 @@ impl Compiler {
                         span,
                     )?;
                     self.used.insert(callback.function);
-                    output.push_str(&self.functions[callback.function].cpp);
+                    if writes {
+                        self.native_effect_references
+                            .insert((callback.function, crate::effects::Query::Writes));
+                        output.push_str(&format!("rusk_writes_{}", callback.function));
+                    } else {
+                        output.push_str(&self.functions[callback.function].cpp);
+                    }
                 }
                 Part::Call {
                     name,
                     arguments,
                     result,
+                    kind,
                 } => {
                     let name = generics::substitute(&name, bindings);
                     let result = generics::substitute(&result, bindings);
@@ -376,6 +388,19 @@ impl Compiler {
                             span.error(format!("no matching native callable '{name}'"))
                         })?;
                     self.same(&result, &self.functions[index].result, span)?;
+                    if let template::CallKind::Effect(query) = kind {
+                        // A semantic query does not call or take the address of
+                        // a native definition, so it needs no target prototype.
+                        self.native_effect_references.insert((index, query));
+                        output.push_str(&format!("rusk_{}_{index}", query.name()));
+                        continue;
+                    }
+                    if matches!(kind, template::CallKind::Value)
+                        && !matches!(result.as_str(), "Int" | "Bool" | "Char")
+                    {
+                        return Err(span
+                            .error("native value references require an Int, Bool or Char result"));
+                    }
                     if self.functions[index].body.is_none() {
                         if !template::identifier(&self.functions[index].cpp) {
                             return Err(span.error(
@@ -385,7 +410,18 @@ impl Compiler {
                         self.native_references.insert(index);
                     }
                     self.used.insert(index);
-                    output.push_str(&self.functions[index].cpp);
+                    match kind {
+                        template::CallKind::Effect(query) => {
+                            unreachable!("effect query handled above: {query:?}");
+                        }
+                        template::CallKind::Value => {
+                            self.native_value_references.insert(index);
+                            output.push_str(&format!("rusk_value_ref_{index}"));
+                        }
+                        template::CallKind::Owned => {
+                            output.push_str(&self.functions[index].cpp);
+                        }
+                    }
                 }
             }
         }

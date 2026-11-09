@@ -110,6 +110,8 @@ pub struct Compiler {
     native_contracts: BTreeMap<usize, crate::effects::Summary>,
     native_lowerings: BTreeMap<usize, crate::native_lowering::Lowering>,
     native_references: BTreeSet<usize>,
+    native_value_references: BTreeSet<usize>,
+    native_effect_references: BTreeSet<(usize, crate::effects::Query)>,
     symbols: BTreeMap<String, String>,
     scopes: Vec<BTreeMap<String, Variable>>,
     body: Body,

@@ -93,7 +93,8 @@
 | 対象 | 状態 | 実装と残る仕事 |
 |---|---|---|
 | A03 | 信頼元の共通化を実装 | `Compiler`への入力で標準・利用者の由来を区別し、関数・具体化へ保持。効果契約とbackendの信頼判定から表示ファイル名への依存を削除。生成物も別の由来として保持する |
-| L03のfirst_true・sort_by_comp | 移行済み | `lib/algorithms.rusk`の通常のジェネリックexternと`invoke`参照へ移し、`higher_order.rs`の専用分岐を削除。別名の利用者定義でも実行する。sort_by_keyは引き続き未移行 |
+| A02・L04の効果参照 | 共通基盤を追加、型・保持情報の移行は未完了 | `writes`・`writes_invoke`・`fails`で通常の操作と静的コールバックを解決し、LIRの効果解析後に保守的な結果を参照。未知のexternには安全性を与えず、標準契約とRusk本体の推論を利用する。型表現・共有先・保持契約の宣言化は引き続き残る |
+| L03 | 移行済み | first_true・sort_by_key・sort_by_compを`lib/algorithms.rusk`の通常のジェネリックexternへ移し、`higher_order.rs`の専用分岐を削除。別名の利用者定義でも実行する。キーのコピー・比較は型付き参照を使い、基本型に限定する専用判定も削除 |
 | A05 | 宣言に生成情報を接続 | 基本演算・入出力・反復・添字の式をcore/vec宣言の`lower`・`lower_owned`・`lower_borrowed`へ移し、backendの関数名別テーブルを削除。所有・借用の証明は従来の解析で行う。Vec宣言自体の広域置換はまだ残る |
 | A06 | 代入の役割を接続、型分類は未完了 | `operation:"assign"`を信頼された宣言で検査し、scalar_aliasesの`__assign__`判定を削除。基本型の表現分類と直接保持の宣言化は残る |
 | L02 | 移行済み | all/any/fold/scan/to_vecを`lib/algorithms.rusk`の通常の宣言へ移し、共通の専用生成ブロックを削除。反復・コピー・コールバックは型付き参照から解決し、利用者定義のジェネリックな反復型でも動かす |

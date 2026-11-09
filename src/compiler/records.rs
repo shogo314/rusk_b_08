@@ -38,6 +38,7 @@ impl Compiler {
         let native = self.types[&record.name.text].clone();
         let copy = format!("copy_{native}");
         let assign = format!("assign_{native}");
+        let copy_index = self.functions.len();
         for (name, params, result, cpp, code) in [
             (
                 "copy",
@@ -73,7 +74,7 @@ impl Compiler {
             });
         }
         self.prepared_records.insert(name.into());
-        self.prepare_tuple_functions(&record)?;
+        self.prepare_tuple_functions(&record, copy_index)?;
         Ok(())
     }
 

@@ -2,6 +2,85 @@ mod support;
 use support::Case;
 
 #[test]
+fn key_sort_checks_structural_changes_inside_user_key_operations_and_cleanup() {
+    let source = r#"
+extern symbol watched_source {code:"Obj<RuskVec<std::int64_t>> watched;",}
+extern type Key {cpp_name:"std::int64_t",}
+extern fn make_key(source:Vec<Int>,x:Int)->Key {
+    cpp_name:"watch_key",code:"Obj<std::int64_t> watch_key(Obj<RuskVec<std::int64_t>> source,Obj<std::int64_t> x,Loc){watched=source;return KEY_OBJECT;}",
+}
+extern fn copy(x:Key)->Key {cpp_name:"watch_key_copy",code:"Obj<std::int64_t> watch_key_copy(Obj<std::int64_t> x,Loc){COPY_CHANGE return make_obj<std::int64_t>(*x);}",}
+extern fn __lt__(a:Key,b:Key)->Bool {
+    cpp_name:"watch_key_less",code:"Obj<bool> watch_key_less(Obj<std::int64_t> a,Obj<std::int64_t> b,Loc){COMPARE_CHANGE return make_obj<bool>(*a<*b);}",
+}
+let values:=VALUES;wt "before";sort_by_key(values,(x:Int)=>make_key(values,x));
+"#;
+    let change = "watched->clear();++watched->version;";
+    let normal = "make_obj<std::int64_t>(*x)";
+    let on_drop = "Obj<std::int64_t>(new std::int64_t(*x),[](auto* value){delete value;watched->clear();++watched->version;})";
+    for (copy, compare, key, values) in [
+        (change, "", normal, "[2,1]"),
+        ("", change, normal, "[2,1]"),
+        ("", "", on_drop, "[2,1]"),
+        ("", "", on_drop, "[2]"),
+    ] {
+        let case = Case::new(
+            &source
+                .replace("COPY_CHANGE", copy)
+                .replace("COMPARE_CHANGE", compare)
+                .replace("KEY_OBJECT", key)
+                .replace("VALUES", values),
+        );
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains("main.rusk:") && error.contains("container changed during callback"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn key_sort_snapshots_keys_once_and_accepts_user_comparison_operations() {
+    let declarations = include_str!("../lib/algorithms.rusk")
+        .replace("fn first_true<", "fn boundary_search<")
+        .replace("fn all<", "fn every_item<")
+        .replace("fn any<", "fn some_item<")
+        .replace("fn fold<", "fn reduce_items<")
+        .replace("fn scan<", "fn prefixes<")
+        .replace("fn to_vec<", "fn collect_items<")
+        .replace("fn sort_by_comp<", "fn order_items<")
+        .replace("fn sort_by_key<", "fn order_keys<");
+    let case = Case::new(&format!(
+        r#"{declarations}
+struct Row{{key:Int;id:Int;}}
+let values:=[Row{{key:1,id:0}},Row{{key:0,id:1}},Row{{key:1,id:2}}];
+let shared:=[0];let visits:=0;
+order_keys(values,(x:Row)=>{{visits+=1;shared[0]=x.key;shared}});
+for value in values{{wt value.id;}}wt visits;
+struct Key{{value:Int;}}
+fn __lt__(a:Key,b:Key)->Bool{{return a.value<b.value;}}
+order_keys(values,(x:Row)=>Key{{value:-x.key}});
+for value in values{{wt value.id;}}
+let tuples:=[(1,2),(0,4),(1,0)];order_keys(tuples,(x:(Int,Int))=>x);wt tuples;
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1\n0\n2\n3\n0\n2\n1\n0 4 1 0 1 2\n");
+    }
+}
+
+#[test]
 fn binary_search_is_an_ordinary_declaration_and_works_under_an_unrelated_name() {
     let declaration = include_str!("../lib/algorithms.rusk")
         .replace("fn first_true<", "fn boundary_search<")
@@ -10,7 +89,8 @@ fn binary_search_is_an_ordinary_declaration_and_works_under_an_unrelated_name() 
         .replace("fn to_vec<", "fn collect_items<")
         .replace("fn fold<", "fn reduce_items<")
         .replace("fn scan<", "fn prefixes<")
-        .replace("fn sort_by_comp<", "fn order_items<");
+        .replace("fn sort_by_comp<", "fn order_items<")
+        .replace("fn sort_by_key<", "fn order_keys<");
     let case = Case::new(&format!(
         r#"{declaration}
 let threshold:=40;let predicate:=(x:Int)=>x*x>=threshold;
@@ -65,7 +145,8 @@ fn predicates_use_user_defined_generic_iteration_without_container_name_dispatch
         .replace("fn to_vec<", "fn collect_items<")
         .replace("fn fold<", "fn reduce_items<")
         .replace("fn scan<", "fn prefixes<")
-        .replace("fn sort_by_comp<", "fn order_items<");
+        .replace("fn sort_by_comp<", "fn order_items<")
+        .replace("fn sort_by_key<", "fn order_keys<");
     let case = Case::new(&format!(
         r#"{declarations}
 struct Feed<T>{{values:Vec<T>;}}
@@ -158,7 +239,8 @@ fn comparator_sort_preserves_stability_and_is_available_as_a_user_declaration() 
         .replace("fn fold<", "fn reduce_items<")
         .replace("fn scan<", "fn prefixes<")
         .replace("fn to_vec<", "fn collect_items<")
-        .replace("fn sort_by_comp<", "fn order_items<");
+        .replace("fn sort_by_comp<", "fn order_items<")
+        .replace("fn sort_by_key<", "fn order_keys<");
     let case = Case::new(&format!(
         r#"{declarations}
 struct Row{{key:Int;id:Int;}}

@@ -242,29 +242,6 @@ impl Compiler {
             let source_native = self.types[&args[0].ty].clone();
             return self.native_function(name,types,&ty,|cpp|format!("Obj<{native}> {cpp}(Obj<{source_native}> source,Obj<{callback_native}> callback,Loc loc){{return make_obj<{native}>({native}{{{create}(source,loc),callback,{{}},false,false}});}}"),span).map(Some);
         }
-        if name == "sort_by_key" && args.len() == 2 {
-            let element = vector_element(&args[0].ty)
-                .ok_or_else(|| span.error("sorting requires an array"))?
-                .to_string();
-            let cb = self.callback(&args[1], std::slice::from_ref(&element), None, span)?;
-            let invoke = self.functions[cb.function].cpp.clone();
-            let source_native = self.types[&args[0].ty].clone();
-            let callback_native = self.types[&args[1].ty].clone();
-            let guard =
-                "if(source->version!=version)fail(loc,\"container changed during callback\");";
-            if !self.automatic_value(&cb.result) {
-                return Err(span.error(
-                    "sort keys require automatically ordered basic, array, or tuple values",
-                ));
-            }
-            let copy = self.copy_function(&cb.result, span)?;
-            let key_native = &self.types[&cb.result];
-            let element_native = &self.types[&element];
-            let action = format!(
-                "std::vector<std::pair<Obj<{key_native}>,Obj<{element_native}>>> values;values.reserve(source->size());for(std::size_t i=0,n=source->size();i<n;++i){{auto value=(*source)[i];auto key={invoke}(callback,value,loc);{guard}values.push_back({{{copy}(key,loc),value}});}}std::stable_sort(values.begin(),values.end(),[](const auto& a,const auto& b){{return value_less(a.first,b.first);}});for(std::size_t i=0;i<values.size();++i)(*source)[i]=values[i].second;"
-            );
-            return self.native_function(name,types,"Unit",|cpp|format!("void {cpp}(Obj<{source_native}> source,Obj<{callback_native}> callback,Loc loc){{auto version=source->version;{action}++source->version;}}"),span).map(Some);
-        }
         Ok(None)
     }
 

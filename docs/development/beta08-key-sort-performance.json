@@ -1,0 +1,126 @@
+{
+  "utc": "2026-11-09T18:38:11.798800+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "f943715ad4a058795ce935e96d66f073dccdf3d4005c99a526f620c2972439cf"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "extern_key_sort": {
+      "source": "let a:=[0;2000];let total:=0;for round in 0..200{for i in 0..a.len(){a[i]=(i*7919+round)%2003;}sort_by_key(a,(x:Int)=>x%97);total+=a[1000];}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "188753\n",
+          "cpp_sha256": "f91917f98b9d6d39f6a8dbafbaf26b2d82d2b612ec802dc1e910526de2db189c",
+          "runs_ms": [
+            28.934796,
+            30.848167,
+            30.176961,
+            28.306914,
+            30.1124,
+            30.958785,
+            32.645349,
+            29.63432,
+            29.7569,
+            42.586087,
+            31.69071,
+            29.640587,
+            27.749909,
+            31.462053,
+            28.703282
+          ],
+          "allocations": 1203414,
+          "shared_ptr_copies": 4001615,
+          "median_ms": 30.1124
+        },
+        "current": {
+          "output": "188753\n",
+          "cpp_sha256": "7b6526f97971ae4a6511f94dbda93ba292b797e214d389e55a7ce112c56cc8ae",
+          "runs_ms": [
+            29.078832,
+            33.166746,
+            29.860679,
+            28.183238,
+            32.743373,
+            29.52485,
+            32.994404,
+            35.379657,
+            29.602816,
+            38.956489,
+            31.223262,
+            31.157395,
+            28.616912,
+            32.602351,
+            30.345251
+          ],
+          "allocations": 1203414,
+          "shared_ptr_copies": 4001615,
+          "median_ms": 31.157395
+        }
+      },
+      "speedup": 0.9664607711909163
+    },
+    "extern_aggregate_key_sort": {
+      "source": "let a:=[0;1000];let total:=0;for round in 0..200{for i in 0..a.len(){a[i]=(i*7919+round)%1009;}sort_by_key(a,(x:Int)=>(x%97,-x));total+=a[500];sort_by_key(a,(x:Int)=>[x%97,-x]);total+=a[500];}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "161572\n",
+          "cpp_sha256": "a96efc6e0e10e107429ed8e1454f42cf0da9bcd540606b3392facb98f2c0b1e6",
+          "runs_ms": [
+            111.698809,
+            67.382865,
+            63.27045,
+            55.922648,
+            56.628076,
+            78.64953,
+            69.396013,
+            65.218615,
+            58.071388,
+            62.346759,
+            58.431284,
+            64.382771,
+            66.300762,
+            65.039808,
+            65.114732
+          ],
+          "allocations": 3003013,
+          "shared_ptr_copies": 5802602,
+          "median_ms": 65.039808
+        },
+        "current": {
+          "output": "161572\n",
+          "cpp_sha256": "c703fc10f7cc9dadd06b4ce0624e06182e4d12fce8f3318b9b1896510cbc8ae6",
+          "runs_ms": [
+            96.652179,
+            68.623698,
+            65.010344,
+            62.572674,
+            70.635559,
+            82.426698,
+            67.49343,
+            68.407542,
+            57.933662,
+            64.340412,
+            57.102948,
+            56.141047,
+            61.667284,
+            61.9658,
+            68.825627
+          ],
+          "allocations": 3003013,
+          "shared_ptr_copies": 5802602,
+          "median_ms": 65.010344
+        }
+      },
+      "speedup": 1.0004532201829295
+    }
+  }
+}

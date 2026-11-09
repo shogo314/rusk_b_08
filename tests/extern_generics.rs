@@ -1,6 +1,100 @@
 mod support;
 use support::Case;
 
+#[test]
+fn native_value_references_preserve_calls_cleanup_and_scalar_identity() {
+    let case = Case::new(
+        r#"
+struct Item{value:Int;visits:Int;}
+fn inspect(x:Item)->Int{x.visits+=1;return x.value;}
+extern fn measured<T,R>(x:T)->R {
+    code:"Obj<@{R}> @{fn}(Obj<@{T}> x,Loc loc){return make_obj<@{R}>(@{value_call inspect(T)->R}(x,loc));}",
+}
+extern fn finish(x:Int)->Int {
+    cpp_name:"finish_cleanup",
+    code:"Obj<std::int64_t> finish_cleanup(Obj<std::int64_t> x,Loc){struct Guard{Obj<std::int64_t> x;~Guard(){*x=7;}} guard{x};return x;}",
+}
+extern fn finished<T>(x:T)->Int {
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}> x,Loc loc){return make_obj<@{Int}>(@{value_call finish(T)->Int}(x,loc));}",
+}
+extern fn detached<T>(x:T)->T {
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){return make_obj<@{T}>(@{value_call copy(T)->T}(x,loc));}",
+}
+extern fn inspect_writes<T,R>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{writes inspect(T)->R});}",
+}
+extern fn copy_writes<T>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{writes copy(T)->T});}",
+}
+extern fn finish_writes<T>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{writes finish(T)->Int});}",
+}
+fn unchanged(x:Int)->Int{return x;}
+extern fn unchanged_writes<T,R>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{writes unchanged(T)->R});}",
+}
+extern fn callback_writes<F,T,R>(f:F,x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{F}>,Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{writes_invoke F(T)->R});}",
+}
+extern fn copy_fails<T>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{fails copy(T)->T});}",
+}
+extern fn finish_fails<T>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{fails finish(T)->Int});}",
+}
+extern fn unchanged_fails<T,R>(x:T)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{fails unchanged(T)->R});}",
+}
+extern fn unit_copy_safe<T>()->Bool {
+    code:"Obj<@{Bool}> @{fn}(Loc){return make_obj<@{Bool}>(!@{writes copy(T)->T} && !@{fails copy(T)->T});}",
+}
+extern fn metadata_only()->Int {cpp_name:"not_a_callable::metadata_only",code:"not valid C++",}
+extern fn unknown_metadata<T>()->Bool {
+    code:"Obj<@{Bool}> @{fn}(Loc){return make_obj<@{Bool}>(@{writes metadata_only()->T} && @{fails metadata_only()->T});}",
+}
+let row:=Item{value:4,visits:0};wt measured(row),row.visits;
+let x:=2;let y:=finished(x);y=9;wt x,y;
+let c:='a';let d:=detached(c);d='Z';wt c,d,detached(true);
+wt inspect_writes(row),copy_writes(x),finish_writes(x),unchanged_writes(x),row.visits,x;
+wt callback_writes((n:Int)=>n+1,1),callback_writes((n:Int)=>{row.visits+=1;n},1),row.visits;
+wt copy_fails(x),finish_fails(x),unchanged_fails(x);
+wt unit_copy_safe::<Unit>(),unknown_metadata::<Int>();
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"4 1\n7 9\na Z Yes\nYes No Yes No 1 7\nNo Yes 1\nNo Yes No\nYes Yes\n"
+        );
+    }
+}
+
+#[test]
+fn native_value_references_reject_aggregate_and_unit_results() {
+    for (ty, body) in [("Str", "return \"text\";"), ("Unit", "")] {
+        let source = format!(
+            r#"
+fn produce()->{ty}{{{body}}}
+extern fn native<T>()->T {{code:"@{{value_call produce()->T}}",}}
+native::<{ty}>();
+"#
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("native value references require an Int, Bool or Char result"),
+            "{error}"
+        );
+    }
+}
+
 const CELL: &str = r#"
 extern type<T> Cell { cpp_name: "std::shared_ptr<{T}>", }
 extern fn cell<T>(x:T)->Cell<T> {

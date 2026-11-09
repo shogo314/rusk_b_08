@@ -18,6 +18,13 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'extern_key_sort': ('let a:=[0;2000];let total:=0;for round in 0..200{'
+                       'for i in 0..a.len(){a[i]=(i*7919+round)%2003;}'
+                       'sort_by_key(a,(x:Int)=>x%97);total+=a[1000];}wt total;'),
+    'extern_aggregate_key_sort': ('let a:=[0;1000];let total:=0;for round in 0..200{'
+                                 'for i in 0..a.len(){a[i]=(i*7919+round)%1009;}'
+                                 'sort_by_key(a,(x:Int)=>(x%97,-x));total+=a[500];'
+                                 'sort_by_key(a,(x:Int)=>[x%97,-x]);total+=a[500];}wt total;'),
     'extern_comparator_sort': ('let a:=[0;2000];let total:=0;for round in 0..30{'
                                'for i in 0..a.len(){a[i]=(i*7919+round)%2003;}'
                                'sort_by_comp(a,(x:Int,y:Int)=>x<y);total+=a[1000];}wt total;'),

@@ -22,6 +22,33 @@ impl Effect {
         *self = (*self).max(other);
     }
 }
+
+/// Conservative questions that native declarations can ask after inference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Query {
+    Writes,
+    Fails,
+}
+impl Query {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Writes => "writes",
+            Self::Fails => "fails",
+        }
+    }
+    pub(crate) fn evaluate(self, summary: &Summary) -> bool {
+        match self {
+            Self::Writes => {
+                summary.external_write != Effect::No
+                    || summary
+                        .parameters
+                        .iter()
+                        .any(|p| p.write != Effect::No || p.structural != Effect::No)
+            }
+            Self::Fails => summary.may_fail != Effect::No,
+        }
+    }
+}
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ParameterEffects {
     pub read: Effect,

@@ -105,26 +105,38 @@ extern fn __iter_next__(it: Iterator) -> Element {
     code: "Obj<NativeElement> vector_function_21(Obj<NativeIterator> it, [[maybe_unused]] Loc loc) { check_iter(it,loc); if(it->index>=it->owner->size()) fail(loc,\"iterator exhausted\"); return (*it->owner)[it->index++]; }",
 }
 extern fn __eq__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "value_equal($0,$1)",
     cpp_name: "vector_function_22",
     code: "Obj<bool> vector_function_22(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_equal(a,b)); }",
 }
 extern fn __ne__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "!value_equal($0,$1)",
     cpp_name: "vector_function_23",
     code: "Obj<bool> vector_function_23(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_equal(a,b)); }",
 }
 extern fn __lt__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "value_less($0,$1)",
     cpp_name: "vector_function_24",
     code: "Obj<bool> vector_function_24(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_less(a,b)); }",
 }
 extern fn __le__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "!value_less($1,$0)",
     cpp_name: "vector_function_25",
     code: "Obj<bool> vector_function_25(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(b,a)); }",
 }
 extern fn __gt__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "value_less($1,$0)",
     cpp_name: "vector_function_26",
     code: "Obj<bool> vector_function_26(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(value_less(b,a)); }",
 }
 extern fn __ge__(a: Vector, b: Vector) -> Bool {
+    effects: "read_fresh",
+    lower: "!value_less($0,$1)",
     cpp_name: "vector_function_27",
     code: "Obj<bool> vector_function_27(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(a,b)); }",
 }

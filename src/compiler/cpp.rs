@@ -43,6 +43,8 @@ impl Compiler {
             functions,
             prelude,
             foreign_definitions,
+            native_value_references: self.native_value_references.clone(),
+            native_effect_references: self.native_effect_references.clone(),
             native_declarations: self
                 .native_references
                 .iter()

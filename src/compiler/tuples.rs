@@ -142,21 +142,48 @@ impl Compiler {
     pub(super) fn prepare_tuple_functions(
         &mut self,
         record: &records::Record,
+        copy_index: usize,
     ) -> Result<(), String> {
         let ty = &record.name.text;
         if !ty.starts_with("Tuple<") || !self.automatic_value(ty) {
             return Ok(());
         }
+        // Only these automatically ordered tuples recursively contain standard
+        // values. Their generated deep copy cannot dispatch to user operations.
+        let effects = crate::native_effects::contract(
+            "checked_read_fresh",
+            std::slice::from_ref(ty),
+            ty,
+            &self.ir_types(),
+        )?;
+        self.native_contracts.insert(copy_index, effects);
         let native = &self.types[ty];
         for (name, expression) in [
-            ("__eq__", "value_equal(a,b)"),
-            ("__ne__", "!value_equal(a,b)"),
-            ("__lt__", "value_less(a,b)"),
-            ("__le__", "!value_less(b,a)"),
-            ("__gt__", "value_less(b,a)"),
-            ("__ge__", "!value_less(a,b)"),
+            ("__eq__", "value_equal($0,$1)"),
+            ("__ne__", "!value_equal($0,$1)"),
+            ("__lt__", "value_less($0,$1)"),
+            ("__le__", "!value_less($1,$0)"),
+            ("__gt__", "value_less($1,$0)"),
+            ("__ge__", "!value_less($0,$1)"),
         ] {
             let cpp = format!("{name}_{native}");
+            let template = crate::native_lowering::Template::parse(expression, 2)
+                .expect("generated tuple expression");
+            let expression = template.render(&["a".into(), "b".into()], "loc");
+            self.native_lowerings.insert(
+                self.functions.len(),
+                crate::native_lowering::Lowering {
+                    scalar: Some(template),
+                    ..Default::default()
+                },
+            );
+            let effects = crate::native_effects::contract(
+                "read_fresh",
+                &[ty.clone(), ty.clone()],
+                "Bool",
+                &self.ir_types(),
+            )?;
+            self.native_contracts.insert(self.functions.len(), effects);
             self.functions.push(Function { name: Name { text:name.into(), span:record.name.span.clone() }, params:vec![ty.clone();2], result:"Bool".into(), cpp:cpp.clone(), code:format!("Obj<bool> {cpp}(Obj<{native}> a, Obj<{native}> b, Loc) {{ return make_obj<bool>({expression}); }}"), body:None, origin:Origin::Generated,checked:None });
         }
         let cpp = format!("write_{native}");
