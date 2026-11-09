@@ -1,4 +1,8 @@
-// Ordinary generic extern declarations for vector operations.
+// Ordinary generic extern declarations for vector types and operations.
+extern type<T> Vec {
+    cpp_name: "RuskVec<{T}>",
+    representation: "vector<T>",
+}
 extern type<T> Iter<Vec<T>> {
     cpp_name: "RuskIter<{T}>",
     representation: "iterator<T>",
@@ -20,8 +24,8 @@ extern fn __vec_new__<T>() -> Vec<T> {
 }
 
 extern fn __vec_repeat__<T>(initial: T, count: Int) -> Vec<T> {
-    effects: "deep_read_fresh",
-    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{T}> initial, Obj<std::int64_t> count, [[maybe_unused]] Loc loc) { if(*count<0) fail(loc,\"negative array length\"); auto a=make_obj<@{Vec<T>}>(@{Vec<T>}{}); if(static_cast<__int128>(*count)>static_cast<__int128>(a->max_size())) fail(loc,\"array length out of range\"); a->reserve(static_cast<std::size_t>(*count)); for(std::int64_t i=0;i<*count;++i) a->push_back(deep_copy(initial,loc)); return a; }",
+    effects: "checked_read_fresh",
+    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{T}> initial, Obj<std::int64_t> count, [[maybe_unused]] Loc loc) { if(*count<0) fail(loc,\"negative array length\"); auto a=make_obj<@{Vec<T>}>(@{Vec<T>}{}); if(static_cast<__int128>(*count)>static_cast<__int128>(a->max_size())) fail(loc,\"array length out of range\"); a->reserve(static_cast<std::size_t>(*count)); for(std::int64_t i=0;i<*count;++i) a->push_back(@{owned_call copy(T)->T}(initial,loc)); return a; }",
 }
 
 extern fn len<T>(a: Vec<T>) -> Int {
@@ -36,6 +40,7 @@ extern fn push_back<T>(a: Vec<T>, x: T) {
 }
 
 extern fn __getitem__<T>(a: Vec<T>, i: Int) -> T {
+    return_abi: "object",
     lower_owned: "(*$0)[checked_index($0->size(),*$1,$loc)]",
     lower_borrowed: "(*$0)[checked_index($0->size(),*$1,$loc)]",
     effects: "element",
@@ -43,18 +48,20 @@ extern fn __getitem__<T>(a: Vec<T>, i: Int) -> T {
 }
 
 extern fn __setitem__<T>(a: Vec<T>, i: Int, x: T) -> T {
+    return_abi: "object",
     effects: "replace_element",
     code: "Obj<@{T}> @{fn}(Obj<@{Vec<T>}> a, Obj<std::int64_t> i, Obj<@{T}> x, [[maybe_unused]] Loc loc) { (*a)[checked_index(a->size(),*i,loc)]=x; return x; }",
 }
 
 extern fn copy<T>(a: Vec<T>) -> Vec<T> {
-    effects: "deep_read_fresh",
-    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{Vec<T>}> a, [[maybe_unused]] Loc loc) { return deep_copy(a,loc); }",
+    effects: "checked_read_fresh",
+    lower_owned: "([&](){auto clone=[&](const auto& input){const auto size=input->size();[[maybe_unused]]const auto version=input->version;auto guard=[&](){if constexpr(@{writes copy(T)->T}){if(input->version!=version||input->size()!=size)fail($loc,\"container changed during copy\");}};auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{});result->reserve(size);for(std::size_t i=0;i<size;++i){guard();if constexpr(@{writes copy(T)->T}){{auto item=(*input)[i];result->push_back(@{owned_call copy(T)->T}(item,$loc));guard();}}else result->push_back(@{owned_call copy(T)->T}((*input)[i],$loc));guard();}return result;};if constexpr(@{writes copy(T)->T}){auto owner=$0;return clone(owner);}else return clone($0);}())",
+    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{Vec<T>}> a,Loc loc){return ([&](){auto clone=[&](const auto& input){const auto size=input->size();[[maybe_unused]]const auto version=input->version;auto guard=[&](){if constexpr(@{writes copy(T)->T}){if(input->version!=version||input->size()!=size)fail(loc,\"container changed during copy\");}};auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{});result->reserve(size);for(std::size_t i=0;i<size;++i){guard();if constexpr(@{writes copy(T)->T}){{auto item=(*input)[i];result->push_back(@{owned_call copy(T)->T}(item,loc));guard();}}else result->push_back(@{owned_call copy(T)->T}((*input)[i],loc));guard();}return result;};if constexpr(@{writes copy(T)->T}){auto owner=a;return clone(owner);}else return clone(a);}());}",
 }
 
 extern fn __assign__<T>(a: Vec<T>, b: Vec<T>) {
-    effects: "deep_resize_first",
-    code: "void @{fn}(Obj<@{Vec<T>}> a, Obj<@{Vec<T>}> b, [[maybe_unused]] Loc loc) { auto snapshot=deep_copy(b,loc); a->assign(snapshot->begin(),snapshot->end()); ++a->version; }",
+    effects: "checked_resize_first",
+    code: "void @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){auto snapshot=@{owned_call copy(Vec<T>)->Vec<T>}(b,loc);const auto size=snapshot->size();a->swap(*snapshot);++a->version;const auto version=a->version;auto guard=[&](){if(a->version!=version||a->size()!=size)fail(loc,\"container changed during assignment\");};snapshot->clear();guard();if(snapshot->capacity()>=size){for(auto& item:*a)snapshot->push_back(std::move(item));a->clear();a->swap(*snapshot);}snapshot.reset();guard();}",
 }
 
 extern fn __bool__<T>(a: Vec<T>) -> Bool {
@@ -85,6 +92,7 @@ extern fn __iter_has_next__<T>(it: Iter<Vec<T>>) -> Bool {
 }
 
 extern fn __iter_next__<T>(it: Iter<Vec<T>>) -> T {
+    return_abi: "object",
     lower_owned: "([&](){check_iter($0,$loc);if($0->index>=$0->owner->size())fail($loc,\"iterator exhausted\");return (*$0->owner)[$0->index++];}())",
     lower_borrowed: "([&]() -> const auto&{check_iter($0,$loc);if($0->index>=$0->owner->size())fail($loc,\"iterator exhausted\");return (*$0->owner)[$0->index++];}())",
     code: "Obj<@{T}> @{fn}(Obj<@{Iter<Vec<T>>}> it, [[maybe_unused]] Loc loc) { check_iter(it,loc); if(it->index>=it->owner->size()) fail(loc,\"iterator exhausted\"); return (*it->owner)[it->index++]; }",
@@ -102,6 +110,7 @@ extern fn Bool<T>(a: Vec<T>) -> Bool {
 }
 
 extern fn pop_back<T>(a: Vec<T>) -> T {
+    return_abi: "object",
     code: "Obj<@{T}> @{fn}(Obj<@{Vec<T>}> a,Loc loc){ if(a->empty()) fail(loc,\"pop from empty array\"); auto value=a->back();a->pop_back();++a->version;return value; }",
 }
 

@@ -55,6 +55,7 @@ impl Compiler {
             foreign_definitions: definitions(foreign_definitions),
             native_unit_bridges: self.native_unit_bridges.clone(),
             native_value_references: self.native_value_references.clone(),
+            native_owned_references: self.native_owned_references.clone(),
             native_effect_references: self.native_effect_references.clone(),
             native_declarations: self
                 .native_references

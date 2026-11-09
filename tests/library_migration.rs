@@ -738,3 +738,79 @@ let rows:=[inner(),[2]];watch(rows);wt "before";wt rows;
         }
     }
 }
+
+#[test]
+fn declared_vector_types_support_opaque_copy_hooks_and_unit_storage() {
+    let opaque = r#"
+extern type Score{cpp_name:"std::int64_t",}
+extern symbol copy_counter{code:"std::int64_t score_copies=0;",}
+extern fn score(x:Int)->Score {cpp_name:"make_score",code:"Obj<std::int64_t> make_score(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",}
+extern fn value(x:Score)->Int {cpp_name:"score_value",code:"Obj<std::int64_t> score_value(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn copies()->Int {cpp_name:"score_count",code:"Obj<std::int64_t> score_count(Loc){return make_obj<std::int64_t>(score_copies);}",}
+extern fn copy(x:Score)->Score {cpp_name:"user::copy",code:"namespace user{Obj<std::int64_t> copy(Obj<std::int64_t> x,Loc){++score_copies;return make_obj<std::int64_t>(*x);}}",}
+extern fn __write__(x:Score){cpp_name:"write_score",code:"void write_score(Obj<std::int64_t> x,Loc){rusk_write(*x);}",}
+let seed:=score(2);let rows:=[seed;2];wt copies();
+let independent=rows;wt copies();value(rows[0])=7;wt value(seed),rows,independent;
+rows=independent;wt copies(),rows;let held:=rows.pop_back();wt value(held),rows.len();
+"#;
+    let unit = r#"
+extern fn same(a:Unit,b:Unit)->Bool{cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+let original:={};let values:=__vec_new__::<Unit>();values.push_back(original);
+let held:=values[0];wt same(held,original);
+let detached=values;wt same(detached[0],original);
+let repeated:=[original;2];wt same(repeated[0],repeated[1]);
+values[0]:={};wt same(held,original),same(values[0],original);
+let stored:=values[0];let popped:=values.pop_back();wt same(popped,stored),values.len();
+let count:=0;for item in repeated{if same(item,repeated[0]){count+=1;}}wt count;
+"#;
+    for (source, expected) in [
+        (opaque, "2\n4\n2 7 2 2 2\n6 2 2\n2 1\n"),
+        (unit, "Yes\nNo\nNo\nYes No\nYes 0\n1\n"),
+    ] {
+        let case = Case::new(source);
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(out.stdout, expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn vector_copy_and_assignment_guard_user_operations_and_displaced_cleanup() {
+    let copying = r#"
+extern type Score{cpp_name:"std::int64_t",}
+struct Row{value:Score;other:Int;}
+extern symbol watched{code:"struct RuskRecord0;Obj<RuskVec<RuskRecord0>> watched;",}
+extern fn score()->Score{cpp_name:"score",code:"Obj<std::int64_t> score(Loc){return make_obj<std::int64_t>(1);}",}
+extern fn watch(rows:Vec<Row>){cpp_name:"watch",code:"void watch(Obj<RuskVec<RuskRecord0>> rows,Loc){watched=rows;}",}
+extern fn copy(x:Score)->Score{cpp_name:"copy_score",code:"Obj<std::int64_t> copy_score(Obj<std::int64_t> x,Loc){watched->clear();++watched->version;return make_obj<std::int64_t>(*x);}",}
+let rows:=[Row{value:score(),other:2}];watch(rows);wt "before";let copied=rows;
+"#;
+    let assigning = r#"
+extern symbol watched{code:"Obj<RuskVec<std::int64_t>> watched;",}
+extern fn watch(rows:Vec<Int>){cpp_name:"watch",code:"void watch(Obj<RuskVec<std::int64_t>> rows,Loc){watched=rows;}",}
+extern fn risky()->Int{cpp_name:"risky",code:"Obj<std::int64_t> risky(Loc){return Obj<std::int64_t>(new std::int64_t(1),[](auto* p){delete p;if(watched){watched->clear();++watched->version;}});}",}
+let rows:=[risky(),2];watch(rows);wt "before";rows=[3,4];
+"#;
+    for (source, message) in [
+        (copying, "container changed during copy"),
+        (assigning, "container changed during assignment"),
+    ] {
+        let case = Case::new(source);
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains("main.rusk:") && error.contains(message),
+                "{error}"
+            );
+        }
+    }
+}

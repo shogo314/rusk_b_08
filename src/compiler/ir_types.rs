@@ -32,8 +32,6 @@ impl Compiler {
                     Type::Record(fields())
                 } else if let Some(meta) = self.native_types.get(name) {
                     meta.kind.clone()
-                } else if let Some(element) = vector_element(name) {
-                    Type::Vector(element.into())
                 } else if let Some(c) = self.containers.get(name) {
                     match &c.shape {
                         containers::Shape::Dict => Type::Dict {

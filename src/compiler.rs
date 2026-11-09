@@ -101,6 +101,7 @@ pub struct Compiler {
     records: BTreeMap<String, records::Record>,
     prepared_records: BTreeSet<String>,
     record_copies: BTreeMap<String, Vec<usize>>,
+    record_copy_functions: BTreeMap<String, usize>,
     generic_extern_types: BTreeMap<String, externs::ExternalType>,
     preparing_extern_types: BTreeSet<String>,
     generic_records: BTreeMap<String, generics::GenericRecord>,
@@ -113,6 +114,7 @@ pub struct Compiler {
     native_lowerings: BTreeMap<usize, crate::native_lowering::Lowering>,
     native_references: BTreeSet<usize>,
     native_value_references: BTreeSet<usize>,
+    native_owned_references: BTreeSet<usize>,
     native_effect_references: BTreeSet<(usize, crate::effects::Query)>,
     native_types: BTreeMap<String, type_metadata::Metadata>,
     native_unit_objects: BTreeSet<usize>,
@@ -621,24 +623,6 @@ impl Compiler {
             Ok(())
         } else if n.text.starts_with("Tuple<") {
             self.specialize_tuple(n)
-        } else if let Some(inner) = vector_element(&n.text) {
-            let inner = inner.to_string();
-            self.check_type(&Name {
-                text: inner.clone(),
-                span: n.span.clone(),
-            })?;
-            if !matches!(inner.as_str(), "Int" | "Bool" | "Char" | "Str")
-                && vector_element(&inner).is_none()
-                && !self.records.contains_key(&inner)
-                && !self.containers.contains_key(&inner)
-                && !self.enums.contains_key(&inner)
-            {
-                return Err(n
-                    .span
-                    .error("vectors require basic, struct or vector element types"));
-            }
-            self.specialize_vector(&n.text, &inner)?;
-            Ok(())
         } else {
             if self.specialize_record(n)? {
                 Ok(())
@@ -646,12 +630,6 @@ impl Compiler {
                 Err(n.span.error(format!("unknown type '{}'", n.text)))
             }
         }
-    }
-    fn specialize_vector(&mut self, ty: &str, inner: &str) -> Result<(), String> {
-        let native_element = self.types[inner].clone();
-        let native = format!("RuskVec<{native_element}>");
-        self.types.insert(ty.into(), native.clone());
-        Ok(())
     }
     fn temp(&mut self) -> ValueId {
         let r = ValueId::Local(self.counter);

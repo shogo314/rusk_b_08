@@ -39,6 +39,14 @@ impl Compiler {
         let copy = format!("copy_{native}");
         let assign = format!("assign_{native}");
         let copy_index = self.functions.len();
+        self.record_copy_functions
+            .insert(record.name.text.clone(), copy_index);
+        self.native_effect_references
+            .insert((copy_index, crate::effects::Query::Writes));
+        self.native_lowerings.insert(copy_index,crate::native_lowering::Lowering {
+            owned: Some(crate::native_lowering::Template::parse(&format!("([&](){{if constexpr(rusk_writes_{copy_index}){{auto owner=$0;return deep_copy(owner,$loc);}}else return deep_copy($0,$loc);}}())"),1).expect("generated record copy expression")),
+            ..Default::default()
+        });
         for (name, params, result, cpp, code) in [
             (
                 "copy",
@@ -164,6 +172,18 @@ impl Compiler {
                 self.abi_reference(index, true);
                 copies.push(index);
             }
+            let copy_index = self.record_copy_functions[&record.name.text];
+            self.native_contracts.insert(
+                copy_index,
+                crate::native_effects::contract(
+                    "checked_read_fresh",
+                    std::slice::from_ref(&record.name.text),
+                    &record.name.text,
+                    &self.ir_types(),
+                )?,
+            );
+            self.native_contract_dependencies
+                .insert(copy_index, copies.iter().copied().collect());
             self.record_copies.insert(record.name.text, copies);
         }
         Ok(())

@@ -31,8 +31,10 @@ pub(crate) fn emit(
                         scalar.insert(result.id.clone());
                     }
                     Instruction::Call(call)
-                        if functions[call.function].result == "Unit"
-                            || intrinsics::lower(call, &functions[call.function]).is_some() =>
+                        if !functions[call.function].unit_object
+                            && (functions[call.function].result == "Unit"
+                                || intrinsics::lower(call, &functions[call.function])
+                                    .is_some()) =>
                     {
                         scalar.insert(call.result.id.clone());
                     }
@@ -289,6 +291,8 @@ pub(crate) fn emit(
                     let direct = if optimize {
                         if owned.elements.contains(&call.result.id) {
                             intrinsics::lower_borrowed(call, info)
+                        } else if info.unit_object {
+                            intrinsics::lower_owned(call, info)
                         } else {
                             intrinsics::lower(call, info)
                                 .or_else(|| intrinsics::lower_owned(call, info))
@@ -307,7 +311,7 @@ pub(crate) fn emit(
                         args.push(call_location(call));
                         format!("{}({})", info.cpp, args.join(","))
                     };
-                    if call.result.ty == "Unit" {
+                    if call.result.ty == "Unit" && !info.unit_object {
                         let constructor = if scalar.contains(&call.result.id) {
                             "RuskTemporary"
                         } else {

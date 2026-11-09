@@ -1,0 +1,22 @@
+struct Row {ch:Char;}
+let text:="ab";
+let detached:=__vec_new__::<Row>();
+{
+    let rows:=[Row{ch:text[0]},Row{ch:text[1]}];
+    detached=rows;
+}
+text.push_back('!');
+wt detached[0].ch,detached[1].ch,text;
+extern fn token(n:Int)->Unit {
+    return_abi:"object",cpp_name:"unit_token",
+    code:"Obj<Unit> unit_token(Obj<std::int64_t> n,Loc){return Obj<Unit>(new Unit{},[n](auto* p){++*n;delete p;});}",
+}
+extern fn same(a:Unit,b:Unit)->Bool {
+    cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",
+}
+let count:=0;
+let values:=__vec_new__::<Unit>();
+{let value:=token(count);values.push_back(value);}
+wt count;
+{let held:=values.pop_back();wt same(held,held),count;}
+wt count;

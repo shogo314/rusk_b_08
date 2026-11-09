@@ -39,7 +39,7 @@ pub(crate) fn contract(
         walk(ty, types, 0)
     }
     let specification = match specification {
-        "deep_read_fresh" | "deep_resize_first" | "deep_io_write" => {
+        "deep_read_fresh" | "deep_resize_first" => {
             // Generated record copies can invoke user-defined copy functions;
             // foreign data can also supply arbitrary target-language helpers.
             if parameters.iter().any(|ty| !builtin_value(ty, types)) {
@@ -48,7 +48,7 @@ pub(crate) fn contract(
             match specification {
                 "deep_read_fresh" => "checked_read_fresh",
                 "deep_resize_first" => "checked_resize_first",
-                _ => "io_write",
+                _ => unreachable!("deep operation matched above"),
             }
         }
         other => other,
@@ -329,7 +329,7 @@ mod tests {
             Type::Record(vec![("x".into(), "Int".into())]),
         );
         types.insert("Vec<Custom>".into(), Type::Vector("Custom".into()));
-        for spec in ["deep_read_fresh", "deep_resize_first", "deep_io_write"] {
+        for spec in ["deep_read_fresh", "deep_resize_first"] {
             let opaque = contract(spec, &["Vec<Custom>".into()], "Vec<Custom>", &types).unwrap();
             assert_eq!(opaque.source, SummarySource::Opaque);
             assert_eq!(opaque.parameters[0].write, Effect::Unknown);

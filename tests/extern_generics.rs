@@ -104,8 +104,8 @@ fn invalid_and_expensive_native_type_patterns_fail_before_cpp_output() {
             "expects 1 type arguments",
         ),
         (
-            r#"extern type<T> Bad<Vec<T>>{cpp_name:"{T}",} fn unused(x:Bad<Vec<Unit>>){}"#,
-            "vectors require",
+            r#"extern type<T> Bad<Vec<T>>{cpp_name:"{T}",} fn unused(x:Bad<Vec<UnknownElement>>){}"#,
+            "unknown type",
         ),
     ] {
         let out = Case::new(source).compile();
@@ -919,5 +919,55 @@ let count:=3;actions(count);wt count;descend(count,3);wt count;
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(out.stdout, b"10\n13\n");
+    }
+}
+
+#[test]
+fn owned_references_keep_aliases_fresh_copies_and_both_unit_abis() {
+    let case = Case::new(
+        r#"
+fn alias(x:Int)->Int{return x;}
+fn action(x:Int){x+=1;}
+extern fn own<T>(x:T)->T {code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){return @{owned_call copy(T)->T}(x,loc);}",return_abi:"object",}
+extern fn share<T>(x:T)->T {code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){return @{owned_call alias(T)->T}(x,loc);}",}
+extern fn action_object<T>(x:T)->Unit {return_abi:"object",code:"Obj<@{Unit}> @{fn}(Obj<@{T}> x,Loc loc){return @{owned_call action(T)->Unit}(x,loc);}",}
+let x:=3;let independent:=own(x);let shared:=share(x);independent=8;shared=7;action_object(x);wt x,independent;
+let text:="ab";let ch:=own(text[0]);text.push_back('!');ch='Z';wt text,ch;
+own({});
+let nested:=own([[1],[2]]);nested[0][0]=9;wt nested;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"8 8\nab! Z\n9 2\n");
+    }
+}
+
+#[test]
+fn object_unit_calls_keep_the_returned_token_until_its_stored_owner_is_released() {
+    let case = Case::new(
+        r#"
+extern fn token(n:Int)->Unit{return_abi:"object",cpp_name:"token",code:"Obj<Unit> token(Obj<std::int64_t> n,Loc){return Obj<Unit>(new Unit{},[n](auto* p){++*n;delete p;});}",}
+extern fn same(a:Unit,b:Unit)->Bool{cpp_name:"same",code:"Obj<bool> same(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+let count:=0;let values:=__vec_new__::<Unit>();
+{let value:=token(count);values.push_back(value);}
+wt count;
+{let held:=values.pop_back();wt same(held,held),count;}
+wt count;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"0\nYes 0\n1\n");
     }
 }

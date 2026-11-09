@@ -18,6 +18,13 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'record_vector_copy': ('struct Row{value:Int;text:Str;}let a:=[Row{value:1,text:"ab"};1000];'
+                           'let total:=0;for round in 0..100{let b=a;total+=b[0].value;}wt total;'),
+    'vector_copy': ('let a:=[[1,2,3,4];500];let total:=0;for round in 0..200{'
+                    'let b=a;total+=b[0][0];a=b;}wt total;'),
+    'vector_capacity_reuse': ('let a:=[1;10000];let small:=[2;4];let total:=0;'
+                             'for round in 0..100{a=small;for i in 0..10000{a.push_back(i);}'
+                             'total+=a.len();}wt total;'),
     'vector_output': ('let values:=[123;1000];let matrix:=[values,values];'
                       'let rows:=[(1,2);1000];for round in 0..500{wt matrix,rows;}'),
     'vector_input': ('in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;'

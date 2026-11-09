@@ -75,10 +75,12 @@ impl Compiler {
         origin: Origin,
     ) -> Result<(), String> {
         generics::parameters_valid(parameters)?;
+        let base = tuples::type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base);
         if name.text.starts_with("__Rusk")
+            || (base == "Vec" && origin != Origin::StandardLibrary)
             || matches!(
                 tuples::type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base),
-                "Vec" | "Tuple" | "Option" | "Dict" | "Set"
+                "Tuple" | "Option" | "Dict" | "Set"
             )
         {
             return Err(name
@@ -314,7 +316,7 @@ impl Compiler {
             Some(d.parameters.len())
         } else {
             match base {
-                "Vec" | "Iter" | "Set" => Some(1),
+                "Iter" | "Set" => Some(1),
                 "Dict" => Some(2),
                 "Tuple" if args.len() >= 2 => Some(args.len()),
                 _ => None,
@@ -576,6 +578,11 @@ impl Compiler {
                         template::CallKind::Value => {
                             self.native_value_references.insert(index);
                             output.push_str(&format!("rusk_value_ref_{index}"));
+                        }
+                        template::CallKind::Object => {
+                            self.native_owned_references.insert(index);
+                            self.abi_reference(index, true);
+                            output.push_str(&format!("rusk_owned_ref_{index}"));
                         }
                         template::CallKind::Owned => {
                             output.push_str(&self.abi_reference(index, false));

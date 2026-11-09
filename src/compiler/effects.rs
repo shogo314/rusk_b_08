@@ -173,6 +173,13 @@ extern fn via<T>(x:T)->Bool{
             let sources = [
                 Source::standard(core.clone()),
                 Source::standard(collections.clone()),
+                Source::standard(
+                    crate::parse(
+                        include_str!("../../lib/vec.rusk"),
+                        "vector-declarations.rusk",
+                    )
+                    .unwrap(),
+                ),
                 Source::standard(definitions.clone()),
                 Source::user(crate::parse("wt via({});", "unit-call.rusk").unwrap()),
             ];

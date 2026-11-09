@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/vector_native_copy.rusk').read_text(),b'',b'a b ab!\n0\nYes 0\n1\n'),
     ((ROOT/'examples/beta08/vector_output_lifetime.rusk').read_text(),b'',b'a b\na b a b\nab!\n'),
     ((ROOT/'examples/beta08/structured_input_unit.rusk').read_text(),b'3 4 5',b'3 4 5 0\n3\n'),
     ((ROOT/'examples/beta08/vector_ordering_lifetime.rusk').read_text(),b'',b'1 0 2\nYes 1 3 Yes\nZaba\nZaba!\n'),

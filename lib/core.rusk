@@ -96,6 +96,7 @@ extern fn __write__(x: Char) {
 }
 
 extern fn copy(x: Str) -> Str {
+    lower_owned: "make_obj<std::string>(*$0)",
     effects: "read_fresh",
     cpp_name: "copy_Str",
     code: "inline Obj<std::string> copy_Str(Obj<std::string> x, Loc) { return make_obj<std::string>(*x); }",
@@ -115,6 +116,7 @@ extern fn __write__(x: Str) {
 }
 
 extern fn copy(x: Unit) -> Unit {
+    lower_owned: "make_obj<Unit>(*$0)",
     return_abi: "object",
     effects: "read_fresh",
     cpp_name: "copy_Unit",

@@ -132,8 +132,9 @@ fn borrow_elements(
                     expression: Rvalue::BoolCopy(_) | Rvalue::VariantTest { .. },
                 } => Some(result),
                 Operation::Call(call)
-                    if call.result.ty == "Unit"
-                        || intrinsics::lower(call, &functions[call.function]).is_some() =>
+                    if !functions[call.function].unit_object
+                        && (call.result.ty == "Unit"
+                            || intrinsics::lower(call, &functions[call.function]).is_some()) =>
                 {
                     Some(&call.result)
                 }

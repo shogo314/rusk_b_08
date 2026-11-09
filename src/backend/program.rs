@@ -11,6 +11,7 @@ pub(crate) struct Context {
     pub native_unit_bridges: std::collections::BTreeSet<(usize, crate::native_abi::UnitBridge)>,
     pub native_declarations: std::collections::BTreeSet<usize>,
     pub native_value_references: std::collections::BTreeSet<usize>,
+    pub native_owned_references: std::collections::BTreeSet<usize>,
     pub native_effect_references: std::collections::BTreeSet<(usize, crate::effects::Query)>,
     pub epilogue: String,
 }
@@ -112,6 +113,20 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
         params.push("Loc".into());
         out += &format!("{} rusk_value_ref_{id}({});\n", result, params.join(","));
     }
+    for id in &context.native_owned_references {
+        let f = &program.functions[*id];
+        let mut params = f
+            .params
+            .iter()
+            .map(|ty| format!("const Obj<{}>&", context.types[ty]))
+            .collect::<Vec<_>>();
+        params.push("Loc".into());
+        out += &format!(
+            "Obj<{}> rusk_owned_ref_{id}({});\n",
+            context.types[&f.result],
+            params.join(",")
+        );
+    }
     for id in &context.native_value_references {
         let f = &program.functions[*id];
         let info = &context.functions[*id];
@@ -149,6 +164,56 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
         out += &format!(
             "{} rusk_value_ref_{id}({}){{return {expression};}}\n",
             result,
+            params.join(",")
+        );
+    }
+    for id in &context.native_owned_references {
+        let f = &program.functions[*id];
+        let info = &context.functions[*id];
+        let args = (0..f.params.len())
+            .map(|i| format!("rusk_a{i}"))
+            .collect::<Vec<_>>();
+        let mut params = f
+            .params
+            .iter()
+            .zip(&args)
+            .map(|(ty, arg)| format!("const Obj<{}>& {arg}", context.types[ty]))
+            .collect::<Vec<_>>();
+        params.push("[[maybe_unused]] Loc rusk_loc".into());
+        let lowering = info.lowering.as_ref().filter(|_| info.trusted);
+        let expression = lowering
+            .and_then(|l| l.owned.as_ref())
+            .map(|t| t.render(&args, "rusk_loc"))
+            .or_else(|| {
+                let returned = &f.effects.returned;
+                (f.result != "Unit"
+                    && returned.fresh
+                    && !returned.unknown
+                    && returned.aliases.is_empty())
+                .then(|| {
+                    lowering.and_then(|l| l.scalar.as_ref()).map(|t| {
+                        format!(
+                            "make_obj<{}>({})",
+                            context.types[&f.result],
+                            t.render(&args, "rusk_loc")
+                        )
+                    })
+                })
+                .flatten()
+            })
+            .unwrap_or_else(|| {
+                let name = if f.result == "Unit" && !info.unit_object {
+                    crate::native_abi::UnitBridge::Box.name(*id)
+                } else {
+                    info.cpp.clone()
+                };
+                let mut actual = args.clone();
+                actual.push("rusk_loc".into());
+                format!("{name}({})", actual.join(","))
+            });
+        out += &format!(
+            "Obj<{}> rusk_owned_ref_{id}({}){{return {expression};}}\n",
+            context.types[&f.result],
             params.join(",")
         );
     }

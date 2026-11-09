@@ -177,6 +177,13 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
             let sources = [
                 Source::standard(core.clone()),
                 Source::standard(collections.clone()),
+                Source::standard(
+                    crate::parse(
+                        include_str!("../../lib/vec.rusk"),
+                        "vector-declarations.rusk",
+                    )
+                    .unwrap(),
+                ),
                 Source::standard(crate::parse(definitions, "renamed-types.rusk").unwrap()),
             ];
             let cpp = Compiler::with_optimization(optimize)
@@ -227,6 +234,13 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
                 &[
                     Source::standard(core),
                     Source::standard(collections),
+                    Source::standard(
+                        crate::parse(
+                            include_str!("../../lib/vec.rusk"),
+                            "vector-declarations.rusk",
+                        )
+                        .unwrap(),
+                    ),
                     invalid,
                 ],
                 crate::backend::Emit::Cpp,
