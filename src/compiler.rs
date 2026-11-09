@@ -114,6 +114,8 @@ pub struct Compiler {
     native_value_references: BTreeSet<usize>,
     native_effect_references: BTreeSet<(usize, crate::effects::Query)>,
     native_types: BTreeMap<String, type_metadata::Metadata>,
+    native_unit_objects: BTreeSet<usize>,
+    native_unit_bridges: BTreeSet<(usize, crate::native_abi::UnitBridge)>,
     symbols: BTreeMap<String, String>,
     scopes: Vec<BTreeMap<String, Variable>>,
     body: Body,
@@ -309,6 +311,7 @@ impl Compiler {
                                         "lower_owned",
                                         "lower_borrowed",
                                         "operation",
+                                        "return_abi",
                                     ],
                                 )?;
                                 (property(n, p, "cpp_name")?, property(n, p, "code")?, None)
@@ -375,6 +378,7 @@ impl Compiler {
                             self.native_contracts.insert(self.functions.len(), effects);
                         }
                         if let Stmt::Function(_, _, _, properties) = s {
+                            self.register_return_abi(self.functions.len(), n, properties, &result)?;
                             self.register_native_lowering(
                                 self.functions.len(),
                                 n,

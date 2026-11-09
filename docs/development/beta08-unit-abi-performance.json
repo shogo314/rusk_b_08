@@ -1,0 +1,56 @@
+{
+  "utc": "2026-11-09T20:10:30.022679+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "0364de6cc201ce0ee2aa066c8a694c4aa813f73724d76d78f4f0766444e866a7"
+  },
+  "repeats": 7,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "extern_reductions": {
+      "source": "let a:=[1;10000];let total:=0;for i in 0..50{total+=fold(a,0,(x:Int,y:Int)=>x+y);let prefix:=scan(a,0,(x:Int,y:Int)=>x+y);total+=prefix.len();total+=to_vec(a).len();}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "1500050\n",
+          "cpp_sha256": "a6642d3f8fabb4811c7d347bc4a6eb57feff0709a0870ed5369dea373fae474e",
+          "runs_ms": [
+            40.393404,
+            37.567915,
+            38.887616,
+            37.804287,
+            41.345052,
+            39.459217,
+            40.071328
+          ],
+          "allocations": 3012264,
+          "shared_ptr_copies": 6501206,
+          "median_ms": 39.459217
+        },
+        "current": {
+          "output": "1500050\n",
+          "cpp_sha256": "499f70afe3627b49ad680100a76a468601b27f91f9f146dff48b1849a56ff743",
+          "runs_ms": [
+            39.95203,
+            37.211286,
+            37.979002,
+            37.454011,
+            40.263522,
+            39.466859,
+            39.935658
+          ],
+          "allocations": 3012264,
+          "shared_ptr_copies": 6501206,
+          "median_ms": 39.466859
+        }
+      },
+      "speedup": 0.9998063691868665
+    }
+  }
+}

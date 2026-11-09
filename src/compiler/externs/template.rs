@@ -4,14 +4,22 @@ use super::super::tuples::type_parts;
 #[derive(Clone, Copy)]
 pub(super) enum CallKind {
     Owned,
+    Boxed,
     Value,
     Effect(crate::effects::Query),
+}
+#[derive(Clone, Copy)]
+pub(super) enum InvokeKind {
+    Normal,
+    Boxed,
+    Writes,
 }
 
 pub(super) enum Part {
     Text(String),
     Type(String),
     ReturnType(String),
+    Finish(String),
     SelfName,
     Call {
         name: String,
@@ -23,7 +31,7 @@ pub(super) enum Part {
         name: String,
         arguments: Vec<String>,
         result: String,
-        writes: bool,
+        kind: InvokeKind,
     },
 }
 
@@ -58,13 +66,21 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
         }
         return Ok(Part::ReturnType(ty.into()));
     }
+    if body && let Some(ty) = text.strip_prefix("finish ") {
+        if !valid_type(ty) {
+            return Err("invalid native return value reference".into());
+        }
+        return Ok(Part::Finish(ty.into()));
+    }
     if body
         && let Some(call) = text
             .strip_prefix("call ")
+            .or_else(|| text.strip_prefix("boxed_call "))
             .or_else(|| text.strip_prefix("value_call "))
             .or_else(|| text.strip_prefix("writes "))
             .or_else(|| text.strip_prefix("fails "))
             .or_else(|| text.strip_prefix("invoke "))
+            .or_else(|| text.strip_prefix("boxed_invoke "))
             .or_else(|| text.strip_prefix("writes_invoke "))
     {
         let call = call
@@ -96,12 +112,21 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                 .collect()
         };
         return Ok(
-            if text.starts_with("invoke ") || text.starts_with("writes_invoke ") {
+            if text.starts_with("invoke ")
+                || text.starts_with("writes_invoke ")
+                || text.starts_with("boxed_invoke ")
+            {
                 Part::Invoke {
                     name,
                     arguments,
                     result: result.into(),
-                    writes: text.starts_with("writes_invoke "),
+                    kind: if text.starts_with("writes_invoke ") {
+                        InvokeKind::Writes
+                    } else if text.starts_with("boxed_invoke ") {
+                        InvokeKind::Boxed
+                    } else {
+                        InvokeKind::Normal
+                    },
                 }
             } else {
                 Part::Call {
@@ -110,6 +135,8 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                     result: result.into(),
                     kind: if text.starts_with("value_call ") {
                         CallKind::Value
+                    } else if text.starts_with("boxed_call ") {
+                        CallKind::Boxed
                     } else if text.starts_with("writes ") {
                         CallKind::Effect(crate::effects::Query::Writes)
                     } else if text.starts_with("fails ") {

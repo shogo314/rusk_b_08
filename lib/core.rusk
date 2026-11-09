@@ -115,6 +115,7 @@ extern fn __write__(x: Str) {
 }
 
 extern fn copy(x: Unit) -> Unit {
+    return_abi: "object",
     effects: "read_fresh",
     cpp_name: "copy_Unit",
     code: "inline Obj<Unit> copy_Unit(Obj<Unit> x, Loc) { return make_obj<Unit>(*x); }",

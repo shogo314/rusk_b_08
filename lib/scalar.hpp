@@ -1,3 +1,8 @@
+// Normalize a stored value to Rusk's return ABI without an extra shared copy.
+template<class T,bool IsUnit> auto rusk_finish_return([[maybe_unused]] Obj<T>&& value) {
+    if constexpr(!IsUnit) return std::move(value);
+}
+
 // Closed scalar groups have no object escapes except their final return.
 // Their aliases refer to this one value. Conversion is used only by return,
 // where a new owning object is created before local cleanup.

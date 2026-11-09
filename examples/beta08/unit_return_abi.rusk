@@ -1,0 +1,17 @@
+extern type<T> Hold {cpp_name:"std::shared_ptr<{T}>",}
+extern fn token(ch:Char)->Unit {
+    return_abi:"object",
+    cpp_name:"unit_character_token",
+    code:"Obj<Unit> unit_character_token(Obj<char> ch,Loc){return Obj<Unit>(new Unit{},[ch](Unit* p){*ch='Z';delete p;});}",
+}
+extern fn keep<T>(value:T)->Hold<Unit> {
+    code:"Obj<@{Hold<Unit>}> @{fn}(Obj<@{T}> value,Loc loc){auto token=@{boxed_call token(T)->Unit}(value,loc);return make_obj<@{Hold<Unit>}>(token);}",
+}
+let text:="ab";
+{let held:=keep(text[0]);wt text;}
+wt text;
+text.push_back('!');
+wt text;
+let total:=0;
+fold([2,3],{},(unit:Unit,x:Int)=>{total+=x;});
+wt total;

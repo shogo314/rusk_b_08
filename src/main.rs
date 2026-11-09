@@ -8,6 +8,7 @@ mod hir_flow;
 mod hir_validate;
 mod lir;
 mod lir_cleanup;
+mod native_abi;
 mod native_effects;
 mod native_lowering;
 mod readonly;

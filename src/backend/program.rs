@@ -7,13 +7,14 @@ pub(crate) struct Context {
     pub functions: Vec<FunctionInfo>,
     pub prelude: String,
     pub foreign_definitions: Vec<String>,
+    pub native_unit_bridges: std::collections::BTreeSet<(usize, crate::native_abi::UnitBridge)>,
     pub native_declarations: std::collections::BTreeSet<usize>,
     pub native_value_references: std::collections::BTreeSet<usize>,
     pub native_effect_references: std::collections::BTreeSet<(usize, crate::effects::Query)>,
     pub epilogue: String,
 }
 fn signature(function: &ProgramFunction, context: &Context, optimize: bool) -> String {
-    let result = if function.result == "Unit" {
+    let result = if function.result == "Unit" && !context.functions[function.id].unit_object {
         "void".into()
     } else {
         format!("Obj<{}>", context.types[&function.result])
@@ -84,6 +85,39 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             "{} rusk_value_ref_{id}({}){{return {expression};}}\n",
             context.types[&f.result],
             params.join(",")
+        );
+    }
+    for (id, bridge) in &context.native_unit_bridges {
+        let f = &program.functions[*id];
+        let args = (0..f.params.len())
+            .map(|i| format!("rusk_a{i}"))
+            .collect::<Vec<_>>();
+        let mut params = f
+            .params
+            .iter()
+            .zip(&args)
+            .map(|(ty, arg)| format!("const Obj<{}>& {arg}", context.types[ty]))
+            .collect::<Vec<_>>();
+        params.push("[[maybe_unused]] Loc rusk_loc".into());
+        let mut actual = args;
+        actual.push("rusk_loc".into());
+        let result = match bridge {
+            crate::native_abi::UnitBridge::Discard => "void".into(),
+            crate::native_abi::UnitBridge::Box => format!("Obj<{}>", context.types["Unit"]),
+        };
+        let finish = match bridge {
+            crate::native_abi::UnitBridge::Discard => String::new(),
+            crate::native_abi::UnitBridge::Box => format!(
+                "return make_obj<{}>({}{{}});",
+                context.types["Unit"], context.types["Unit"]
+            ),
+        };
+        out += &format!(
+            "{result} {}({}){{{}({});{finish}}}\n",
+            bridge.name(*id),
+            params.join(","),
+            context.functions[*id].cpp,
+            actual.join(",")
         );
     }
     for native in &context.foreign_definitions {

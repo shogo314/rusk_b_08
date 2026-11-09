@@ -9,6 +9,7 @@ impl Compiler {
             .map(|(id, f)| crate::backend::FunctionInfo {
                 cpp: f.cpp.clone(),
                 result: f.result.clone(),
+                unit_object: self.native_unit_objects.contains(&id),
                 trusted: f.body.is_none()
                     && (f.origin == Origin::StandardLibrary
                         || self.native_lowerings.contains_key(&id)),
@@ -44,6 +45,7 @@ impl Compiler {
             functions,
             prelude,
             foreign_definitions,
+            native_unit_bridges: self.native_unit_bridges.clone(),
             native_value_references: self.native_value_references.clone(),
             native_effect_references: self.native_effect_references.clone(),
             native_declarations: self

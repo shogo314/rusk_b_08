@@ -77,7 +77,7 @@ impl Compiler {
             .ok_or_else(|| span.error(format!("type '{ty}' has no copy function")))?;
         self.same(ty, &self.functions[id].result, span)?;
         self.used.insert(id);
-        Ok(self.functions[id].cpp.clone())
+        Ok(self.abi_reference(id, true))
     }
     fn iteration(
         &mut self,

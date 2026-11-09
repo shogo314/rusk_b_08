@@ -12,6 +12,57 @@ pub(super) struct ExternalType {
 }
 
 impl Compiler {
+    pub(super) fn register_return_abi(
+        &mut self,
+        index: usize,
+        name: &Name,
+        properties: &BTreeMap<String, String>,
+        result: &str,
+    ) -> Result<(), String> {
+        if let Some(abi) = properties.get("return_abi") {
+            if abi != "object" {
+                return Err(name
+                    .span
+                    .error("invalid native return ABI; expected object"));
+            }
+            if result == "Unit" {
+                self.native_unit_objects.insert(index);
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn abi_reference_name(&self, index: usize, object: bool) -> String {
+        if self.functions[index].result != "Unit"
+            || object == self.native_unit_objects.contains(&index)
+        {
+            self.functions[index].cpp.clone()
+        } else {
+            (if object {
+                crate::native_abi::UnitBridge::Box
+            } else {
+                crate::native_abi::UnitBridge::Discard
+            })
+            .name(index)
+        }
+    }
+    pub(super) fn abi_reference(&mut self, index: usize, object: bool) -> String {
+        if self.functions[index].result == "Unit"
+            && object != self.native_unit_objects.contains(&index)
+        {
+            self.native_unit_bridges.insert((
+                index,
+                if object {
+                    crate::native_abi::UnitBridge::Box
+                } else {
+                    crate::native_abi::UnitBridge::Discard
+                },
+            ));
+            if self.functions[index].body.is_none() {
+                self.native_references.insert(index);
+            }
+        }
+        self.abi_reference_name(index, object)
+    }
     pub(super) fn register_extern_type(
         &mut self,
         name: &Name,
@@ -70,8 +121,14 @@ impl Compiler {
                 "lower_owned",
                 "lower_borrowed",
                 "operation",
+                "return_abi",
             ],
         )?;
+        if properties.get("return_abi").is_some_and(|v| v != "object") {
+            return Err(name
+                .span
+                .error("invalid native return ABI; expected object"));
+        }
         if properties.contains_key("effects") && origin != Origin::StandardLibrary {
             return Err(name
                 .span
@@ -249,7 +306,7 @@ impl Compiler {
             |parts: Vec<Part>, parameters: &[Name], span: &Span| -> Result<(), String> {
                 for part in parts {
                     match part {
-                        Part::Type(ty) | Part::ReturnType(ty) => {
+                        Part::Type(ty) | Part::ReturnType(ty) | Part::Finish(ty) => {
                             self.validate_symbolic_type(&ty, parameters, span)?
                         }
                         Part::Invoke {
@@ -353,11 +410,23 @@ impl Compiler {
                         format!("Obj<{}>", self.types[&ty])
                     });
                 }
+                Part::Finish(ty) => {
+                    let ty = generics::substitute(&ty, bindings);
+                    self.check_type(&Name {
+                        text: ty.clone(),
+                        span: span.clone(),
+                    })?;
+                    output.push_str(&format!(
+                        "rusk_finish_return<{},{}>",
+                        self.types[&ty],
+                        ty == "Unit"
+                    ));
+                }
                 Part::Invoke {
                     name,
                     arguments,
                     result,
-                    writes,
+                    kind,
                 } => {
                     let ty = generics::substitute(&name, bindings);
                     let callback = self.callables.get(&ty).cloned().ok_or_else(|| {
@@ -376,12 +445,15 @@ impl Compiler {
                         span,
                     )?;
                     self.used.insert(callback.function);
-                    if writes {
+                    if matches!(kind, template::InvokeKind::Writes) {
                         self.native_effect_references
                             .insert((callback.function, crate::effects::Query::Writes));
                         output.push_str(&format!("rusk_writes_{}", callback.function));
                     } else {
-                        output.push_str(&self.functions[callback.function].cpp);
+                        output.push_str(&self.abi_reference(
+                            callback.function,
+                            matches!(kind, template::InvokeKind::Boxed),
+                        ));
                     }
                 }
                 Part::Call {
@@ -449,7 +521,10 @@ impl Compiler {
                             output.push_str(&format!("rusk_value_ref_{index}"));
                         }
                         template::CallKind::Owned => {
-                            output.push_str(&self.functions[index].cpp);
+                            output.push_str(&self.abi_reference(index, false));
+                        }
+                        template::CallKind::Boxed => {
+                            output.push_str(&self.abi_reference(index, true));
                         }
                     }
                 }

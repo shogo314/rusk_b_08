@@ -2,6 +2,119 @@ mod support;
 use support::Case;
 
 #[test]
+fn object_unit_returns_preserve_cleanup_and_opaque_holder_retention() {
+    let definitions = r#"
+extern type<T> Cell {cpp_name:"std::shared_ptr<{T}>",}
+extern fn token(x:Int)->Unit {
+    return_abi:"object",cpp_name:"make_unit_token",
+    code:"Obj<Unit> make_unit_token(Obj<std::int64_t> x,Loc){return Obj<Unit>(new Unit{},[x](Unit* p){++*x;delete p;});}",
+}
+extern fn discard<T>(x:T) {
+    code:"void @{fn}(Obj<@{T}> x,Loc loc){@{call token(T)->Unit}(x,loc);}",
+}
+extern fn retain<T>(x:T)->Cell<Unit> {
+    code:"Obj<@{Cell<Unit>}> @{fn}(Obj<@{T}> x,Loc loc){auto value=@{boxed_call token(T)->Unit}(x,loc);return make_obj<@{Cell<Unit>}>(value);}",
+}
+"#;
+    let case = Case::new(&format!(
+        "{definitions} let n:=0;discard(n);wt n;{{let holder:=retain(n);wt n;}}wt n;"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1\n1\n2\n");
+    }
+    let out = Case::new(&format!(
+        "{definitions} fn blocked(noescape x:Int){{let holder:=retain(x);}} blocked(1);"
+    ))
+    .compile();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("noescape"));
+}
+
+#[test]
+fn unit_references_support_normal_and_object_return_abis_and_recursive_definitions() {
+    let case = Case::new(
+        r#"
+extern fn unit_clone<T>(x:T)->T {
+    code:"@{return T} @{fn}(Obj<@{T}> x,Loc loc){return @{call copy(T)->T}(x,loc);}",
+}
+extern fn descend<T>(x:T,n:Int)->T {
+    return_abi:"object",
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Obj<@{Int}> n,Loc loc){if(*n==0)return @{boxed_call copy(T)->T}(x,loc);return @{boxed_call descend(T,Int)->T}(x,make_obj<@{Int}>(*n-1),loc);}",
+}
+extern fn run<F,T,R>(f:F,x:T)->R {
+    return_abi:"object",
+    code:"Obj<@{R}> @{fn}(Obj<@{F}> f,Obj<@{T}> x,Loc loc){return @{boxed_invoke F(T)->R}(f,x,loc);}",
+}
+extern fn call_normal<T>(x:T)->T {
+    code:"@{return T} @{fn}(Obj<@{T}> x,Loc loc){return @{call descend(T,Int)->T}(x,make_obj<@{Int}>(2),loc);}",
+}
+fn touch(x:Unit) {}
+extern fn call_touch<T>(x:T)->T {
+    return_abi:"object",
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){return @{boxed_call touch(T)->T}(x,loc);}",
+}
+unit_clone({});call_normal({});descend({},2);call_touch({});
+let total:=0;run((x:Int)=>{total+=x;},3);wt total,run((x:Int)=>x+4,2);
+fold([1,2,3],{},(u:Unit,x:Int)=>{total+=x;});wt total;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3 6\n9\n");
+    }
+}
+
+#[test]
+fn aggregate_unit_fields_keep_shared_aliases_and_detach_on_copy() {
+    let case = Case::new(
+        r#"
+extern fn same_unit(a:Unit,b:Unit)->Bool {
+    cpp_name:"same_unit",
+    code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",
+}
+struct Holder {value:Unit;}
+let original:=Holder{value:{}};let alias:=original;let copied=original;
+wt same_unit(original.value,alias.value),same_unit(original.value,copied.value);
+let held:=original.value;original=copied;wt same_unit(held,original.value);
+let first:=Some({});let second=first;
+match (first,second) {(Some(a),Some(b))=>{wt same_unit(a,b);},_=>{wt "wrong";},};
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes No\nNo\nNo\n");
+    }
+}
+
+#[test]
+fn invalid_native_return_abis_are_checked_before_use() {
+    for source in [
+        "extern fn unused() {cpp_name:\"unused\",code:\"unused\",return_abi:\"scalar\",}",
+        "extern fn unused<T>(x:T)->T {code:\"unused\",return_abi:\"scalar\",}",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("invalid native return ABI"));
+    }
+}
+
+#[test]
 fn native_value_references_preserve_calls_cleanup_and_scalar_identity() {
     let case = Case::new(
         r#"

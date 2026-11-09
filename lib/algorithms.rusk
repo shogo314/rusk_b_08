@@ -15,10 +15,10 @@ extern fn to_vec<S,I,T>(source:S)->Vec<T> {
     code: "Obj<@{Vec<T>}> @{fn}(Obj<@{S}> source,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{ });while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);result->push_back(value);}return result;}",
 }
 extern fn fold<S,A,F,I,T>(source:S,seed:A,callback:F)->A {
-    code: "@{return A} @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto accumulator=@{call copy(A)->A}(seed,loc);while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);}return accumulator;}",
+    code: "@{return A} @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto accumulator=@{boxed_call copy(A)->A}(seed,loc);while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{boxed_invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);}return @{finish A}(std::move(accumulator));}",
 }
 extern fn scan<S,A,F,I,T>(source:S,seed:A,callback:F)->Vec<A> {
-    code: "Obj<@{Vec<A>}> @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto result=make_obj<@{Vec<A>}>(@{Vec<A>}{ });auto accumulator=@{call copy(A)->A}(seed,loc);result->push_back(@{call copy(A)->A}(accumulator,loc));while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);result->push_back(@{call copy(A)->A}(accumulator,loc));}return result;}",
+    code: "Obj<@{Vec<A>}> @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto result=make_obj<@{Vec<A>}>(@{Vec<A>}{ });auto accumulator=@{boxed_call copy(A)->A}(seed,loc);result->push_back(@{boxed_call copy(A)->A}(accumulator,loc));while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{boxed_invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);result->push_back(@{boxed_call copy(A)->A}(accumulator,loc));}return result;}",
 }
 
 extern fn sort_by_comp<T,F>(source:Vec<T>,callback:F) {

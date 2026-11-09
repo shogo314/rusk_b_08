@@ -573,6 +573,14 @@ impl Compiler {
         });
         self.generic_instances.insert(key, index);
         self.generic_calls.insert(index, span.clone());
+        if let Some(properties) = &definition.foreign {
+            self.register_return_abi(
+                index,
+                &definition.name,
+                properties,
+                &self.functions[index].result.clone(),
+            )?;
+        }
         let code = if let Some(properties) = &definition.foreign {
             self.render_native(
                 &property(&definition.name, properties, "code")?,

@@ -361,6 +361,7 @@ impl Compiler {
                         .ok_or_else(|| field.span.error("enum payload requires copy"))?;
                     self.same(&field.text, &self.functions[index].result, &field.span)?;
                     self.used.insert(index);
+                    self.abi_reference(index, true);
                     copies.push(index);
                 }
                 variants.push(copies);
@@ -482,7 +483,7 @@ impl Compiler {
                 for (j, f) in fields.iter().enumerate() {
                     code += &format!(
                         "auto field_{j}={}(rusk_enum_payload<{native},{i}>(snapshot).field_{j},loc);",
-                        self.functions[*f].cpp
+                        self.abi_reference_name(*f, true)
                     );
                 }
                 let args = (0..fields.len())

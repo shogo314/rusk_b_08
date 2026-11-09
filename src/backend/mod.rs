@@ -9,6 +9,7 @@ pub(crate) use program::{Context, emit as emit_program};
 pub(crate) struct FunctionInfo {
     pub cpp: String,
     pub result: String,
+    pub unit_object: bool,
     pub trusted: bool,
     pub lowering: Option<crate::native_lowering::Lowering>,
 }

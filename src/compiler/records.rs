@@ -169,6 +169,7 @@ impl Compiler {
                     })?;
                 self.same(&ty.text, &self.functions[index].result, &ty.span)?;
                 self.used.insert(index);
+                self.abi_reference(index, true);
                 copies.push(index);
             }
             self.record_copies.insert(record.name.text, copies);
@@ -184,7 +185,10 @@ impl Compiler {
                 .iter()
                 .enumerate()
                 .map(|(i, &function)| {
-                    format!("{}(value->field_{i},loc)", self.functions[function].cpp)
+                    format!(
+                        "{}(value->field_{i},loc)",
+                        self.abi_reference_name(function, true)
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join(",");
