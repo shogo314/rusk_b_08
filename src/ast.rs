@@ -399,6 +399,14 @@ pub enum Stmt {
     Enum(Name, Vec<Name>, Vec<(Name, Vec<Name>)>),
     Struct(Name, Vec<Name>, Vec<(Name, Name)>),
     Type(Name, BTreeMap<String, String>),
+    GenericExternType(Name, Vec<Name>, BTreeMap<String, String>),
+    GenericExternFunction(
+        Name,
+        Vec<Name>,
+        Vec<(DeclaredName, Name)>,
+        Option<Name>,
+        BTreeMap<String, String>,
+    ),
     Function(
         Name,
         Vec<(DeclaredName, Name)>,
@@ -525,10 +533,16 @@ fn simple_stmt(s: &g::SimpleStatement<'_>) -> Result<Stmt, String> {
                 })
                 .collect(),
         ),
-        g::SimpleStatement::ExternType(x) => Stmt::Type(
-            type_name(&x.extern_type.type_name),
-            props(&x.extern_type.properties)?,
-        ),
+        g::SimpleStatement::ExternType(x) => {
+            let x = &x.extern_type;
+            let n = type_name(&x.type_name);
+            let p = props(&x.properties)?;
+            if let Some(parameters) = &x.extern_type_opt {
+                Stmt::GenericExternType(n, type_parameters(&parameters.type_parameters), p)
+            } else {
+                Stmt::Type(n, p)
+            }
+        }
         g::SimpleStatement::ExternSymbol(x) => Stmt::Symbol(
             name(&x.extern_symbol.identifier),
             props(&x.extern_symbol.properties)?,
@@ -536,12 +550,19 @@ fn simple_stmt(s: &g::SimpleStatement<'_>) -> Result<Stmt, String> {
         g::SimpleStatement::ExternFn(x) => {
             let x = &x.extern_fn;
             let params = parameters(&x.parameters)?;
-            Stmt::Function(
-                name(&x.identifier),
-                params,
-                x.extern_fn_opt.as_ref().map(|r| type_name(&r.type_name)),
-                props(&x.properties)?,
-            )
+            let result = x.extern_fn_opt0.as_ref().map(|r| type_name(&r.type_name));
+            let properties = props(&x.properties)?;
+            if let Some(parameters) = &x.extern_fn_opt {
+                Stmt::GenericExternFunction(
+                    name(&x.identifier),
+                    type_parameters(&parameters.type_parameters),
+                    params,
+                    result,
+                    properties,
+                )
+            } else {
+                Stmt::Function(name(&x.identifier), params, result, properties)
+            }
         }
         g::SimpleStatement::Function(x) => {
             let x = &x.function;

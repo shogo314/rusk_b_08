@@ -11,6 +11,7 @@ mod cpp;
 mod effects;
 mod enums;
 mod expressions;
+mod externs;
 mod flow;
 mod generics;
 mod higher_order;
@@ -65,12 +66,15 @@ pub struct Compiler {
     records: BTreeMap<String, records::Record>,
     prepared_records: BTreeSet<String>,
     record_copies: BTreeMap<String, Vec<usize>>,
+    generic_extern_types: BTreeMap<String, externs::ExternalType>,
+    preparing_extern_types: BTreeSet<String>,
     generic_records: BTreeMap<String, generics::GenericRecord>,
     generic_functions: Vec<generics::GenericFunction>,
     generic_instances: BTreeMap<(usize, Vec<String>), usize>,
     generic_calls: BTreeMap<usize, Span>,
     functions: Vec<Function>,
     native_contracts: BTreeMap<usize, crate::effects::Summary>,
+    native_references: BTreeSet<usize>,
     symbols: BTreeMap<String, String>,
     scopes: Vec<BTreeMap<String, Variable>>,
     body: Body,
@@ -109,6 +113,7 @@ impl Compiler {
         sources: &[Vec<Stmt>],
         emit: crate::backend::Emit,
     ) -> Result<String, String> {
+        generics::validate_type_declarations(sources)?;
         for source in sources {
             for s in source {
                 if let Stmt::UserFunction(name, parameters, arguments, result, body) = s
@@ -119,8 +124,23 @@ impl Compiler {
                         parameters: parameters.clone(),
                         arguments: arguments.clone(),
                         result: result.clone(),
-                        body: body.clone(),
+                        body: Some(body.clone()),
+                        foreign: None,
+                        callbacks: vec![],
                     })?;
+                }
+                if let Stmt::GenericExternType(name, parameters, properties) = s {
+                    self.register_extern_type(name, parameters, properties)?;
+                }
+                if let Stmt::GenericExternFunction(
+                    name,
+                    parameters,
+                    arguments,
+                    result,
+                    properties,
+                ) = s
+                {
+                    self.register_extern_function(name, parameters, arguments, result, properties)?;
                 }
                 if let Stmt::Struct(name, parameters, fields) = s {
                     if name.text.starts_with("__Rusk")
@@ -141,6 +161,7 @@ impl Compiler {
                     }
                     let native = format!("RuskRecord{}", self.records.len());
                     if self.generic_records.contains_key(&name.text)
+                        || self.generic_extern_types.contains_key(&name.text)
                         || self.types.insert(name.text.clone(), native).is_some()
                     {
                         return Err(name.span.error("duplicate type"));
@@ -157,7 +178,9 @@ impl Compiler {
                     if n.text.starts_with("__Rusk") {
                         return Err(n.span.error("reserved internal type name"));
                     }
-                    if self.generic_records.contains_key(&n.text) {
+                    if self.generic_records.contains_key(&n.text)
+                        || self.generic_extern_types.contains_key(&n.text)
+                    {
                         return Err(n.span.error("duplicate type"));
                     }
                     validate(n, p, &["cpp_name"])?;
@@ -178,6 +201,7 @@ impl Compiler {
                 }
             }
         }
+        self.validate_extern_declarations()?;
         let enum_names = self
             .enum_definitions
             .values()
@@ -455,6 +479,7 @@ impl Compiler {
             return Err(crate::hir::DIVERGED.into());
         }
         if self.types.contains_key(&n.text)
+            || self.specialize_extern_type(n)?
             || self.specialize_enum(n)?
             || self.specialize_container(n)?
         {
@@ -809,7 +834,9 @@ impl Compiler {
             Stmt::Include(_, span) => {
                 return Err(span.error("include is only allowed at top level"));
             }
-            Stmt::Type(n, _)
+            Stmt::GenericExternType(n, ..)
+            | Stmt::GenericExternFunction(n, ..)
+            | Stmt::Type(n, _)
             | Stmt::Struct(n, ..)
             | Stmt::Enum(n, ..)
             | Stmt::Function(n, ..)
@@ -1204,7 +1231,9 @@ impl Compiler {
             }
             ExprKind::CompareChain(first, rest) => self.comparison_chain(first, rest, &e.span),
             ExprKind::Lambda(parameters, body) => self.lambda(parameters, body, &e.span),
-            ExprKind::Invoke(callee, args) => self.invoke_expression(callee, args, &e.span),
+            ExprKind::Invoke(callee, args) => {
+                self.invoke_expression(callee, args, expected, &e.span)
+            }
             ExprKind::Tuple(items) => self.tuple_value(items, expected, &e.span),
             ExprKind::Record(name, fields) => self.record_value(name, fields),
             ExprKind::Field(receiver, field) => {
@@ -1345,7 +1374,7 @@ impl Compiler {
                 let mut values = vec![];
                 for arg in args {
                     // Use a context only when every remaining overload agrees.
-                    let hints = self.argument_hints(&n.text, args.len(), &values);
+                    let hints = self.argument_hints(&n.text, args.len(), &values, expected);
                     let builtin_hint =
                         self.enum_argument_hint(&n.text, &values, expected)
                             .or_else(|| {

@@ -422,6 +422,7 @@ impl Compiler {
         &mut self,
         callee: &Expr,
         args: &[Expr],
+        expected: Option<&str>,
         span: &Span,
     ) -> Result<Value, String> {
         if let ExprKind::Field(owner, name) = &callee.kind {
@@ -457,9 +458,9 @@ impl Compiler {
             }
             let mut values = vec![owner];
             for arg in args {
-                let hints = self.argument_hints(&name.text, args.len() + 1, &values);
+                let hints = self.argument_hints(&name.text, args.len() + 1, &values, expected);
                 let builtin_hint =
-                    self.container_argument_hint(&name.text, args.len() + 1, &values, None);
+                    self.container_argument_hint(&name.text, args.len() + 1, &values, expected);
                 let hint = if hints.len() == 1 {
                     hints.first().map(String::as_str)
                 } else {
@@ -467,7 +468,7 @@ impl Compiler {
                 };
                 values.push(self.expr(arg, hint)?);
             }
-            return self.call(&name.text, values, None, span);
+            return self.call(&name.text, values, expected, span);
         }
         let callee = self.expr(callee, None)?;
         self.invoke_arguments(callee, args, span)

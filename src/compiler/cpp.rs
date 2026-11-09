@@ -44,6 +44,17 @@ impl Compiler {
             functions,
             prelude,
             foreign_definitions,
+            native_declarations: self
+                .native_references
+                .iter()
+                .copied()
+                .chain(
+                    self.generic_instances
+                        .values()
+                        .copied()
+                        .filter(|&id| self.functions[id].body.is_none() && self.used.contains(&id)),
+                )
+                .collect(),
             epilogue,
         }
     }

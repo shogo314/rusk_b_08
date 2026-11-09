@@ -32,7 +32,7 @@ fn duplicate<T>(x: T) -> T { return copy(x); }
 wt duplicate(7), duplicate::<Str>("abc");
 ```
 
-出力は`7 abc`です。型引数は呼び出しから推論するか、`::<...>`で指定します。型引数付き関数は具体的な型に応じて検査・生成されるため、その本体で使う操作を実際の型が提供する必要があります。トレイト境界を書く構文はありません。
+出力は`7 abc`です。型引数は実引数と期待する返却型から推論するか、`::<...>`で指定します。明示型引数と期待型は一致する必要があります。型引数付き関数は具体的な型に応じて検査・生成されるため、その本体で使う操作を実際の型が提供する必要があります。トレイト境界を書く構文はありません。
 
 `value.f(args)`は通常`f(value, args)`の糖衣構文です。この形式を**UFCS（Uniform Function Call Syntax）**と呼びます。一般的な概念は[Wikipedia日本語版](https://ja.wikipedia.org/wiki/Uniform_Function_Call_Syntax)、Ruskでの評価順は[メソッド形式](index.md#method-syntax)を参照してください。
 

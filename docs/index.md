@@ -4,7 +4,7 @@ Ruskは、競技プログラミング向けに開発している言語です。�
 
 β08はfixしたβ07を引き継いで開始します。externを含む通常のライブラリ定義を使い、コンパイラ内のライブラリ名ごとの専用処理を減らすことが中心です。[開始点と方針](development/beta08.md)に対象をまとめています。
 
-開始時点の機能はβ07と同じです。効果・共有・脱出の解析、readonly/mutable・fixed/rebindable・noescape/escapeの契約検査、推論結果に基づく値保持・借用を利用できます。追加するexternの仕組みは開発中の対象です。
+開始時点の機能はβ07と同じです。効果・共有・脱出の解析、readonly/mutable・fixed/rebindable・noescape/escapeの契約検査、推論結果に基づく値保持・借用を利用できます。現在は[ジェネリックexternの最小試作](development/beta08-extern-prototype.md)を追加しています。記法と共通基盤は開発中です。
 
 ```rusk
 in n: Int;

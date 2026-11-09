@@ -13,7 +13,85 @@ pub(super) struct GenericFunction {
     pub parameters: Vec<Name>,
     pub arguments: Vec<(DeclaredName, Name)>,
     pub result: Option<Name>,
-    pub body: Box<Stmt>,
+    pub body: Option<Box<Stmt>>,
+    pub foreign: Option<BTreeMap<String, String>>,
+    pub callbacks: Vec<CallbackRequirement>,
+}
+
+#[derive(Clone)]
+pub(super) struct CallbackRequirement {
+    pub ty: String,
+    pub parameters: Vec<String>,
+    pub result: String,
+}
+
+impl GenericFunction {
+    fn infer_callbacks(
+        &self,
+        callables: &BTreeMap<String, callables::Callable>,
+        bindings: &mut BTreeMap<String, String>,
+    ) -> bool {
+        // A callable's nominal type is already known from the argument. Its
+        // signature can fill result/argument parameters without erasing captures.
+        loop {
+            let before = bindings.len();
+            for requirement in &self.callbacks {
+                let ty = substitute(&requirement.ty, bindings);
+                if self.parameters.iter().any(|p| {
+                    !bindings.contains_key(&p.text)
+                        && ty
+                            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                            .any(|word| word == p.text)
+                }) {
+                    continue;
+                }
+                let Some(callback) = callables.get(&ty) else {
+                    return false;
+                };
+                if callback.parameters.len() != requirement.parameters.len()
+                    || !requirement
+                        .parameters
+                        .iter()
+                        .zip(&callback.parameters)
+                        .all(|(pattern, actual)| unify(pattern, actual, &self.parameters, bindings))
+                    || !unify(
+                        &requirement.result,
+                        &callback.result,
+                        &self.parameters,
+                        bindings,
+                    )
+                {
+                    return false;
+                }
+            }
+            if bindings.len() == before {
+                return true;
+            }
+        }
+    }
+    fn infer_result(
+        &self,
+        expected: Option<&str>,
+        bindings: &mut BTreeMap<String, String>,
+    ) -> bool {
+        // Context fills missing type arguments; it must not choose between
+        // otherwise applicable overloads by their already determined results.
+        if let Some(expected) = expected
+            && self
+                .parameters
+                .iter()
+                .any(|p| !bindings.contains_key(&p.text))
+        {
+            unify(
+                self.result.as_ref().map_or("Unit", |r| r.text.as_str()),
+                expected,
+                &self.parameters,
+                bindings,
+            )
+        } else {
+            true
+        }
+    }
 }
 
 pub(super) fn substitute(text: &str, bindings: &BTreeMap<String, String>) -> String {
@@ -53,7 +131,7 @@ pub(super) fn unify(
         _ => pattern == actual,
     }
 }
-fn parameters_valid(parameters: &[Name]) -> Result<(), String> {
+pub(super) fn parameters_valid(parameters: &[Name]) -> Result<(), String> {
     let mut names = BTreeSet::new();
     for parameter in parameters {
         if !names.insert(&parameter.text) {
@@ -79,6 +157,34 @@ fn explicit_bindings(name: &str, parameters: &[Name]) -> Option<BTreeMap<String,
     }
 }
 
+// A constructor owns its whole family. Concrete foreign instantiations may
+// coexist with each other, but cannot override part of a declared constructor.
+pub(super) fn validate_type_declarations(sources: &[Vec<Stmt>]) -> Result<(), String> {
+    let mut families: BTreeMap<&str, Vec<(&Name, bool)>> = BTreeMap::new();
+    for statement in sources.iter().flatten() {
+        let (name, concrete) = match statement {
+            Stmt::Type(name, _) => (name, type_parts(&name.text).is_some()),
+            Stmt::Struct(name, ..) | Stmt::Enum(name, ..) | Stmt::GenericExternType(name, ..) => {
+                (name, false)
+            }
+            _ => continue,
+        };
+        let base = type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base);
+        let previous = families.entry(base).or_default();
+        if let Some((old, _)) = previous
+            .iter()
+            .find(|(old, was_concrete)| old.text == name.text || !concrete || !was_concrete)
+        {
+            return Err(name.span.error(format!(
+                "duplicate type family '{base}'; previous definition at {}:{}:{}",
+                old.span.file, old.span.line, old.span.column
+            )));
+        }
+        previous.push((name, concrete));
+    }
+    Ok(())
+}
+
 impl Compiler {
     pub(super) fn register_generic_record(
         &mut self,
@@ -87,6 +193,9 @@ impl Compiler {
         parameters_valid(&definition.parameters)?;
         if self.types.contains_key(&definition.name.text)
             || self.generic_records.contains_key(&definition.name.text)
+            || self
+                .generic_extern_types
+                .contains_key(&definition.name.text)
         {
             return Err(definition.name.span.error("duplicate type"));
         }
@@ -198,6 +307,7 @@ impl Compiler {
         name: &str,
         count: usize,
         known: &[Value],
+        expected: Option<&str>,
     ) -> BTreeSet<String> {
         let base = type_parts(name).map_or(name, |(base, _)| base);
         let mut hints = BTreeSet::new();
@@ -229,6 +339,11 @@ impl Compiler {
                 .iter()
                 .zip(known)
                 .all(|((_, ty), value)| unify(&ty.text, &value.ty, &f.parameters, &mut bindings))
+            {
+                continue;
+            }
+            if !f.infer_callbacks(&self.callables, &mut bindings)
+                || !f.infer_result(expected, &mut bindings)
             {
                 continue;
             }
@@ -277,6 +392,8 @@ impl Compiler {
                 .iter()
                 .zip(args)
                 .all(|((_, ty), value)| unify(&ty.text, &value.ty, &f.parameters, &mut bindings))
+                && f.infer_callbacks(&self.callables, &mut bindings)
+                && f.infer_result(expected, &mut bindings)
                 && f.parameters.iter().all(|p| bindings.contains_key(&p.text))
             {
                 candidates.push((index, bindings));
@@ -309,27 +426,50 @@ impl Compiler {
             text: result.clone(),
             span: span.clone(),
         })?;
-        let mut body = *definition.body.clone();
-        substitute_statement(&mut body, &bindings);
+        let mut body = definition.body.clone();
+        if let Some(body) = &mut body {
+            substitute_statement(body, &bindings);
+        }
         let index = self.functions.len();
+        let cpp = format!("rusk_generic_{index}");
         self.functions.push(Function {
             name: definition.name.clone(),
             params: args.iter().map(|v| v.ty.clone()).collect(),
             result,
-            cpp: format!("rusk_generic_{index}"),
+            cpp: cpp.clone(),
             code: String::new(),
-            body: Some((
-                definition
-                    .arguments
-                    .iter()
-                    .map(|(n, _)| n.clone())
-                    .collect(),
-                Box::new(body),
-            )),
+            body: body.map(|body| {
+                (
+                    definition
+                        .arguments
+                        .iter()
+                        .map(|(n, _)| n.clone())
+                        .collect(),
+                    body,
+                )
+            }),
             checked: None,
         });
         self.generic_instances.insert(key, index);
         self.generic_calls.insert(index, span.clone());
+        let code = if let Some(properties) = &definition.foreign {
+            self.render_native(
+                &property(&definition.name, properties, "code")?,
+                &bindings,
+                Some(&cpp),
+                &definition.name.span,
+                true,
+            )
+            .map_err(|error| {
+                format!(
+                    "{error}\nwhile instantiating '{name}' at {}:{}:{}",
+                    span.file, span.line, span.column
+                )
+            })?
+        } else {
+            String::new()
+        };
+        self.functions[index].code = code;
         Ok(Some(index))
     }
 }

@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/extern_callback_lifetime.rusk').read_text(),b'',b'Z b\n'),
     ('''struct Key{ch:Char;}
 fn __eq__(a:Key,b:Key)->Bool{return a.ch==b.ch;}
 let text:="abc";let values:=[Key{ch:text[0]},Key{ch:text[1]}];

@@ -22,6 +22,7 @@ impl Compiler {
     ) -> Result<(), String> {
         if self.types.contains_key(&name.text)
             || self.generic_records.contains_key(&name.text)
+            || self.generic_extern_types.contains_key(&name.text)
             || self.enum_definitions.contains_key(&name.text)
         {
             return Err(name.span.error("duplicate type"));
