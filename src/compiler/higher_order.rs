@@ -319,14 +319,6 @@ impl Compiler {
             let _ = iterator;
             return self.native_function(name,types,&result,|cpp|format!("Obj<{result_native}> {cpp}({params},Loc loc){{auto it={create}(source,loc);{allocate}{initial}while(*{has}(it,loc)){{auto value={next}(it,loc);{process}}}{finish}}}"),span).map(Some);
         }
-        if name == "first_true" && args.len() == 3 {
-            self.same("Int", &args[0].ty, span)?;
-            self.same("Int", &args[1].ty, span)?;
-            let cb = self.callback(&args[2], &["Int".into()], Some("Bool"), span)?;
-            let invoke = self.functions[cb.function].cpp.clone();
-            let callback_native = self.types[&args[2].ty].clone();
-            return self.native_function(name,types,"Int",|cpp|format!("Obj<std::int64_t> {cpp}(Obj<std::int64_t> left,Obj<std::int64_t> right,Obj<{callback_native}> predicate,Loc loc){{auto l=*left,r=*right;if(l>r)fail(loc,\"invalid binary search interval\");while(l<r){{auto mid=static_cast<std::int64_t>(static_cast<__int128>(l)+(static_cast<__int128>(r)-l)/2);bool yes=*{invoke}(predicate,make_obj<std::int64_t>(mid),loc);if(yes)r=mid;else l=mid+1;}}return make_obj<std::int64_t>(l);}}"),span).map(Some);
-        }
         if matches!(name, "sort_by_key" | "sort_by_comp") && args.len() == 2 {
             let element = vector_element(&args[0].ty)
                 .ok_or_else(|| span.error("sorting requires an array"))?

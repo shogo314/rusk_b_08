@@ -775,7 +775,7 @@ impl Compiler {
             span: s.clone(),
             inherit_location: self
                 .current_function
-                .is_some_and(|i| self.functions[i].name.span.file == "<stdlib/core.rusk>"),
+                .is_some_and(|i| self.functions[i].origin == Origin::StandardLibrary),
             result: result.clone(),
         }));
         Ok(result)

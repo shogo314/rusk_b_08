@@ -18,6 +18,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'extern_first_true': ('let total:=0;for i in 0..100000{let threshold:=i%1000000;'
+                          'total+=first_true(0,1000000,(x:Int)=>x>=threshold);}wt total;'),
     'scalar_call': ('fn add_one(x:Int)->Int{return x+1;}let i:=0;let total:=0;'
                     'while i<500000{total+=add_one(i);i+=1;}wt total;'),
     'element_call': ('fn add_one(x:Int)->Int{return x+1;}'

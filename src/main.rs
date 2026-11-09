@@ -122,10 +122,15 @@ fn run() -> Result<(), String> {
         }
     }
     let source = source::load(std::path::Path::new(&file))?.statements;
+    let algorithms = parse(
+        include_str!("../lib/algorithms.rusk"),
+        "<stdlib/algorithms.rusk>",
+    )?;
     let cpp = compiler::Compiler::with_optimization(optimize).compile(
         &[
             compiler::Source::standard(core),
             compiler::Source::standard(collections),
+            compiler::Source::standard(algorithms),
             compiler::Source::user(source),
         ],
         emit,

@@ -1,0 +1,4 @@
+// Algorithms use the same generic extern and callback references as user code.
+extern fn first_true<F>(left:Int,right:Int,predicate:F)->Int {
+    code: "Obj<@{Int}> @{fn}(Obj<@{Int}> left,Obj<@{Int}> right,Obj<@{F}> predicate,Loc loc){auto l=*left,r=*right;if(l>r)fail(loc,\"invalid binary search interval\");while(l<r){auto mid=static_cast<std::int64_t>(static_cast<__int128>(l)+(static_cast<__int128>(r)-l)/2);bool yes=*@{invoke F(Int)->Bool}(predicate,make_obj<@{Int}>(mid),loc);if(yes)r=mid;else l=mid+1;}return make_obj<@{Int}>(l);}",
+}

@@ -89,4 +89,46 @@ stamp(1);
         assert!(!context.functions[0].trusted);
         assert!(context.functions[1].trusted);
     }
+
+    #[test]
+    fn diagnostic_location_inheritance_also_follows_source_origin() {
+        for (origin, display, inherited) in [
+            (Origin::StandardLibrary, "renamed.rusk", true),
+            (Origin::User, "<stdlib/core.rusk>", false),
+        ] {
+            let declarations = Source::standard(
+                crate::parse(
+                    r#"
+extern type Int {cpp_name:"std::int64_t",}
+extern type Unit {cpp_name:"Unit",}
+extern fn checked(x:Int)->Int {cpp_name:"checked",code:"unused",effects:"checked_read_fresh",}
+"#,
+                    "runtime.rusk",
+                )
+                .unwrap(),
+            );
+            let wrapper = Source {
+                origin,
+                statements: crate::parse(
+                    "fn wrapper(x:Int)->Int{return checked(x);}wrapper(1);",
+                    display,
+                )
+                .unwrap(),
+            };
+            let hir = Compiler::default()
+                .compile(&[declarations, wrapper], crate::backend::Emit::Hir)
+                .unwrap();
+            let body = hir
+                .split("name: \"wrapper\",")
+                .nth(1)
+                .unwrap()
+                .split("effects: Summary")
+                .next()
+                .unwrap();
+            assert!(
+                body.contains(&format!("inherit_location: {inherited}")),
+                "{body}"
+            );
+        }
+    }
 }
