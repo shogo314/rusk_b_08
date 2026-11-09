@@ -162,6 +162,7 @@ impl Compiler {
                         foreign: None,
                         origin: source.origin,
                         callbacks: vec![],
+                        calls: vec![],
                     })?;
                 }
                 if let Stmt::GenericExternType(name, parameters, properties) = s {

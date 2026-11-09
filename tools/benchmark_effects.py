@@ -18,6 +18,13 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'extern_predicates': ('let visited:=0;let a:=[1;10000];let total:=0;for i in 0..200{'
+                          'if all(a,(x:Int)=>{visited+=1;x==1}){total+=1;}'
+                          'if any(a,(x:Int)=>x==1){total+=1;}}wt total,visited;'),
+    'extern_reductions': ('let a:=[1;10000];let total:=0;for i in 0..50{'
+                          'total+=fold(a,0,(x:Int,y:Int)=>x+y);'
+                          'let prefix:=scan(a,0,(x:Int,y:Int)=>x+y);total+=prefix.len();'
+                          'total+=to_vec(a).len();}wt total;'),
     'extern_first_true': ('let total:=0;for i in 0..100000{let threshold:=i%1000000;'
                           'total+=first_true(0,1000000,(x:Int)=>x>=threshold);}wt total;'),
     'scalar_call': ('fn add_one(x:Int)->Int{return x+1;}let i:=0;let total:=0;'

@@ -17,6 +17,7 @@ pub(super) struct GenericFunction {
     pub foreign: Option<BTreeMap<String, String>>,
     pub origin: Origin,
     pub callbacks: Vec<CallbackRequirement>,
+    pub calls: Vec<CallRequirement>,
 }
 
 #[derive(Clone)]
@@ -26,12 +27,48 @@ pub(super) struct CallbackRequirement {
     pub result: String,
 }
 
+#[derive(Clone)]
+pub(super) struct CallRequirement {
+    pub name: String,
+    pub arguments: Vec<String>,
+    pub result: String,
+}
+
+fn bound(pattern: &str, parameters: &[Name], bindings: &BTreeMap<String, String>) -> bool {
+    !parameters.iter().any(|p| {
+        !bindings.contains_key(&p.text)
+            && pattern
+                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .any(|word| word == p.text)
+    })
+}
+
+struct QueryBudget {
+    remaining: usize,
+}
+impl QueryBudget {
+    fn new() -> Self {
+        Self { remaining: 4096 }
+    }
+    fn charge(&mut self, depth: usize) -> Result<(), ()> {
+        if depth > 32 || self.remaining == 0 {
+            return Err(());
+        }
+        self.remaining -= 1;
+        Ok(())
+    }
+}
+
 impl GenericFunction {
-    fn infer_callbacks(
+    fn infer_requirements(
         &self,
-        callables: &BTreeMap<String, callables::Callable>,
+        compiler: &Compiler,
+        depth: usize,
+        budget: &mut QueryBudget,
+        expected: Option<&str>,
         bindings: &mut BTreeMap<String, String>,
-    ) -> bool {
+    ) -> Result<bool, ()> {
+        budget.charge(depth)?;
         // A callable's nominal type is already known from the argument. Its
         // signature can fill result/argument parameters without erasing captures.
         loop {
@@ -46,8 +83,8 @@ impl GenericFunction {
                 }) {
                     continue;
                 }
-                let Some(callback) = callables.get(&ty) else {
-                    return false;
+                let Some(callback) = compiler.callables.get(&ty) else {
+                    return Ok(false);
                 };
                 if callback.parameters.len() != requirement.parameters.len()
                     || !requirement
@@ -62,11 +99,38 @@ impl GenericFunction {
                         bindings,
                     )
                 {
-                    return false;
+                    return Ok(false);
+                }
+            }
+            if !self.infer_result(expected, bindings) {
+                return Ok(false);
+            }
+            for requirement in &self.calls {
+                budget.charge(depth)?;
+                if bound(&requirement.result, &self.parameters, bindings)
+                    || !bound(&requirement.name, &self.parameters, bindings)
+                    || !requirement
+                        .arguments
+                        .iter()
+                        .all(|a| bound(a, &self.parameters, bindings))
+                {
+                    continue;
+                }
+                let name = substitute(&requirement.name, bindings);
+                let arguments = requirement
+                    .arguments
+                    .iter()
+                    .map(|a| substitute(a, bindings))
+                    .collect::<Vec<_>>();
+                if let Some(result) =
+                    compiler.signature_result(&name, &arguments, depth + 1, budget)?
+                    && !unify(&requirement.result, &result, &self.parameters, bindings)
+                {
+                    return Ok(false);
                 }
             }
             if bindings.len() == before {
-                return true;
+                return Ok(true);
             }
         }
     }
@@ -303,6 +367,58 @@ impl Compiler {
         })?;
         Ok(true)
     }
+    // Resolve only signatures: inference must not emit code, instantiate bodies,
+    // or leave candidate-specific types/functions behind on a failed overload.
+    fn signature_result(
+        &self,
+        name: &str,
+        arguments: &[String],
+        depth: usize,
+        budget: &mut QueryBudget,
+    ) -> Result<Option<String>, ()> {
+        budget.charge(depth)?;
+        let base = type_parts(name).map_or(name, |(base, _)| base);
+        if base == name {
+            let concrete = self
+                .functions
+                .iter()
+                .enumerate()
+                .filter(|(i, f)| {
+                    !self.generic_calls.contains_key(i)
+                        && f.name.text == name
+                        && f.params == arguments
+                })
+                .map(|(_, f)| &f.result)
+                .collect::<Vec<_>>();
+            if !concrete.is_empty() {
+                return Ok((concrete.len() == 1).then(|| concrete[0].clone()));
+            }
+        }
+        let mut results = vec![];
+        for f in &self.generic_functions {
+            if f.name.text != base || f.arguments.len() != arguments.len() {
+                continue;
+            }
+            let Some(mut bindings) = explicit_bindings(name, &f.parameters) else {
+                continue;
+            };
+            if f.arguments
+                .iter()
+                .zip(arguments)
+                .all(|((_, pattern), ty)| unify(&pattern.text, ty, &f.parameters, &mut bindings))
+                && f.infer_requirements(self, depth + 1, budget, None, &mut bindings)?
+                && f.parameters.iter().all(|p| bindings.contains_key(&p.text))
+            {
+                results.push(
+                    f.result
+                        .as_ref()
+                        .map_or("Unit".into(), |r| substitute(&r.text, &bindings)),
+                );
+            }
+        }
+        Ok((results.len() == 1).then(|| results[0].clone()))
+    }
+
     pub(super) fn argument_hints(
         &self,
         name: &str,
@@ -343,9 +459,12 @@ impl Compiler {
             {
                 continue;
             }
-            if !f.infer_callbacks(&self.callables, &mut bindings)
-                || !f.infer_result(expected, &mut bindings)
-            {
+            let Ok(inferred) =
+                f.infer_requirements(self, 0, &mut QueryBudget::new(), expected, &mut bindings)
+            else {
+                return BTreeSet::new();
+            };
+            if !inferred {
                 continue;
             }
             let ty = &f.arguments[known.len()].1.text;
@@ -393,8 +512,8 @@ impl Compiler {
                 .iter()
                 .zip(args)
                 .all(|((_, ty), value)| unify(&ty.text, &value.ty, &f.parameters, &mut bindings))
-                && f.infer_callbacks(&self.callables, &mut bindings)
-                && f.infer_result(expected, &mut bindings)
+                && f.infer_requirements(self, 0, &mut QueryBudget::new(), expected, &mut bindings)
+                    .map_err(|()| span.error("native reference inference limit exceeded"))?
                 && f.parameters.iter().all(|p| bindings.contains_key(&p.text))
             {
                 candidates.push((index, bindings));

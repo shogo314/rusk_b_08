@@ -465,6 +465,7 @@ fn unchanged<T>(x:T)->T{return x;}
 extern fn bridge<T>(x:T)->T {
     code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){return @{call unchanged(T)->T}(x,loc);}",
 }
+
 "#;
     for (source, expected) in [
         ("readonly let x:=1; bridge(x);", "cannot prove readonly"),
@@ -481,4 +482,56 @@ extern fn bridge<T>(x:T)->T {
             "{error}"
         );
     }
+}
+
+#[test]
+fn referenced_signatures_infer_return_types_and_context_for_empty_arguments() {
+    let case = Case::new(
+        r#"
+extern fn chain<S,I,T,R>(value:S)->R {
+    code:"@{return R} @{fn}(Obj<@{S}> value,Loc loc){auto extract=@{call extract(I)->T};auto length=@{call length_of(T)->R};auto pair=@{call package(S)->I}(value,loc);return length(extract(pair,loc),loc);}",
+}
+fn package(value:Int)->(Int,Str){return (value,"abc");}
+fn extract(value:(Int,Str))->Str{return value[1];}
+fn length_of(value:Str)->Int{return value.len();}
+extern fn typed_empty<S,T>(source:S,values:Vec<T>)->Int {
+    code:"Obj<@{Int}> @{fn}(Obj<@{S}>,Obj<@{Vec<T>}> values,Loc){auto requirement=@{call choose_element(S)->T};(void)requirement;return make_obj<@{Int}>(values->size());}",
+}
+fn choose_element(x:Int)->Str{return "unused";}
+wt chain(4),typed_empty(1,[]);
+"#,
+    );
+    let out = case.run("");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"3 0\n");
+}
+
+#[test]
+fn cyclic_or_expensive_reference_inference_is_bounded_without_selecting_another_overload() {
+    let cycle = r#"
+extern fn a<T,R>(x:T)->R{code:"@{call b(T)->R}",}
+extern fn b<T,R>(x:T)->R{code:"@{call a(T)->R}",}
+a(1);
+"#;
+    let out = Case::new(cycle).compile();
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success());
+    assert!(
+        error.contains("native reference inference limit exceeded") && error.contains("main.rusk:"),
+        "{error}"
+    );
+
+    // The fully typed fallback must not hide an undecidable matching candidate.
+    let source = cycle.replace(
+        "a(1);",
+        "extern fn a<T>(x:Vec<T>)->Int{code:\"unused\",} a([1]);",
+    );
+    let out = Case::new(&source).compile();
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success());
+    assert!(error.contains("inference limit exceeded"), "{error}");
 }

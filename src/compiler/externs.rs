@@ -64,6 +64,21 @@ impl Compiler {
         }
         let parts = template::parse(&property(name, properties, "code")?, true)
             .map_err(|e| name.span.error(e))?;
+        let calls = parts
+            .iter()
+            .filter_map(|part| match part {
+                Part::Call {
+                    name,
+                    arguments,
+                    result,
+                } => Some(generics::CallRequirement {
+                    name: name.clone(),
+                    arguments: arguments.clone(),
+                    result: result.clone(),
+                }),
+                _ => None,
+            })
+            .collect();
         let callbacks = parts
             .into_iter()
             .filter_map(|part| match part {
@@ -96,6 +111,7 @@ impl Compiler {
             foreign: Some(properties.clone()),
             origin,
             callbacks,
+            calls,
         })
     }
 

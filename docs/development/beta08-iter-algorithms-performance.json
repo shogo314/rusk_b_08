@@ -1,0 +1,94 @@
+{
+  "utc": "2026-11-09T17:05:47.679527+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "22ded8861b55578487196dec352a97423211f2db8921e96115288599ccdeea99"
+  },
+  "repeats": 7,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "extern_predicates": {
+      "source": "let visited:=0;let a:=[1;10000];let total:=0;for i in 0..200{if all(a,(x:Int)=>{visited+=1;x==1}){total+=1;}if any(a,(x:Int)=>x==1){total+=1;}}wt total,visited;",
+      "variants": {
+        "baseline": {
+          "output": "400 2000000\n",
+          "cpp_sha256": "c021bdf29dcbcdd8ac54818ba2d8a470ecb971fe1690843c4dd6767c723d3d03",
+          "runs_ms": [
+            54.639257,
+            55.155091,
+            55.004711,
+            55.462744,
+            54.638831,
+            53.571272,
+            53.952645
+          ],
+          "allocations": 4011815,
+          "shared_ptr_copies": 16003208,
+          "median_ms": 54.639257
+        },
+        "current": {
+          "output": "400 2000000\n",
+          "cpp_sha256": "1767a6c5abb2d27b1e826b38a90401acf58e86355fc0f96a572f9a263e654c4d",
+          "runs_ms": [
+            54.936583,
+            54.947623,
+            55.451435,
+            55.209142,
+            53.821508,
+            53.846626,
+            54.184288
+          ],
+          "allocations": 4011815,
+          "shared_ptr_copies": 16003208,
+          "median_ms": 54.936583
+        }
+      },
+      "speedup": 0.9945878323011098
+    },
+    "extern_reductions": {
+      "source": "let a:=[1;10000];let total:=0;for i in 0..50{total+=fold(a,0,(x:Int,y:Int)=>x+y);let prefix:=scan(a,0,(x:Int,y:Int)=>x+y);total+=prefix.len();total+=to_vec(a).len();}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "1500050\n",
+          "cpp_sha256": "ca1e45379529a580c1b9d334617b2021b5eb60d59faa3af7fe2f64a2e1d59fc3",
+          "runs_ms": [
+            40.073306,
+            39.668749,
+            40.185976,
+            40.260545,
+            37.613269,
+            38.344756,
+            38.668613
+          ],
+          "allocations": 3012264,
+          "shared_ptr_copies": 6501206,
+          "median_ms": 39.668749
+        },
+        "current": {
+          "output": "1500050\n",
+          "cpp_sha256": "b94b408d185835827851307c5b8460791df9d219998807b15b7776927ead5852",
+          "runs_ms": [
+            39.597547,
+            39.281576,
+            39.420726,
+            39.586666,
+            38.258645,
+            37.589735,
+            38.204694
+          ],
+          "allocations": 3012264,
+          "shared_ptr_copies": 6501206,
+          "median_ms": 39.281576
+        }
+      },
+      "speedup": 1.009856350977364
+    }
+  }
+}

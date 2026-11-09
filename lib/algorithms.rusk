@@ -2,3 +2,21 @@
 extern fn first_true<F>(left:Int,right:Int,predicate:F)->Int {
     code: "Obj<@{Int}> @{fn}(Obj<@{Int}> left,Obj<@{Int}> right,Obj<@{F}> predicate,Loc loc){auto l=*left,r=*right;if(l>r)fail(loc,\"invalid binary search interval\");while(l<r){auto mid=static_cast<std::int64_t>(static_cast<__int128>(l)+(static_cast<__int128>(r)-l)/2);bool yes=*@{invoke F(Int)->Bool}(predicate,make_obj<@{Int}>(mid),loc);if(yes)r=mid;else l=mid+1;}return make_obj<@{Int}>(l);}",
 }
+
+extern fn all<S,F,I,T>(source:S,predicate:F)->Bool {
+    code: "Obj<@{Bool}> @{fn}(Obj<@{S}> source,Obj<@{F}> predicate,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);auto accepted=@{invoke F(T)->Bool}(predicate,value,loc);rusk_guard_iter(it,loc);if(*accepted==false)return make_obj<@{Bool}>(false);}return make_obj<@{Bool}>(true);}",
+}
+
+extern fn any<S,F,I,T>(source:S,predicate:F)->Bool {
+    code: "Obj<@{Bool}> @{fn}(Obj<@{S}> source,Obj<@{F}> predicate,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);auto accepted=@{invoke F(T)->Bool}(predicate,value,loc);rusk_guard_iter(it,loc);if(*accepted==true)return make_obj<@{Bool}>(true);}return make_obj<@{Bool}>(false);}",
+}
+
+extern fn to_vec<S,I,T>(source:S)->Vec<T> {
+    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{S}> source,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{ });while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);result->push_back(value);}return result;}",
+}
+extern fn fold<S,A,F,I,T>(source:S,seed:A,callback:F)->A {
+    code: "@{return A} @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto accumulator=@{call copy(A)->A}(seed,loc);while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);}return accumulator;}",
+}
+extern fn scan<S,A,F,I,T>(source:S,seed:A,callback:F)->Vec<A> {
+    code: "Obj<@{Vec<A>}> @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto result=make_obj<@{Vec<A>}>(@{Vec<A>}{ });auto accumulator=@{call copy(A)->A}(seed,loc);result->push_back(@{call copy(A)->A}(accumulator,loc));while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);result->push_back(@{call copy(A)->A}(accumulator,loc));}return result;}",
+}
