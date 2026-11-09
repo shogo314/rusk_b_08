@@ -59,7 +59,9 @@ impl Compiler {
                     crate::native_abi::UnitBridge::Discard
                 },
             ));
-            if self.functions[index].body.is_none() {
+            if self.functions[index].body.is_none()
+                && template::identifier(&self.functions[index].cpp)
+            {
                 self.native_references.insert(index);
             }
         }
@@ -532,7 +534,7 @@ impl Compiler {
                         });
                     }
                     let index = self
-                        .resolve(&name, &values, Some(&result), span)?
+                        .resolve_callable(&name, &values, Some(&result), span)?
                         .ok_or_else(|| {
                             span.error(format!("no matching native callable '{name}'"))
                         })?;
@@ -554,12 +556,9 @@ impl Compiler {
                             "native value references require a declared non-Unit scalar result",
                         ));
                     }
-                    if self.functions[index].body.is_none() {
-                        if !template::identifier(&self.functions[index].cpp) {
-                            return Err(span.error(
-                                "native callable references require a simple C++ function name",
-                            ));
-                        }
+                    if self.functions[index].body.is_none()
+                        && template::identifier(&self.functions[index].cpp)
+                    {
                         self.native_references.insert(index);
                     }
                     self.used.insert(index);

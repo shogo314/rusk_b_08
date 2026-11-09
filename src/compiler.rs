@@ -659,14 +659,6 @@ impl Compiler {
         let source = include_str!("../lib/vec_compat.rusk");
         for statement in crate::parse(source, "<stdlib/vec_compat.rusk>")? {
             if let Stmt::Function(name, params, result, properties) = statement {
-                if name.text == "__read__"
-                    && (vector_element(inner).is_some()
-                        || self.records.contains_key(inner)
-                        || self.containers.contains_key(inner)
-                        || self.enums.contains_key(inner))
-                {
-                    continue;
-                }
                 if self.record_element(inner) && name.text == "__write__" {
                     continue;
                 }
@@ -808,6 +800,24 @@ impl Compiler {
         }
         Ok(ids.first().copied())
     }
+    fn resolve_callable(
+        &mut self,
+        name: &str,
+        args: &[Value],
+        expected: Option<&str>,
+        span: &Span,
+    ) -> Result<Option<usize>, String> {
+        if let Some(id) = self.container_constructor(name, args, expected, span)? {
+            return Ok(Some(id));
+        }
+        if let Some(id) = self.resolve(name, args, expected, span)? {
+            return Ok(Some(id));
+        }
+        if let Some(id) = self.collection_operation(name, args, expected, span)? {
+            return Ok(Some(id));
+        }
+        self.higher_order(name, args, span)
+    }
     fn call(
         &mut self,
         name: &str,
@@ -821,31 +831,17 @@ impl Compiler {
         if let Some(value) = self.enum_constructor(name, &args, expected, s)? {
             return Ok(value);
         }
-        let constructor = self.container_constructor(name, &args, expected, s)?;
-        let resolved = if constructor.is_some() {
-            constructor
-        } else {
-            self.resolve(name, &args, expected, s)?
-        };
-        let resolved = if resolved.is_some() {
-            resolved
-        } else {
-            self.collection_operation(name, &args, expected, s)?
-        };
-        let resolved = if resolved.is_some() {
-            resolved
-        } else {
-            self.higher_order(name, &args, s)?
-        };
-        let i = resolved.ok_or_else(|| {
-            s.error(format!(
-                "no matching function '{name}' for ({})",
-                args.iter()
-                    .map(|v| v.ty.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ))
-        })?;
+        let i = self
+            .resolve_callable(name, &args, expected, s)?
+            .ok_or_else(|| {
+                s.error(format!(
+                    "no matching function '{name}' for ({})",
+                    args.iter()
+                        .map(|v| v.ty.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+            })?;
         self.used.insert(i);
         let f = self.functions[i].clone();
         let result = Value {

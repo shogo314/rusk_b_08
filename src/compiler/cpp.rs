@@ -30,12 +30,19 @@ impl Compiler {
         prelude += &self.container_declarations();
         prelude += &self.lazy_copy_declarations();
         prelude += &self.scalar_representation_checks();
-        let foreign_definitions = self
+        let (concrete_foreign_definitions, foreign_definitions): (Vec<_>, Vec<_>) = self
             .used
             .iter()
             .filter(|&&id| self.functions[id].checked.is_none())
-            .map(|&id| self.functions[id].code.clone())
-            .collect();
+            .partition(|&&id| {
+                self.functions[id].origin != Origin::Generated
+                    && !self.generic_calls.contains_key(&id)
+            });
+        let definitions = |ids: Vec<&usize>| {
+            ids.into_iter()
+                .map(|&id| self.functions[id].code.clone())
+                .collect()
+        };
         let epilogue = self.enum_copy_cpp()
             + &self.record_copy_cpp()
             + &self.container_copy_cpp()
@@ -44,7 +51,8 @@ impl Compiler {
             types: self.types.clone(),
             functions,
             prelude,
-            foreign_definitions,
+            concrete_foreign_definitions: definitions(concrete_foreign_definitions),
+            foreign_definitions: definitions(foreign_definitions),
             native_unit_bridges: self.native_unit_bridges.clone(),
             native_value_references: self.native_value_references.clone(),
             native_effect_references: self.native_effect_references.clone(),

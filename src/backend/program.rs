@@ -6,6 +6,7 @@ pub(crate) struct Context {
     pub types: BTreeMap<String, String>,
     pub functions: Vec<FunctionInfo>,
     pub prelude: String,
+    pub concrete_foreign_definitions: Vec<String>,
     pub foreign_definitions: Vec<String>,
     pub native_unit_bridges: std::collections::BTreeSet<(usize, crate::native_abi::UnitBridge)>,
     pub native_declarations: std::collections::BTreeSet<usize>,
@@ -47,6 +48,12 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             out += &signature(f, context, optimize);
             out += ";\n";
         }
+    }
+    // Concrete externs may define qualified C++ names which cannot be declared
+    // by a global prototype. Their definitions precede references and bridges.
+    for native in &context.concrete_foreign_definitions {
+        out += native;
+        out += "\n";
     }
     // Native bodies may call these value-returning adapters, including adapters
     // to Rusk bodies defined later. All ordinary prototypes precede them.

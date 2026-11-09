@@ -1,0 +1,74 @@
+{
+  "utc": "2026-11-09T22:40:53.020158+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "6419f74881220c1932ed032077a309f6df87e33d0570aa7a67dfc514c3a8ffa0"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "vector_input": {
+      "source": "in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;wt values.len(),values[-1],rows.len(),rows[-1][1];",
+      "variants": {
+        "baseline": {
+          "output": "300000 1 100000 1\n",
+          "cpp_sha256": "c8b0bbfa673943f586b9b941ae7f3abb186f3e09917a96405f00e105f2b393cf",
+          "runs_ms": [
+            21.862819,
+            22.432994,
+            22.588039,
+            22.265531,
+            22.049366,
+            22.873597,
+            23.408359,
+            22.195659,
+            21.873356,
+            22.285294,
+            22.416342,
+            22.542053,
+            21.869831,
+            21.750848,
+            23.915387
+          ],
+          "allocations": 600012,
+          "shared_ptr_copies": 200011,
+          "median_ms": 22.285294
+        },
+        "current": {
+          "output": "300000 1 100000 1\n",
+          "cpp_sha256": "ff02ebd3d5733e8f12238766d39b82f5e49de01a640c4e2ada7455ca1be9fa7c",
+          "runs_ms": [
+            21.114557,
+            22.126957,
+            22.958086,
+            21.99307,
+            24.110031,
+            23.059269,
+            22.734638,
+            22.209603,
+            22.301839,
+            22.457232,
+            22.013259,
+            22.211253,
+            22.243128,
+            22.316677,
+            23.326559
+          ],
+          "allocations": 600012,
+          "shared_ptr_copies": 200011,
+          "median_ms": 22.301839
+        }
+      },
+      "input_bytes": 1000000,
+      "input_sha256": "9d3c8986edd01da50a625fa16e03cb3322fa9f95491078b0660a8cc93bbae42f",
+      "speedup": 0.9992581329279616
+    }
+  }
+}

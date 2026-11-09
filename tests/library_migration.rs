@@ -216,6 +216,7 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
         .collect::<Vec<_>>()
         .join("\n");
     for name in [
+        "__read__",
         "__vec_new__",
         "__vec_repeat__",
         "len",
@@ -251,6 +252,7 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
     }
     let case = Case::new(&format!(
         r#"{declarations}
+wt migrated___read__::<Int>(2);
 let empty:=migrated___vec_new__::<Int>();
 wt migrated_len(empty),migrated___bool__(empty),migrated___not__(empty),migrated_Bool(empty);
 migrated_push_back(empty,4);wt migrated___getitem__(empty,0);
@@ -271,7 +273,7 @@ let ordered:=migrated_sorted([3,1,2]);migrated_sort(ordered);wt ordered,migrated
 "#
     ));
     for options in [vec![], vec!["--no-opt"]] {
-        let out = case.run_with_options("", &options);
+        let out = case.run_with_options("4 5\n", &options);
         assert!(
             out.status.success(),
             "{}",
@@ -279,7 +281,7 @@ let ordered:=migrated_sorted([3,1,2]);migrated_sort(ordered);wt ordered,migrated
         );
         assert_eq!(
             out.stdout,
-            b"0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n1 2 3 1 2 Yes\n"
+            b"4 5\n0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n1 2 3 1 2 Yes\n"
         );
     }
 }
@@ -548,5 +550,108 @@ for value in values{{wt value.id;}}
         .run_with_options("", &options);
         assert!(!out.status.success());
         assert!(String::from_utf8_lossy(&out.stderr).contains("container changed during callback"));
+    }
+}
+
+#[test]
+fn vector_input_preserves_custom_readers_and_snapshots_the_length() {
+    let case = Case::new(
+        r#"
+struct Row {value:Int;}
+extern symbol input_state {code:"Obj<std::int64_t> input_length;",}
+extern fn watch(n:Int) {cpp_name:"watch_input_length",code:"void watch_input_length(Obj<std::int64_t> n,Loc){input_length=n;}",}
+extern fn __read__()->Row {
+    cpp_name:"reader::row",
+    code:"namespace reader {Obj<RuskRecord0> row(Loc loc){++*input_length;return make_obj<RuskRecord0>(RuskRecord0{make_obj<std::int64_t>(rusk_read_int(loc))});}}",
+}
+let n:=2;watch(n);in rows(n):Vec<Row>;wt rows.len(),rows[0].value,rows[1].value,n;
+in tail:Int;wt tail;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("7 8 9", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"2 7 8 4\n9\n");
+    }
+}
+
+#[test]
+fn structured_input_boxes_void_unit_and_preserves_object_unit_cleanup() {
+    for (reader, expected) in [
+        ("fn __read__()->Unit {}", "0\n"),
+        (
+            r#"extern fn __read__()->Unit {
+            return_abi:"object",cpp_name:"reader::unit",
+            code:"namespace reader {Obj<Unit> unit(Loc){return Obj<Unit>(new Unit{},[](Unit* p){++*input_cleanup;delete p;});}}",
+        }"#,
+            "3\n",
+        ),
+    ] {
+        let case = Case::new(&format!(
+            r#"
+extern symbol input_state {{code:"Obj<std::int64_t> input_cleanup;",}}
+extern fn watch(n:Int) {{cpp_name:"watch_input_cleanup",code:"void watch_input_cleanup(Obj<std::int64_t> n,Loc){{input_cleanup=n;}}",}}
+{reader}
+let count:=0;watch(count);
+{{in pair:(Unit,Int),rows(2):Vec<(Unit,Int)>;wt pair[1],rows[0][1],rows[1][1],count;}}
+wt count;
+"#
+        ));
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("3 4 5", &options);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&out.stdout),
+                format!("3 4 5 0\n{expected}")
+            );
+        }
+    }
+}
+
+#[test]
+fn vector_input_reports_scalar_reader_errors_at_the_input_site() {
+    for (ty, inputs) in [
+        (
+            "Int",
+            vec![
+                ("bad", "invalid integer input"),
+                ("9223372036854775808", "integer input out of range"),
+                ("", "unexpected end of input"),
+            ],
+        ),
+        (
+            "Char",
+            vec![("", "unexpected end of input"), ("é", "non-ASCII input")],
+        ),
+        ("Bool", vec![("maybe", "invalid boolean input")]),
+        ("Str", vec![("é", "non-ASCII input")]),
+    ] {
+        let case = Case::new(&format!(
+            "wt \"before\";\nin values(1):Vec<{ty}>;\nwt \"after\";"
+        ));
+        for options in [vec![], vec!["--no-opt"]] {
+            for (index, (input, message)) in inputs.iter().enumerate() {
+                let out = if index == 0 {
+                    case.run_with_options(input, &options)
+                } else {
+                    case.execute(input)
+                };
+                assert!(!out.status.success(), "{ty}: {input}");
+                assert_eq!(out.stdout, b"before\n");
+                let error = String::from_utf8_lossy(&out.stderr);
+                assert!(
+                    error.contains("main.rusk:2:") && error.contains(message),
+                    "{ty}: {error}"
+                );
+            }
+        }
     }
 }

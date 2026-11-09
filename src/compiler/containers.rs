@@ -471,7 +471,7 @@ impl Compiler {
             }
             let child = self.read_function(&element, dimensions - 1, span)?;
             self.used.insert(child);
-            let read = &self.functions[child].cpp;
+            let read = self.abi_reference(child, true);
             let params = (0..dimensions)
                 .map(|i| format!("Obj<std::int64_t> d{i}"))
                 .collect::<Vec<_>>()
@@ -492,7 +492,7 @@ impl Compiler {
             for (index, (_, field)) in fields.iter().enumerate() {
                 let read = self.read_function(&field.text, 0, span)?;
                 self.used.insert(read);
-                body += &format!("auto value{index}={}(loc);", self.functions[read].cpp);
+                body += &format!("auto value{index}={}(loc);", self.abi_reference(read, true));
                 values.push(format!("value{index}"));
             }
             format!(

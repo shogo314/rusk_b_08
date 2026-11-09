@@ -865,3 +865,30 @@ a(1);
     assert!(!out.status.success());
     assert!(error.contains("inference limit exceeded"), "{error}");
 }
+
+#[test]
+fn qualified_native_names_support_calls_value_references_and_unit_bridges() {
+    let case = Case::new(
+        r#"
+extern fn number(x:Int)->Int {cpp_name:"native::number",code:"namespace native {Obj<std::int64_t> number(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x+1);}}",}
+extern fn touch(x:Int) {cpp_name:"native::touch",code:"namespace native {void touch(Obj<std::int64_t> x,Loc){++*x;}}",}
+extern fn token(x:Int)->Unit {
+    return_abi:"object",cpp_name:"native::token",
+    code:"namespace native {Obj<Unit> token(Obj<std::int64_t> x,Loc){return Obj<Unit>(new Unit{},[x](Unit* p){++*x;delete p;});}}",
+}
+extern fn exercise<T>(x:T)->T {
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){auto boxed=@{boxed_call touch(T)->Unit}(x,loc);@{call token(T)->Unit}(x,loc);auto n=@{value_call number(T)->T}(x,loc);auto actual=@{call number(T)->T}(x,loc);return make_obj<@{T}>(n+*actual);}",
+}
+let n:=3;wt exercise(n),n;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"12 5\n");
+    }
+}

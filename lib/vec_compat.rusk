@@ -1,15 +1,5 @@
-// Remaining type-dependent operations. Signature parameters are bound as AST types;
-// native code uses only explicit references. These operations still need migration.
+// Remaining type-dependent output. This operation still needs migration.
 extern fn __write__(a: Vector) {
     effects: "deep_io_write",
     code: "void @{fn}(Obj<@{Vector}> a, [[maybe_unused]] Loc loc) { write_value(a); }",
-}
-
-
-
-
-
-
-extern fn __read__(count: Int) -> Vector {
-    code: "Obj<@{Vector}> @{fn}(Obj<std::int64_t> count, [[maybe_unused]] Loc loc) { if(*count<0) fail(loc,\"negative array length\"); auto a=make_obj<@{Vector}>(@{Vector}{}); if(static_cast<__int128>(*count)>static_cast<__int128>(a->max_size())) fail(loc,\"array length out of range\"); a->reserve(static_cast<std::size_t>(*count)); for(std::int64_t i=0;i<*count;++i) a->push_back(read_value<@{Element}>(loc)); return a; }",
 }

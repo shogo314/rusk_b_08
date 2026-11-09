@@ -18,6 +18,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'vector_input': ('in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;'
+                     'wt values.len(),values[-1],rows.len(),rows[-1][1];'),
     'vector_ordering': ('let a:=[0;4000];let total:=0;for round in 0..60{'
                         'for i in 0..a.len(){a[i]=(i*7919+round)%4001;}'
                         'let ordered:=sorted(a);sort(a);total+=a[2000]+ordered[2000];}wt total;'),
@@ -56,6 +58,7 @@ CASES = {
     'sum_rusk': ('fn rusk_total(a:Vec<Int>)->Int{let total:=0;for x in a{total+=x;}return total;}'
                  'let a:=[1;1000000];let total:=0;for i in 0..20{total+=rusk_total(a);}wt total;'),
 }
+INPUTS = {'vector_input': b'1 '*500000}
 ALLOCATION_COUNTER = r'''
 #include <new>
 #include <cstdio>
@@ -66,8 +69,8 @@ void operator delete(void* p,std::size_t)noexcept{std::free(p);}
 struct AllocationReport{~AllocationReport(){std::fprintf(stderr,"allocations=%llu\n",measured_allocations);}} allocation_report;
 '''
 
-def checked(command):
-    run = subprocess.run(command, capture_output=True)
+def checked(command, input_data=None):
+    run = subprocess.run(command, capture_output=True, input=input_data)
     if run.returncode:
         raise RuntimeError(f'{command}:\n{run.stderr.decode(errors="replace")}')
     return run
@@ -104,7 +107,11 @@ def main():
         for name in args.case or CASES:
             source = directory/(name+'.rusk')
             source.write_text(CASES[name])
+            input_data = INPUTS.get(name)
             row = {'source': CASES[name], 'variants': {}}
+            if input_data is not None:
+                row['input_bytes'] = len(input_data)
+                row['input_sha256'] = hashlib.sha256(input_data).hexdigest()
             report['cases'][name] = row
             expected = None
             for variant, compiler in compilers.items():
@@ -112,7 +119,7 @@ def main():
                 cpp = stem.with_suffix('.cpp')
                 checked([str(compiler), 'compile', str(source), '-o', str(cpp)])
                 build(cpp, stem)
-                output = checked([str(stem)]).stdout
+                output = checked([str(stem)], input_data).stdout
                 if expected is None:
                     expected = output
                 assert output == expected, (name, variant, output, expected)
@@ -123,7 +130,7 @@ def main():
                 counted.write_text(instrumented)
                 executable = counted.with_suffix('')
                 build(counted, executable)
-                run = checked([str(executable)])
+                run = checked([str(executable)], input_data)
                 assert run.stdout == expected
                 data['allocations'] = int(run.stderr.decode().strip().split('=')[1])
                 if args.reference_copies:
@@ -144,17 +151,17 @@ def main():
                     counted.write_text(text)
                     executable = counted.with_suffix('')
                     build(counted, executable)
-                    run = checked([str(executable)])
+                    run = checked([str(executable)], input_data)
                     assert run.stdout == expected
                     data['shared_ptr_copies'] = int(run.stderr.decode().strip().split('=')[1])
-                jobs.append((name, variant, stem, data, expected))
+                jobs.append((name, variant, stem, data, expected, input_data))
             print(name, 'built and checked', flush=True)
         # Start timings only after all builds/counters complete. Reverse order
         # every other round, preserving every sample in the result artifact.
         for repeat in range(args.repeats):
-            for name, variant, executable, data, expected in jobs[::1 if repeat % 2 == 0 else -1]:
+            for name, variant, executable, data, expected, input_data in jobs[::1 if repeat % 2 == 0 else -1]:
                 start = time.perf_counter()
-                run = checked([str(executable)])
+                run = checked([str(executable)], input_data)
                 elapsed = (time.perf_counter()-start)*1000
                 assert run.stdout == expected and not run.stderr, (name, variant)
                 data['runs_ms'].append(round(elapsed, 6))
