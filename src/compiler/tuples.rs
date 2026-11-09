@@ -157,7 +157,7 @@ impl Compiler {
             ("__ge__", "!value_less(a,b)"),
         ] {
             let cpp = format!("{name}_{native}");
-            self.functions.push(Function { name: Name { text:name.into(), span:record.name.span.clone() }, params:vec![ty.clone();2], result:"Bool".into(), cpp:cpp.clone(), code:format!("Obj<bool> {cpp}(Obj<{native}> a, Obj<{native}> b, Loc) {{ return make_obj<bool>({expression}); }}"), body:None, checked:None });
+            self.functions.push(Function { name: Name { text:name.into(), span:record.name.span.clone() }, params:vec![ty.clone();2], result:"Bool".into(), cpp:cpp.clone(), code:format!("Obj<bool> {cpp}(Obj<{native}> a, Obj<{native}> b, Loc) {{ return make_obj<bool>({expression}); }}"), body:None, origin:Origin::Generated,checked:None });
         }
         let cpp = format!("write_{native}");
         self.functions.push(Function {
@@ -170,6 +170,7 @@ impl Compiler {
             cpp: cpp.clone(),
             code: format!("void {cpp}(Obj<{native}> value, Loc) {{ write_value(value); }}"),
             body: None,
+            origin: Origin::Generated,
             checked: None,
         });
         Ok(())

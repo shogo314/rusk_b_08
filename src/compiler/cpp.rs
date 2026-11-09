@@ -9,11 +9,7 @@ impl Compiler {
                 cpp: f.cpp.clone(),
                 name: f.name.text.clone(),
                 result: f.result.clone(),
-                trusted: f.body.is_none()
-                    && matches!(
-                        f.name.span.file.as_str(),
-                        "<stdlib/core.rusk>" | "<stdlib/vec.rusk>"
-                    ),
+                trusted: f.body.is_none() && f.origin == Origin::StandardLibrary,
             })
             .collect();
         let mut prelude = String::new();

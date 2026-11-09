@@ -54,9 +54,14 @@ impl Compiler {
         arguments: &[(DeclaredName, Name)],
         result: &Option<Name>,
         properties: &BTreeMap<String, String>,
+        origin: Origin,
     ) -> Result<(), String> {
-        // The prototype deliberately has no trusted effects or native-name override.
-        validate(name, properties, &["code"])?;
+        validate(name, properties, &["code", "effects"])?;
+        if properties.contains_key("effects") && origin != Origin::StandardLibrary {
+            return Err(name
+                .span
+                .error("native effect contracts are reserved for the embedded standard library"));
+        }
         let parts = template::parse(&property(name, properties, "code")?, true)
             .map_err(|e| name.span.error(e))?;
         let callbacks = parts
@@ -89,6 +94,7 @@ impl Compiler {
             result: result.clone(),
             body: None,
             foreign: Some(properties.clone()),
+            origin,
             callbacks,
         })
     }

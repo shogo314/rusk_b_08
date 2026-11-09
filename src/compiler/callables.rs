@@ -291,6 +291,7 @@ impl Compiler {
                 cpp: format!("rusk_callable_{index}"),
                 code: String::new(),
                 body: Some((vec![], Box::new(Stmt::Block(vec![], None)))),
+                origin: Origin::Generated,
                 checked: Some({
                     if !exits {
                         checked_body.push(Instruction::Return {

@@ -20,6 +20,39 @@ mod patterns;
 mod records;
 mod tuples;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Origin {
+    User,
+    StandardLibrary,
+    Generated,
+}
+
+pub(crate) struct Source {
+    statements: Vec<Stmt>,
+    origin: Origin,
+}
+impl Source {
+    pub(crate) fn standard(statements: Vec<Stmt>) -> Self {
+        Self {
+            statements,
+            origin: Origin::StandardLibrary,
+        }
+    }
+    pub(crate) fn user(statements: Vec<Stmt>) -> Self {
+        Self {
+            statements,
+            origin: Origin::User,
+        }
+    }
+}
+impl<'a> IntoIterator for &'a Source {
+    type Item = &'a Stmt;
+    type IntoIter = std::slice::Iter<'a, Stmt>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.statements.iter()
+    }
+}
+
 #[derive(Clone)]
 struct Function {
     name: Name,
@@ -29,6 +62,7 @@ struct Function {
     code: String,
     body: Option<(Vec<DeclaredName>, Box<Stmt>)>,
     checked: Option<Body>,
+    origin: Origin,
 }
 #[derive(Clone)]
 struct Variable {
@@ -110,7 +144,7 @@ impl Compiler {
     }
     pub fn compile(
         mut self,
-        sources: &[Vec<Stmt>],
+        sources: &[Source],
         emit: crate::backend::Emit,
     ) -> Result<String, String> {
         generics::validate_type_declarations(sources)?;
@@ -126,6 +160,7 @@ impl Compiler {
                         result: result.clone(),
                         body: Some(body.clone()),
                         foreign: None,
+                        origin: source.origin,
                         callbacks: vec![],
                     })?;
                 }
@@ -140,7 +175,14 @@ impl Compiler {
                     properties,
                 ) = s
                 {
-                    self.register_extern_function(name, parameters, arguments, result, properties)?;
+                    self.register_extern_function(
+                        name,
+                        parameters,
+                        arguments,
+                        result,
+                        properties,
+                        source.origin,
+                    )?;
                 }
                 if let Stmt::Struct(name, parameters, fields) = s {
                     if name.text.starts_with("__Rusk")
@@ -286,8 +328,13 @@ impl Compiler {
                             )));
                         }
                         if let Stmt::Function(_, _, _, properties) = s
-                            && let Some(effects) =
-                                self.declared_native_effects(n, &params, &result, properties)?
+                            && let Some(effects) = self.declared_native_effects(
+                                n,
+                                &params,
+                                &result,
+                                properties,
+                                source.origin,
+                            )?
                         {
                             self.native_contracts.insert(self.functions.len(), effects);
                         }
@@ -298,6 +345,7 @@ impl Compiler {
                             cpp,
                             code,
                             body,
+                            origin: source.origin,
                             checked: None,
                         });
                     }
@@ -562,9 +610,13 @@ impl Compiler {
                     .map(|(_, ty)| ty.text)
                     .collect::<Vec<_>>();
                 let result = result.map_or("Unit".into(), |ty| ty.text);
-                if let Some(effects) =
-                    self.declared_native_effects(&name, &parameters, &result, &properties)?
-                {
+                if let Some(effects) = self.declared_native_effects(
+                    &name,
+                    &parameters,
+                    &result,
+                    &properties,
+                    Origin::StandardLibrary,
+                )? {
                     self.native_contracts.insert(self.functions.len(), effects);
                 }
                 self.functions.push(Function {
@@ -574,6 +626,7 @@ impl Compiler {
                     params: parameters,
                     result,
                     body: None,
+                    origin: Origin::StandardLibrary,
                     checked: None,
                 });
             }

@@ -15,6 +15,7 @@ pub(super) struct GenericFunction {
     pub result: Option<Name>,
     pub body: Option<Box<Stmt>>,
     pub foreign: Option<BTreeMap<String, String>>,
+    pub origin: Origin,
     pub callbacks: Vec<CallbackRequirement>,
 }
 
@@ -159,9 +160,9 @@ fn explicit_bindings(name: &str, parameters: &[Name]) -> Option<BTreeMap<String,
 
 // A constructor owns its whole family. Concrete foreign instantiations may
 // coexist with each other, but cannot override part of a declared constructor.
-pub(super) fn validate_type_declarations(sources: &[Vec<Stmt>]) -> Result<(), String> {
+pub(super) fn validate_type_declarations(sources: &[Source]) -> Result<(), String> {
     let mut families: BTreeMap<&str, Vec<(&Name, bool)>> = BTreeMap::new();
-    for statement in sources.iter().flatten() {
+    for statement in sources.iter().flat_map(|s| &s.statements) {
         let (name, concrete) = match statement {
             Stmt::Type(name, _) => (name, type_parts(&name.text).is_some()),
             Stmt::Struct(name, ..) | Stmt::Enum(name, ..) | Stmt::GenericExternType(name, ..) => {
@@ -448,6 +449,7 @@ impl Compiler {
                     body,
                 )
             }),
+            origin: definition.origin,
             checked: None,
         });
         self.generic_instances.insert(key, index);
@@ -469,6 +471,17 @@ impl Compiler {
         } else {
             String::new()
         };
+        if let Some(properties) = &definition.foreign
+            && let Some(effects) = self.declared_native_effects(
+                &definition.name,
+                &self.functions[index].params,
+                &self.functions[index].result,
+                properties,
+                definition.origin,
+            )?
+        {
+            self.native_contracts.insert(index, effects);
+        }
         self.functions[index].code = code;
         Ok(Some(index))
     }

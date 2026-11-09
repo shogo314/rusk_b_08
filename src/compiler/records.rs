@@ -68,6 +68,7 @@ impl Compiler {
                 cpp,
                 code,
                 body: None,
+                origin: Origin::Generated,
                 checked: None,
             });
         }

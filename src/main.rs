@@ -122,8 +122,14 @@ fn run() -> Result<(), String> {
         }
     }
     let source = source::load(std::path::Path::new(&file))?.statements;
-    let cpp = compiler::Compiler::with_optimization(optimize)
-        .compile(&[core, collections, source], emit)?;
+    let cpp = compiler::Compiler::with_optimization(optimize).compile(
+        &[
+            compiler::Source::standard(core),
+            compiler::Source::standard(collections),
+            compiler::Source::user(source),
+        ],
+        emit,
+    )?;
     std::fs::write(&output, cpp).map_err(|e| format!("{output}: {e}"))?;
     Ok(())
 }

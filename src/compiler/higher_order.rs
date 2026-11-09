@@ -34,6 +34,7 @@ impl Compiler {
             cpp,
             code,
             body: None,
+            origin: Origin::Generated,
             checked: None,
         });
         Ok(index)
@@ -201,6 +202,7 @@ impl Compiler {
                 cpp: has_name,
                 code,
                 body: None,
+                origin: Origin::Generated,
                 checked: None,
             });
             let has_id = self.functions.len() - 1;
@@ -215,6 +217,7 @@ impl Compiler {
                 cpp: next_name,
                 code: String::new(),
                 body: None,
+                origin: Origin::Generated,
                 checked: None,
             });
             self.native_function(
