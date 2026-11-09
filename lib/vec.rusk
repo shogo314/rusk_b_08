@@ -130,3 +130,23 @@ extern fn __ge__<T>(a:Vec<T>,b:Vec<T>)->Bool {
     lower: "!@{value_call __lt__(Vec<T>,Vec<T>)->Bool}($0,$1,$loc)",
     code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc loc){return make_obj<bool>(!@{value_call __lt__(Vec<T>,Vec<T>)->Bool}(a,b,loc));}",
 }
+
+extern fn bisect_left<T>(a:Vec<T>,x:T) -> Int {
+    code: "Obj<std::int64_t> @{fn}(Obj<@{Vec<T>}> a,Obj<@{T}> x,Loc loc){const auto version=a->version;auto guard=[&](){if(a->version!=version)fail(loc,\"container changed during comparison\");};auto compare=[&](const auto& left,const auto& right){if constexpr(@{writes __lt__(T,T)->Bool}){guard();bool result;{auto l=left;auto r=right;result=@{value_call __lt__(T,T)->Bool}(l,r,loc);guard();}guard();return result;}else return @{value_call __lt__(T,T)->Bool}(left,right,loc);};auto it=std::lower_bound(a->begin(),a->end(),x,compare);if constexpr(@{writes __lt__(T,T)->Bool}){guard();}return make_obj<std::int64_t>(it-a->begin());}",
+}
+
+extern fn bisect_right<T>(a:Vec<T>,x:T) -> Int {
+    code: "Obj<std::int64_t> @{fn}(Obj<@{Vec<T>}> a,Obj<@{T}> x,Loc loc){const auto version=a->version;auto guard=[&](){if(a->version!=version)fail(loc,\"container changed during comparison\");};auto compare=[&](const auto& left,const auto& right){if constexpr(@{writes __lt__(T,T)->Bool}){guard();bool result;{auto l=left;auto r=right;result=@{value_call __lt__(T,T)->Bool}(l,r,loc);guard();}guard();return result;}else return @{value_call __lt__(T,T)->Bool}(left,right,loc);};auto it=std::upper_bound(a->begin(),a->end(),x,compare);if constexpr(@{writes __lt__(T,T)->Bool}){guard();}return make_obj<std::int64_t>(it-a->begin());}",
+}
+
+extern fn contains<T>(a:Vec<T>,x:T) -> Bool {
+    code: "Obj<bool> @{fn}(Obj<@{Vec<T>}> a,Obj<@{T}> x,Loc loc){if constexpr(@{writes __eq__(T,T)->Bool}){const auto version=a->version;auto guard=[&](){if(a->version!=version)fail(loc,\"container changed during comparison\");};for(std::size_t i=0,n=a->size();i<n;++i){guard();bool found;{auto value=(*a)[i];found=@{value_call __eq__(T,T)->Bool}(value,x,loc);guard();}guard();if(found)return make_obj<bool>(true);}guard();return make_obj<bool>(false);}else{return make_obj<bool>(std::any_of(a->begin(),a->end(),[&](const auto& value){return @{value_call __eq__(T,T)->Bool}(value,x,loc);}));}}",
+}
+
+extern fn sort<T>(a:Vec<T>) {
+    code: "void @{fn}(Obj<@{Vec<T>}> a,Loc loc){if constexpr(!@{writes __lt__(T,T)->Bool}&&!@{fails __lt__(T,T)->Bool}){std::stable_sort(a->begin(),a->end(),[](const auto& x,const auto& y){return @{value_call __lt__(T,T)->Bool}(x,y,Loc{});});}else if constexpr(!@{writes __lt__(T,T)->Bool}){std::stable_sort(a->begin(),a->end(),[&](const auto& x,const auto& y){return @{value_call __lt__(T,T)->Bool}(x,y,loc);});}else{const auto version=a->version;auto guard=[&](){if(a->version!=version)fail(loc,\"container changed during comparison\");};auto values=*a;std::stable_sort(values.begin(),values.end(),[&](const auto& x,const auto& y){guard();bool result;{auto left=x;auto right=y;result=@{value_call __lt__(T,T)->Bool}(left,right,loc);guard();}guard();return result;});guard();auto displaced=*a;a->assign(values.begin(),values.end());++a->version;const auto committed=a->version;displaced.clear();if(a->version!=committed)fail(loc,\"container changed during comparison\");values.clear();if(a->version!=committed)fail(loc,\"container changed during comparison\");return;}++a->version;}",
+}
+
+extern fn sorted<T>(a:Vec<T>) -> Vec<T> {
+    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{Vec<T>}> a,Loc loc){auto result=make_obj<@{Vec<T>}>(*a);if constexpr(!@{writes __lt__(T,T)->Bool}&&!@{fails __lt__(T,T)->Bool}){std::stable_sort(result->begin(),result->end(),[](const auto& x,const auto& y){return @{value_call __lt__(T,T)->Bool}(x,y,Loc{});});}else if constexpr(!@{writes __lt__(T,T)->Bool}){std::stable_sort(result->begin(),result->end(),[&](const auto& x,const auto& y){return @{value_call __lt__(T,T)->Bool}(x,y,loc);});}else{const auto version=a->version;auto guard=[&](){if(a->version!=version)fail(loc,\"container changed during comparison\");};std::stable_sort(result->begin(),result->end(),[&](const auto& x,const auto& y){guard();bool result;{auto left=x;auto right=y;result=@{value_call __lt__(T,T)->Bool}(left,right,loc);guard();}guard();return result;});guard();}return result;}",
+}

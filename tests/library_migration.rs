@@ -2,6 +2,103 @@ mod support;
 use support::Case;
 
 #[test]
+fn vector_search_and_sort_use_element_operations_stability_and_sharing() {
+    let case = Case::new(
+        r#"
+struct Row{key:Int;id:Int;visits:Vec<Int>;}
+fn __lt__(a:Row,b:Row)->Bool{a.visits[0]+=1;return a.key<b.key;}
+fn __eq__(a:Row,b:Row)->Bool{a.visits[0]+=1;return a.key==b.key;}
+let visits:=[0];
+let rows:=[Row{key:1,id:0,visits:visits},Row{key:0,id:1,visits:visits},Row{key:1,id:2,visits:visits}];
+let ordered:=sorted(rows);for row in ordered{wt row.id;}
+ordered[0].key=8;wt rows[1].key;ordered[0].key=0;
+sort(rows);for row in rows{wt row.id;}
+let key:=Row{key:1,id:99,visits:visits};
+wt bisect_left(rows,key),bisect_right(rows,key),contains(rows,key),contains(rows,Row{key:9,id:99,visits:visits}),visits[0]>0;
+let empty:Vec<Int>:=[];sort(empty);wt sorted(empty).len(),bisect_left(empty,3),bisect_right(empty,3),contains(empty,3);
+let values:=[3,1,2,1];let view:=sorted(values);wt values,view;
+view[0]=9;wt values;sort(values);wt values;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"1\n0\n2\n8\n1\n0\n2\n1 3 Yes No Yes\n0 0 0 No\n3 1 2 1 1 1 2 3\n3 9 2 1\n1 2 3 9\n"
+        );
+    }
+    for source in [
+        "let values:Vec<Int>:=[];let cursor:=values.map((x:Int)=>x);wt \"before\";sort(values);wt cursor.to_vec();",
+        "struct Row{key:Int;visits:Vec<Int>;} fn __lt__(a:Row,b:Row)->Bool{a.visits[0]+=1;return a.key<b.key;} let visits:=[0];let values:=[Row{key:2,visits:visits},Row{key:1,visits:visits}];let cursor:=values.map((x:Row)=>x.key);wt \"before\";sort(values);wt cursor.to_vec();",
+    ] {
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = Case::new(source).run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            assert!(
+                String::from_utf8_lossy(&out.stderr).contains("container changed during iteration")
+            );
+        }
+    }
+}
+
+#[test]
+fn vector_search_and_sort_guard_calls_and_deferred_element_release() {
+    let definitions = r#"
+extern symbol watched {code:"Obj<RuskVec<RuskVec<std::int64_t>>> watched;bool changed=false;",}
+extern fn watch(a:Vec<Vec<Int>>) {cpp_name:"watch",code:"void watch(Obj<RuskVec<RuskVec<std::int64_t>>> a,Loc){watched=a;}",}
+extern fn inner()->Vec<Int>{cpp_name:"inner",code:"Obj<RuskVec<std::int64_t>> inner(Loc){return Obj<RuskVec<std::int64_t>>(new RuskVec<std::int64_t>{},[](auto* p){delete p;if(watched){watched->clear();++watched->version;}});}",}
+extern fn __eq__(a:Vec<Int>,b:Vec<Int>)->Bool {cpp_name:"equal",code:"Obj<bool> equal(Obj<RuskVec<std::int64_t>> a,Obj<RuskVec<std::int64_t>> b,Loc){ACTION}",}
+extern fn __lt__(a:Vec<Int>,b:Vec<Int>)->Bool {cpp_name:"less",code:"Obj<bool> less(Obj<RuskVec<std::int64_t>> a,Obj<RuskVec<std::int64_t>> b,Loc){ACTION}",}
+"#;
+    let mut cases = vec![];
+    for action in [
+        "watched->clear();++watched->version;return make_obj<bool>(true);",
+        "return Obj<bool>(new bool(true),[](bool* p){delete p;watched->clear();++watched->version;});",
+    ] {
+        for operation in [
+            "sort(a);",
+            "sorted(a);",
+            "contains(a,needle);",
+            "bisect_left(a,needle);",
+            "bisect_right(a,needle);",
+        ] {
+            cases.push((action, operation));
+        }
+    }
+    for operation in [
+        "contains(a,needle);",
+        "bisect_left(a,needle);",
+        "bisect_right(a,needle);",
+    ] {
+        cases.push(("for(auto& slot:*watched){if(slot==a||slot==b){slot=make_obj<RuskVec<std::int64_t>>(RuskVec<std::int64_t>{});break;}}return make_obj<bool>(false);",operation));
+    }
+    cases.push(("if(!changed){changed=true;(*watched)[0]=Obj<RuskVec<std::int64_t>>(new RuskVec<std::int64_t>{},[](auto* p){delete p;watched->clear();++watched->version;});}return make_obj<bool>(false);","sort(a);"));
+    for (action, operation) in cases {
+        let source = format!(
+            "{} let a:Vec<Vec<Int>>:=[[],inner()];let needle:Vec<Int>:=[];watch(a);wt \"before\";{operation}",
+            definitions.replace("ACTION", action)
+        );
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = Case::new(&source).run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains("main.rusk:")
+                    && error.contains("container changed during comparison"),
+                "{operation} {action}\n{error}"
+            );
+        }
+    }
+}
+
+#[test]
 fn vector_comparisons_resolve_user_operations_and_preserve_lexicographic_order() {
     let case = Case::new(
         r#"
@@ -143,6 +240,11 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
         "__le__",
         "__gt__",
         "__ge__",
+        "contains",
+        "bisect_left",
+        "bisect_right",
+        "sort",
+        "sorted",
     ] {
         declarations =
             declarations.replace(&format!("fn {name}<"), &format!("fn migrated_{name}<"));
@@ -165,6 +267,7 @@ struct Row{{value:Int;}}
 let rows:=migrated___vec_repeat__(Row{{value:2}},2);rows[0].value=5;
 wt rows[0].value,rows[1].value,migrated_len(rows);
 wt migrated___eq__([1,2],[1,2]),migrated___ne__([1],[2]),migrated___lt__([1],[2]),migrated___le__([1],[1]),migrated___gt__([2],[1]),migrated___ge__([1],[1]);
+let ordered:=migrated_sorted([3,1,2]);migrated_sort(ordered);wt ordered,migrated_bisect_left(ordered,2),migrated_bisect_right(ordered,2),migrated_contains(ordered,2);
 "#
     ));
     for options in [vec![], vec!["--no-opt"]] {
@@ -176,7 +279,7 @@ wt migrated___eq__([1,2],[1,2]),migrated___ne__([1],[2]),migrated___lt__([1],[2]
         );
         assert_eq!(
             out.stdout,
-            b"0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n"
+            b"0 No Yes No\n4\n8 3 1\n3 1 9 1\n6 1\n2 4\n6 1\n1\n6\n7 7\n5 2 2\nYes Yes Yes Yes Yes Yes\n1 2 3 1 2 Yes\n"
         );
     }
 }

@@ -667,17 +667,7 @@ impl Compiler {
                 {
                     continue;
                 }
-                if self.record_element(inner)
-                    && matches!(
-                        name.text.as_str(),
-                        "__write__"
-                            | "sort"
-                            | "sorted"
-                            | "bisect_left"
-                            | "bisect_right"
-                            | "contains"
-                    )
-                {
+                if self.record_element(inner) && name.text == "__write__" {
                     continue;
                 }
                 let parameters = params

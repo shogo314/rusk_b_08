@@ -1,0 +1,25 @@
+struct Letter { key:Char; id:Int; calls:Vec<Int>; }
+fn __lt__(a:Letter,b:Letter)->Bool {
+    a.calls[0]+=1;
+    return a.key<b.key;
+}
+fn __eq__(a:Letter,b:Letter)->Bool {
+    a.calls[0]+=1;
+    return a.key==b.key;
+}
+let text:="baba";
+let calls:=[0];
+let rows:=[Letter{key:text[0],id:0,calls:calls},Letter{key:text[1],id:1,calls:calls},Letter{key:text[2],id:2,calls:calls}];
+let ordered:=sorted(rows);
+let held:=ordered[1].key;
+sort(rows);
+wt rows[0].id,rows[1].id,rows[2].id;
+let needle:=Letter{key:'b',id:99,calls:calls};
+wt contains(rows,needle),bisect_left(rows,needle),bisect_right(rows,needle),calls[0]>0;
+rows=[];
+ordered=[];
+held='Z';
+wt text;
+held:='q';
+text.push_back('!');
+wt text;

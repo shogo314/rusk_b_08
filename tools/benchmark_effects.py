@@ -18,6 +18,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'vector_ordering': ('let a:=[0;4000];let total:=0;for round in 0..60{'
+                        'for i in 0..a.len(){a[i]=(i*7919+round)%4001;}'
+                        'let ordered:=sorted(a);sort(a);total+=a[2000]+ordered[2000];}wt total;'),
+    'vector_search': ('let a:=[0;2000];for i in 0..a.len(){a[i]=i/3;}let total:=0;'
+                      'for i in 0..20000{let key:=i%700;total+=bisect_left(a,key);'
+                      'total+=bisect_right(a,key);if contains(a,key){total+=1;}}wt total;'),
     'vector_comparisons': ('let a:=[1;2000];let b:=[1;2000];let total:=0;'
                            'for round in 0..20000{b[-1]=round%3;'
                            'if a==b{total+=1;}if a<b{total+=1;}}wt total;'),
