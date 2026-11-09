@@ -30,6 +30,8 @@ impl Compiler {
                     )
                 } else if self.records.contains_key(name) {
                     Type::Record(fields())
+                } else if let Some(meta) = self.native_types.get(name) {
+                    meta.kind.clone()
                 } else if let Some(element) = vector_element(name) {
                     Type::Vector(element.into())
                 } else if let Some(c) = self.containers.get(name) {
@@ -53,12 +55,6 @@ impl Compiler {
                     Type::Iterator {
                         element: element.into(),
                     }
-                } else if name == "RangeIter" {
-                    Type::Iterator {
-                        element: "Int".into(),
-                    }
-                } else if matches!(name.as_str(), "Int" | "Bool" | "Char" | "Str" | "Unit") {
-                    Type::Primitive
                 } else {
                     Type::Opaque
                 };

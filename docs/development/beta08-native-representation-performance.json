@@ -1,0 +1,113 @@
+{
+  "utc": "2026-11-09T19:26:37.735483+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "49dafe74bb339c3f808f69a44fde61d8a9a4bb76096bf38a26231f6cbe447fab"
+  },
+  "repeats": 7,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "scalar_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let i:=0;let total:=0;while i<500000{total+=add_one(i);i+=1;}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "125000250000\n",
+          "cpp_sha256": "1336e8a21423abbb18f44c2fbd78fec777e2f17284b741bea7f07cbf30101834",
+          "runs_ms": [
+            9.99215,
+            10.189776,
+            9.805202,
+            10.398813,
+            9.704122,
+            9.786737,
+            9.807055
+          ],
+          "allocations": 500007,
+          "shared_ptr_copies": 2000002,
+          "median_ms": 9.807055
+        },
+        "current": {
+          "output": "125000250000\n",
+          "cpp_sha256": "47680f4c8186c142c3467767fa4f98f1937ea2f99fef0b3c291909263e7a8a5b",
+          "runs_ms": [
+            9.866378,
+            10.321975,
+            9.665039,
+            10.092801,
+            9.796977,
+            10.13828,
+            10.007068
+          ],
+          "allocations": 500007,
+          "shared_ptr_copies": 2000002,
+          "median_ms": 10.007068
+        }
+      },
+      "speedup": 0.9800128269339231
+    },
+    "element_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let a:=[1;100000];let total:=0;for i in 0..20{for x in a{total+=add_one(x);}}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "4000000\n",
+          "cpp_sha256": "c46b361d7b63009ac1a54f646152f67fca12507ab9852145b105169e955aa91e",
+          "runs_ms": [
+            27.192014,
+            28.959763,
+            27.348146,
+            28.412679,
+            27.317238,
+            29.706615,
+            29.233124
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 28.412679
+        },
+        "current": {
+          "output": "4000000\n",
+          "cpp_sha256": "52bc0de187003fbea6bd7a856a321c2d46981da752daf7bad345e70be04571b4",
+          "runs_ms": [
+            27.719089,
+            28.766483,
+            29.409904,
+            29.153367,
+            27.79599,
+            29.246173,
+            28.644705
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 28.766483
+        }
+      },
+      "speedup": 0.9877008252972739
+    }
+  },
+  "code_equivalence": {
+    "normalization": "Remove only top-level static_assert declarations and the explicit #include <type_traits> line from both generated sources; use identical source paths within each pair.",
+    "cases": {
+      "scalar_call": {
+        "equal_without_representation_checks": true,
+        "sha256_without_checks": [
+          "e2f6ae8d54c85e3fa929b5fe20efff60d7d7c064cd443d707953a9175860a178",
+          "e2f6ae8d54c85e3fa929b5fe20efff60d7d7c064cd443d707953a9175860a178"
+        ]
+      },
+      "element_call": {
+        "equal_without_representation_checks": true,
+        "sha256_without_checks": [
+          "a213cf225494311c6f357d9d7ef51dc66b43d970ac8e5af4b9a1afa74b5fa6c5",
+          "a213cf225494311c6f357d9d7ef51dc66b43d970ac8e5af4b9a1afa74b5fa6c5"
+        ]
+      }
+    }
+  }
+}

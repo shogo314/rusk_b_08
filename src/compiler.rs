@@ -19,6 +19,7 @@ mod ir_types;
 mod patterns;
 mod records;
 mod tuples;
+mod type_metadata;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Origin {
@@ -112,6 +113,7 @@ pub struct Compiler {
     native_references: BTreeSet<usize>,
     native_value_references: BTreeSet<usize>,
     native_effect_references: BTreeSet<(usize, crate::effects::Query)>,
+    native_types: BTreeMap<String, type_metadata::Metadata>,
     symbols: BTreeMap<String, String>,
     scopes: Vec<BTreeMap<String, Variable>>,
     body: Body,
@@ -169,7 +171,7 @@ impl Compiler {
                     })?;
                 }
                 if let Stmt::GenericExternType(name, parameters, properties) = s {
-                    self.register_extern_type(name, parameters, properties)?;
+                    self.register_extern_type(name, parameters, properties, source.origin)?;
                 }
                 if let Stmt::GenericExternFunction(
                     name,
@@ -229,13 +231,22 @@ impl Compiler {
                     {
                         return Err(n.span.error("duplicate type"));
                     }
-                    validate(n, p, &["cpp_name"])?;
+                    validate(n, p, &["cpp_name", "representation"])?;
                     if self
                         .types
                         .insert(n.text.clone(), property(n, p, "cpp_name")?)
                         .is_some()
                     {
                         return Err(n.span.error("duplicate type"));
+                    }
+                    if let Some(kind) = type_metadata::parse_properties(n, p, source.origin)? {
+                        self.native_types.insert(
+                            n.text.clone(),
+                            type_metadata::Metadata {
+                                kind,
+                                span: n.span.clone(),
+                            },
+                        );
                     }
                 }
             }
@@ -248,6 +259,15 @@ impl Compiler {
             }
         }
         self.validate_extern_declarations()?;
+        for (name, meta) in self.native_types.clone() {
+            self.validate_representation(
+                &Name {
+                    text: name,
+                    span: meta.span,
+                },
+                &meta.kind,
+            )?;
+        }
         let enum_names = self
             .enum_definitions
             .values()

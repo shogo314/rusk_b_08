@@ -41,10 +41,15 @@ impl Compiler {
         let scalar = parse("lower")?;
         let owned = parse("lower_owned")?;
         let borrowed = parse("lower_borrowed")?;
-        if scalar.is_some() && !matches!(result, "Int" | "Bool" | "Char" | "Unit") {
+        if scalar.is_some()
+            && !self
+                .ir_types()
+                .get(result)
+                .is_some_and(crate::hir::Type::leaf)
+        {
             return Err(name
                 .span
-                .error("scalar lowering requires a language scalar or Unit result"));
+                .error("scalar lowering requires a declared scalar representation"));
         }
         if (scalar.is_some() && owned.is_some()) || (borrowed.is_some() && owned.is_none()) {
             return Err(name
@@ -117,8 +122,8 @@ stamp(1);
 "#;
 
     const TYPES: &str = r#"
-extern type Int {cpp_name:"std::int64_t",}
-extern type Unit {cpp_name:"Unit",}
+extern type Int {cpp_name:"std::int64_t",representation:"i64",}
+extern type Unit {cpp_name:"Unit",representation:"unit",}
 extern type Str {cpp_name:"std::string",}
 "#;
 
@@ -177,6 +182,9 @@ let x:=unrelated(1,2);store(x,4);
         let text = format!(
             "{TYPES}\nextern fn f(x:Int)->Int{{cpp_name:\"f\",code:\"unused\",lower:\"*$0\",}} f(1);"
         );
+        let text = text
+            .replace("representation:\"i64\",", "")
+            .replace("representation:\"unit\",", "");
         let source = Source::user(crate::parse(&text, "<stdlib/core.rusk>").unwrap());
         let error = Compiler::default()
             .compile(&[source], crate::backend::Emit::Cpp)

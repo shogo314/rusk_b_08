@@ -29,20 +29,23 @@ fn root(parents: &BTreeMap<ValueId, ValueId>, id: &ValueId) -> ValueId {
 }
 pub(super) fn plan(
     body: &Function,
+    kinds: &BTreeMap<String, crate::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
 ) -> BTreeMap<ValueId, ValueId> {
-    groups(body, functions, summaries, Source::Fresh)
+    groups(body, kinds, functions, summaries, Source::Fresh)
 }
 pub(super) fn owned_plan(
     body: &Function,
+    kinds: &BTreeMap<String, crate::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
 ) -> BTreeMap<ValueId, ValueId> {
-    groups(body, functions, summaries, Source::Element)
+    groups(body, kinds, functions, summaries, Source::Element)
 }
 pub(super) fn parameter_plan(
     body: &Function,
+    kinds: &BTreeMap<String, crate::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
     current: &ProgramFunction,
@@ -52,7 +55,7 @@ pub(super) fn parameter_plan(
         .iter()
         .enumerate()
         .filter(|(index, ty)| {
-            matches!(ty.as_str(), "Int" | "Bool" | "Char")
+            kinds.get(*ty).is_some_and(crate::hir::Type::scalar_value)
                 && super::borrows_parameter(current, *index)
         })
         .map(|(index, _)| ValueId::Parameter(index))
@@ -60,10 +63,17 @@ pub(super) fn parameter_plan(
     if parameters.is_empty() {
         return BTreeMap::new();
     }
-    groups(body, functions, summaries, Source::Parameter(&parameters))
+    groups(
+        body,
+        kinds,
+        functions,
+        summaries,
+        Source::Parameter(&parameters),
+    )
 }
 fn groups(
     body: &Function,
+    kinds: &BTreeMap<String, crate::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
     source: Source<'_>,
@@ -80,7 +90,10 @@ fn groups(
         }
     }
     for slot in &body.slots {
-        if matches!(slot.ty.as_str(), "Bool" | "Int" | "Char") {
+        if kinds
+            .get(&slot.ty)
+            .is_some_and(crate::hir::Type::scalar_value)
+        {
             parents.insert(slot.id.clone(), slot.id.clone());
         }
     }
@@ -90,11 +103,21 @@ fn groups(
                 Operation::Declare {
                     result,
                     initial: Some(value),
-                } if matches!(result.ty.as_str(), "Bool" | "Int" | "Char") => Some((result, value)),
+                } if kinds
+                    .get(&result.ty)
+                    .is_some_and(crate::hir::Type::scalar_value) =>
+                {
+                    Some((result, value))
+                }
                 Operation::Object {
                     result,
                     expression: Rvalue::Share(value),
-                } if matches!(result.ty.as_str(), "Bool" | "Int" | "Char") => Some((result, value)),
+                } if kinds
+                    .get(&result.ty)
+                    .is_some_and(crate::hir::Type::scalar_value) =>
+                {
+                    Some((result, value))
+                }
                 _ => None,
             };
             if let Some((result, value)) = pair {
@@ -113,11 +136,17 @@ fn groups(
                 | Operation::Object {
                     result,
                     expression: Rvalue::BoolCopy(_) | Rvalue::VariantTest { .. },
-                } if !readonly && matches!(result.ty.as_str(), "Bool" | "Int" | "Char") => {
+                } if !readonly
+                    && kinds
+                        .get(&result.ty)
+                        .is_some_and(crate::hir::Type::scalar_value) =>
+                {
                     origins.insert(result.id.clone());
                 }
                 Operation::Call(call)
-                    if matches!(call.result.ty.as_str(), "Bool" | "Int" | "Char")
+                    if kinds
+                        .get(&call.result.ty)
+                        .is_some_and(crate::hir::Type::scalar_value)
                         && (match source {
                             Source::Element => {
                                 intrinsics::lower_owned(call, &functions[call.function]).is_some()

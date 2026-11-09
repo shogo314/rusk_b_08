@@ -153,9 +153,18 @@ impl Body {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Scalar {
+    I64,
+    Bool,
+    Char,
+    Unit,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum Type {
-    Primitive,
+    Scalar(Scalar),
+    Buffer(String),
     Record(Vec<(String, String)>),
     Callable {
         fields: Vec<(String, String)>,
@@ -176,6 +185,15 @@ pub(crate) enum Type {
     Opaque,
 }
 impl Type {
+    pub fn scalar_value(&self) -> bool {
+        matches!(
+            self,
+            Self::Scalar(Scalar::I64 | Scalar::Bool | Scalar::Char)
+        )
+    }
+    pub fn leaf(&self) -> bool {
+        matches!(self, Self::Scalar(_))
+    }
     pub fn fields(&self) -> Option<&[(String, String)]> {
         match self {
             Self::Record(fields) | Self::Callable { fields, .. } => Some(fields),

@@ -28,6 +28,7 @@ impl Compiler {
         prelude += &self.key_hash_cpp();
         prelude += &self.container_declarations();
         prelude += &self.lazy_copy_declarations();
+        prelude += &self.scalar_representation_checks();
         let foreign_definitions = self
             .used
             .iter()

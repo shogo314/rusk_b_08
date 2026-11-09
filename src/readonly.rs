@@ -163,9 +163,6 @@ struct State {
     /// Their retained restrictions still widen to all aggregates/projections.
     heap: AccessPaths,
 }
-fn aggregate(ty: &str) -> bool {
-    !matches!(ty, "Int" | "Bool" | "Char" | "Unit")
-}
 impl State {
     fn diagnostic_cost(&self) -> usize {
         self.heap.diagnostic_cost()
@@ -182,9 +179,9 @@ impl State {
             .cloned()
             .unwrap_or_else(Reference::unknown)
     }
-    fn get(&self, value: &Value) -> AccessPaths {
+    fn get(&self, value: &Value, types: &BTreeMap<String, crate::hir::Type>) -> AccessPaths {
         let mut access = self.objects.read(&self.reference(value));
-        if aggregate(&value.ty) {
+        if !types.get(&value.ty).is_some_and(crate::hir::Type::leaf) {
             access.join(&self.heap);
         }
         access
@@ -292,7 +289,7 @@ fn operation(
                     state.values.insert(id.clone(), value);
                 }
                 Place::Field { owner, index } => {
-                    let owner_access = state.get(owner).project_root();
+                    let owner_access = state.get(owner, &program.types).project_root();
                     if check {
                         owner_access
                             .check(
@@ -323,7 +320,11 @@ fn operation(
         Operation::Call(call) => {
             let callee = &program.functions[call.function];
             let references: Vec<_> = call.args.iter().map(|v| state.reference(v)).collect();
-            let args: Vec<_> = call.args.iter().map(|v| state.get(v)).collect();
+            let args: Vec<_> = call
+                .args
+                .iter()
+                .map(|v| state.get(v, &program.types))
+                .collect();
             for (index, (actual, effect)) in args.iter().zip(&callee.effects.parameters).enumerate()
             {
                 if check && (effect.write != Effect::No || effect.structural != Effect::No) {
@@ -407,7 +408,7 @@ fn operation(
             // Compiler-created snapshots are fresh. A restricted source here
             // would indicate an invalid lowering rather than a user call.
             if check {
-                let access = state.get(target);
+                let access = state.get(target, &program.types);
                 access
                     .check(
                         &Span {
@@ -468,7 +469,7 @@ fn analyze_body(
             Terminator::Branch { yes, no, .. } => vec![yes.0, no.0],
             Terminator::Return { value, .. } => {
                 if let Some(value) = value {
-                    result.returned.join(&state.get(value));
+                    result.returned.join(&state.get(value, &program.types));
                 }
                 vec![]
             }
@@ -578,7 +579,11 @@ mod tests {
     }
     #[test]
     fn returned_and_retained_restrictions_have_valid_paths_and_readonly_sources() {
-        let types = [("Int".into(), crate::hir::Type::Primitive)].into();
+        let types = [(
+            "Int".into(),
+            crate::hir::Type::Scalar(crate::hir::Scalar::I64),
+        )]
+        .into();
         let mut summary = Summary {
             returned: AccessPaths::root(info()),
             retained: AccessPaths::default(),

@@ -100,6 +100,7 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
                 cpp(
                     body,
                     &context.types,
+                    &program.types,
                     &context.functions,
                     &program.functions,
                     optimize,
@@ -113,6 +114,7 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
     out += &cpp(
         &program.main,
         &context.types,
+        &program.types,
         &context.functions,
         &program.functions,
         optimize,

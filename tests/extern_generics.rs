@@ -89,7 +89,7 @@ native::<{ty}>();
         assert!(!out.status.success());
         let error = String::from_utf8_lossy(&out.stderr);
         assert!(
-            error.contains("native value references require an Int, Bool or Char result"),
+            error.contains("native value references require a declared non-Unit scalar result"),
             "{error}"
         );
     }

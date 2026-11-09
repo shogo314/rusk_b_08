@@ -10,13 +10,19 @@ pub(crate) fn contract(
     types: &BTreeMap<String, crate::hir::Type>,
 ) -> Result<Summary, String> {
     fn builtin_value(ty: &str, types: &BTreeMap<String, crate::hir::Type>) -> bool {
-        match types.get(ty) {
-            Some(crate::hir::Type::Primitive) => {
-                matches!(ty, "Int" | "Bool" | "Char" | "Str" | "Unit")
+        fn walk(ty: &str, types: &BTreeMap<String, crate::hir::Type>, depth: usize) -> bool {
+            if depth >= 64 {
+                return false;
             }
-            Some(crate::hir::Type::Vector(element)) => builtin_value(element, types),
-            _ => false,
+            match types.get(ty) {
+                Some(crate::hir::Type::Scalar(_)) => true,
+                Some(crate::hir::Type::Buffer(element) | crate::hir::Type::Vector(element)) => {
+                    walk(element, types, depth + 1)
+                }
+                _ => false,
+            }
         }
+        walk(ty, types, 0)
     }
     let specification = match specification {
         "deep_read_fresh" | "deep_resize_first" | "deep_io_write" => {
@@ -81,7 +87,13 @@ pub(crate) fn contract(
             let Some(crate::hir::Type::Vector(element)) = types.get(&parameters[0]) else {
                 return Err("native element store requires a vector".into());
             };
-            if *element != parameters[source] || (source == 2 && parameters[1] != "Int") {
+            if *element != parameters[source]
+                || (source == 2
+                    && !matches!(
+                        types.get(&parameters[1]),
+                        Some(crate::hir::Type::Scalar(crate::hir::Scalar::I64))
+                    ))
+            {
                 return Err("native element store type mismatch".into());
             }
             summary.parameters[0].write = Effect::May;
@@ -154,8 +166,13 @@ pub(crate) fn contract(
             summary.may_fail = Effect::May;
         }
         "element" => {
-            if parameters.len() != 2 || parameters[1] != "Int" {
-                return Err("native element contract requires (container, Int)".into());
+            if parameters.len() != 2
+                || !matches!(
+                    types.get(&parameters[1]),
+                    Some(crate::hir::Type::Scalar(crate::hir::Scalar::I64))
+                )
+            {
+                return Err("native element contract requires a container and an integer index representation".into());
             }
             summary.returned.fresh = false;
             summary.returned.aliases.insert(ReturnAlias {
@@ -181,13 +198,19 @@ mod tests {
     };
     fn types() -> BTreeMap<String, Type> {
         [
-            ("Int".into(), Type::Primitive),
-            ("Char".into(), Type::Primitive),
-            ("Str".into(), Type::Primitive),
-            ("Unit".into(), Type::Primitive),
+            ("Int".into(), Type::Scalar(crate::hir::Scalar::I64)),
+            ("Char".into(), Type::Scalar(crate::hir::Scalar::Char)),
+            ("Str".into(), Type::Buffer("Char".into())),
+            ("Unit".into(), Type::Scalar(crate::hir::Scalar::Unit)),
             ("Vec<Int>".into(), Type::Vector("Int".into())),
         ]
         .into()
+    }
+    #[test]
+    fn recursive_native_shapes_do_not_imply_pure_deep_copy_contracts() {
+        let types = [("Loop".into(), Type::Buffer("Loop".into()))].into();
+        let effect = contract("deep_read_fresh", &["Loop".into()], "Loop", &types).unwrap();
+        assert_eq!(effect.source, SummarySource::Opaque);
     }
     #[test]
     fn element_contract_returns_a_reference_without_retaining_it_elsewhere() {

@@ -339,10 +339,10 @@ pub(crate) fn project_type(
     let mut ty = root.to_string();
     for projection in path {
         ty = match (types.get(&ty), projection) {
-            (Some(crate::hir::Type::Vector(element)), Projection::Element) => Some(element.clone()),
-            (Some(crate::hir::Type::Primitive), Projection::Element) if ty == "Str" => {
-                Some("Char".into())
-            }
+            (
+                Some(crate::hir::Type::Vector(element) | crate::hir::Type::Buffer(element)),
+                Projection::Element,
+            ) => Some(element.clone()),
             (Some(kind), Projection::Field(index)) => kind
                 .fields()
                 .and_then(|fields| fields.get(*index))
@@ -374,8 +374,8 @@ impl State {
             .cloned()
             .unwrap_or_else(ReturnOrigins::unknown)
     }
-    fn returned(&self, value: &Value) -> ReturnOrigins {
-        if self.heap_unknown && !matches!(value.ty.as_str(), "Int" | "Bool" | "Char" | "Unit") {
+    fn returned(&self, value: &Value, types: &BTreeMap<String, crate::hir::Type>) -> ReturnOrigins {
+        if self.heap_unknown && !types.get(&value.ty).is_some_and(crate::hir::Type::leaf) {
             ReturnOrigins::unknown()
         } else {
             self.get(value)
@@ -562,6 +562,7 @@ fn analyze_function(
     function: &lir::ProgramFunction,
     callees: &[Summary],
     private: &BTreeSet<ValueId>,
+    types: &BTreeMap<String, crate::hir::Type>,
 ) -> Summary {
     let Some(body) = &function.body else {
         return if function.effects.source == SummarySource::NativeContract {
@@ -599,7 +600,7 @@ fn analyze_function(
                 value: Some(value), ..
             } => {
                 // Mutated aggregates may retain sources beyond their initial fields.
-                let origins = state.returned(value);
+                let origins = state.returned(value, types);
                 escapes(&mut summary, &origins);
                 summary.returned.join(&origins);
             }
@@ -785,7 +786,7 @@ fn first_escape(
                 span,
                 ..
             } => {
-                let origins = state.returned(value);
+                let origins = state.returned(value, &program.types);
                 let mut step = Summary::inferred(function.params.len());
                 escapes(&mut step, &origins);
                 if step.parameters[parameter].escape != Effect::No {
@@ -961,7 +962,7 @@ fn solve(program: &lir::Program, private: &[BTreeSet<ValueId>]) -> Vec<Summary> 
         let mut next: Vec<_> = program
             .functions
             .iter()
-            .map(|f| analyze_function(f, &summaries, &private[f.id]))
+            .map(|f| analyze_function(f, &summaries, &private[f.id], &program.types))
             .collect();
         for (i, recursive) in recursive.iter().enumerate() {
             if *recursive {
@@ -1009,9 +1010,9 @@ mod tests {
         }
         let mut hir = hir::Program {
             types: [
-                ("Int".into(), hir::Type::Primitive),
-                ("Bool".into(), hir::Type::Primitive),
-                ("Unit".into(), hir::Type::Primitive),
+                ("Int".into(), hir::Type::Scalar(crate::hir::Scalar::I64)),
+                ("Bool".into(), hir::Type::Scalar(crate::hir::Scalar::Bool)),
+                ("Unit".into(), hir::Type::Scalar(crate::hir::Scalar::Unit)),
                 (
                     "Maybe".into(),
                     hir::Type::Enum(vec![
@@ -1626,7 +1627,11 @@ mod tests {
                 .unwrap_err()
                 .contains("return parameter")
         );
-        let types = [("Int".into(), crate::hir::Type::Primitive)].into();
+        let types = [(
+            "Int".into(),
+            crate::hir::Type::Scalar(crate::hir::Scalar::I64),
+        )]
+        .into();
         let mut invalid_path = Summary::inferred(1);
         invalid_path.parameters[0].escape = Effect::May;
         invalid_path.returned.aliases = [alias(0, vec![Projection::Field(0)], vec![])].into();

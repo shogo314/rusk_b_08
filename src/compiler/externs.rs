@@ -8,6 +8,7 @@ pub(super) struct ExternalType {
     parameters: Vec<Name>,
     native: String,
     span: Span,
+    representation: Option<crate::hir::Type>,
 }
 
 impl Compiler {
@@ -16,6 +17,7 @@ impl Compiler {
         name: &Name,
         parameters: &[Name],
         properties: &BTreeMap<String, String>,
+        origin: Origin,
     ) -> Result<(), String> {
         generics::parameters_valid(parameters)?;
         if name.text.starts_with("__Rusk")
@@ -35,13 +37,15 @@ impl Compiler {
         {
             return Err(name.span.error("duplicate type"));
         }
-        validate(name, properties, &["cpp_name"])?;
+        validate(name, properties, &["cpp_name", "representation"])?;
+        let representation = type_metadata::parse_properties(name, properties, origin)?;
         self.generic_extern_types.insert(
             name.text.clone(),
             ExternalType {
                 parameters: parameters.to_vec(),
                 native: property(name, properties, "cpp_name")?,
                 span: name.span.clone(),
+                representation,
             },
         );
         Ok(())
@@ -163,6 +167,23 @@ impl Compiler {
             let native =
                 self.render_native(&template.native, &bindings, None, &template.span, false)?;
             self.types.insert(name.text.clone(), native);
+            if let Some(kind) = template.representation {
+                let kind = type_metadata::substitute(&kind, &bindings);
+                self.native_types.insert(
+                    name.text.clone(),
+                    type_metadata::Metadata {
+                        kind: kind.clone(),
+                        span: template.span.clone(),
+                    },
+                );
+                self.validate_representation(
+                    &Name {
+                        text: name.text.clone(),
+                        span: template.span.clone(),
+                    },
+                    &kind,
+                )?;
+            }
             Ok(true)
         })();
         self.preparing_extern_types.remove(&name.text);
@@ -263,6 +284,11 @@ impl Compiler {
                 Ok(())
             };
         for definition in self.generic_extern_types.values() {
+            if let Some(kind) = &definition.representation {
+                for child in type_metadata::references(kind) {
+                    self.validate_symbolic_type(child, &definition.parameters, &definition.span)?;
+                }
+            }
             validate_parts(
                 template::parse(&definition.native, false).map_err(|e| definition.span.error(e))?,
                 &definition.parameters,
@@ -396,10 +422,14 @@ impl Compiler {
                         continue;
                     }
                     if matches!(kind, template::CallKind::Value)
-                        && !matches!(result.as_str(), "Int" | "Bool" | "Char")
+                        && !self
+                            .ir_types()
+                            .get(&result)
+                            .is_some_and(crate::hir::Type::scalar_value)
                     {
-                        return Err(span
-                            .error("native value references require an Int, Bool or Char result"));
+                        return Err(span.error(
+                            "native value references require a declared non-Unit scalar result",
+                        ));
                     }
                     if self.functions[index].body.is_none() {
                         if !template::identifier(&self.functions[index].cpp) {

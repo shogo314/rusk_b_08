@@ -5,22 +5,27 @@ extern symbol __core__ {
 }
 
 extern type Int {
+    representation: "i64",
     cpp_name: "std::int64_t",
 }
 
 extern type Bool {
+    representation: "bool",
     cpp_name: "bool",
 }
 
 extern type Char {
+    representation: "char",
     cpp_name: "char",
 }
 
 extern type Str {
+    representation: "buffer<Char>",
     cpp_name: "std::string",
 }
 
 extern type Unit {
+    representation: "unit",
     cpp_name: "Unit",
 }
 
@@ -367,7 +372,7 @@ extern fn __ge__(a: Str, b: Str) -> Bool {
 
 
 extern type Range { cpp_name: "RuskRange", }
-extern type RangeIter { cpp_name: "RuskRangeIter", }
+extern type RangeIter { cpp_name: "RuskRangeIter", representation: "iterator<Int>", }
 extern fn __range__(start: Int, end: Int) -> Range {
     effects: "read_fresh",
     cpp_name: "basic_function_0",

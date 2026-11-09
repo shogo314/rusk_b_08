@@ -58,13 +58,13 @@ impl Context<'_> {
                     return None;
                 }
                 let target = match &goal {
-                    Goal::Access(point, value) if *point == (index,position) && has(&state.get(value), self.source) => Some(value.clone()),
+                    Goal::Access(point, value) if *point == (index,position) && has(&state.get(value,&self.program.types), self.source) => Some(value.clone()),
                     Goal::Write => write_target(op, &state, self.source, self.program).filter(|_| !matches!(op, Operation::Call(call) if self.active.contains(&call.function))),
                     _ => None,
                 };
                 if let Some(value) = target {
                     return Some(Found {
-                        paths: routes.get(&value, &state, self.source),
+                        paths: routes.get(&value, &state, self.source, &self.program.types),
                         heap: routes.heap,
                         site: Some((index, position)),
                         value: Some(value),
@@ -97,7 +97,7 @@ impl Context<'_> {
                     ..
                 } => {
                     if matches!(goal, Goal::Returns) {
-                        let mut paths = routes.get(value, &state, self.source);
+                        let mut paths = routes.get(value, &state, self.source, &self.program.types);
                         paths.step(span.clone(), "readonly access returned here".into());
                         returned.join(&paths);
                     }

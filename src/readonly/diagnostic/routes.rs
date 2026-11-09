@@ -68,9 +68,15 @@ impl Routes {
         self.heap.join(&other.heap);
         self.values != old_values || self.heap != old_heap
     }
-    fn get(&self, value: &Value, state: &State, source: &AccessInfo) -> Paths {
+    fn get(
+        &self,
+        value: &Value,
+        state: &State,
+        source: &AccessInfo,
+        types: &BTreeMap<String, crate::hir::Type>,
+    ) -> Paths {
         self.values.get(&value.id).cloned().unwrap_or_default().fit(
-            &state.get(value),
+            &state.get(value, types),
             source,
             self.heap.best().as_ref(),
         )
@@ -104,7 +110,7 @@ impl Routes {
                 id: id.clone(),
                 ty: ty.clone(),
             };
-            let actual = after.get(&value);
+            let actual = after.get(&value, &context.program.types);
             if !has(&actual, context.source) {
                 continue;
             }
@@ -144,13 +150,13 @@ impl Routes {
                 } else {
                     initial
                         .as_ref()
-                        .map(|v| self.get(v, before, source))
+                        .map(|v| self.get(v, before, source, &context.program.types))
                         .unwrap_or_default()
                 };
                 Some((result, paths))
             }
             Operation::AnnotateAccess { value, info } if info == source => {
-                let existing = self.get(value, before, source);
+                let existing = self.get(value, before, source, &context.program.types);
                 Some((
                     value,
                     if existing.0.is_empty() {
@@ -165,7 +171,7 @@ impl Routes {
                 name,
                 captured,
             } => {
-                let mut paths = self.get(value, before, source);
+                let mut paths = self.get(value, before, source, &context.program.types);
                 if *captured || name.span != source.declaration || name.text != source.name {
                     paths.step(
                         Some(name.span.clone()),
@@ -181,7 +187,7 @@ impl Routes {
             }
             Operation::Object { result, expression } => {
                 let paths = match expression {
-                    Rvalue::Share(value) => self.get(value, before, source),
+                    Rvalue::Share(value) => self.get(value, before, source, &context.program.types),
                     Rvalue::BoolCopy(_) | Rvalue::VariantTest { .. } => Paths::default(),
                     Rvalue::Field { owner, index } | Rvalue::VariantField { owner, index, .. } => {
                         let projection = match expression {
@@ -191,7 +197,9 @@ impl Routes {
                             },
                             _ => Projection::Field(*index),
                         };
-                        let mut paths = self.get(owner, before, source).project(&projection);
+                        let mut paths = self
+                            .get(owner, before, source, &context.program.types)
+                            .project(&projection);
                         paths.step(
                             None,
                             format!(
@@ -212,7 +220,7 @@ impl Routes {
                                 }
                                 _ => Projection::Field(index),
                             };
-                            let paths = self.get(field, before, source);
+                            let paths = self.get(field, before, source, &context.program.types);
                             self.store(result, projection, &paths, after, context);
                         }
                         self.values.get(&result.id).cloned().unwrap_or_default()
@@ -225,7 +233,7 @@ impl Routes {
                 value,
                 span,
             } => {
-                let mut paths = self.get(value, before, source);
+                let mut paths = self.get(value, before, source, &context.program.types);
                 match target {
                     Place::Local(id) => {
                         if context
@@ -244,10 +252,13 @@ impl Routes {
                         self.values.insert(
                             id.clone(),
                             paths.fit(
-                                &after.get(&Value {
-                                    id: id.clone(),
-                                    ty: value.ty.clone(),
-                                }),
+                                &after.get(
+                                    &Value {
+                                        id: id.clone(),
+                                        ty: value.ty.clone(),
+                                    },
+                                    &context.program.types,
+                                ),
                                 source,
                                 self.heap.best().as_ref(),
                             ),
@@ -265,7 +276,7 @@ impl Routes {
                 let arguments: Vec<_> = call
                     .args
                     .iter()
-                    .map(|v| self.get(v, before, source))
+                    .map(|v| self.get(v, before, source, &context.program.types))
                     .collect();
                 let mut paths = Paths::default();
                 for alias in &callee.effects.returned.aliases {
@@ -317,7 +328,11 @@ impl Routes {
                             paths.insert(vec![], trail);
                         }
                     }
-                    paths = paths.fit(&after.get(&call.result), source, self.heap.best().as_ref());
+                    paths = paths.fit(
+                        &after.get(&call.result, &context.program.types),
+                        source,
+                        self.heap.best().as_ref(),
+                    );
                     paths.uncertain();
                     paths.step(Some(call.span.clone()), format!("return access of '{}' is unknown; readonly restriction propagated conservatively", callee.name));
                 } else {
@@ -346,12 +361,18 @@ impl Routes {
             _ => None,
         };
         if let Some((value, paths)) = &mut produced {
-            *paths = paths.fit(&after.get(value), source, self.heap.best().as_ref());
+            *paths = paths.fit(
+                &after.get(value, &context.program.types),
+                source,
+                self.heap.best().as_ref(),
+            );
             self.values.insert(value.id.clone(), paths.clone());
         }
         if has(&after.heap, source) && !has(&before.heap, source) && self.heap.0.is_empty() {
             let mut paths = match op {
-                Operation::Rebind { value, .. } => self.get(value, before, source),
+                Operation::Rebind { value, .. } => {
+                    self.get(value, before, source, &context.program.types)
+                }
                 _ => Paths::origin(source),
             };
             paths.uncertain();
@@ -410,14 +431,15 @@ fn write_target(
             .iter()
             .zip(&program.functions[call.function].effects.parameters)
             .find(|(v, e)| {
-                (e.write != Effect::No || e.structural != Effect::No) && has(&state.get(v), source)
+                (e.write != Effect::No || e.structural != Effect::No)
+                    && has(&state.get(v, &program.types), source)
             })
             .map(|(v, _)| v.clone()),
         Operation::Rebind {
             target: Place::Field { owner, .. },
             ..
-        } if has(&state.get(owner).project_root(), source) => Some(owner.clone()),
-        Operation::StoreBool { target, .. } if has(&state.get(target), source) => {
+        } if has(&state.get(owner, &program.types).project_root(), source) => Some(owner.clone()),
+        Operation::StoreBool { target, .. } if has(&state.get(target, &program.types), source) => {
             Some(target.clone())
         }
         _ => None,

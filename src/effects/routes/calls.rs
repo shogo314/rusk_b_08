@@ -208,7 +208,10 @@ fn trace(
                 span,
                 ..
             } = &block.terminator
-            && state.returned(value).aliases.contains(alias)
+            && state
+                .returned(value, &context.program.types)
+                .aliases
+                .contains(alias)
             && let Some(mut trail) = routes
                 .values
                 .get(&value.id)

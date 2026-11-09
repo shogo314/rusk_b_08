@@ -17,11 +17,12 @@ pub(super) struct Plan {
 }
 pub(super) fn plan(
     body: &Function,
+    kinds: &BTreeMap<String, crate::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
     inline_aliases: &BTreeMap<ValueId, ValueId>,
 ) -> Plan {
-    let candidates = scalar_aliases::owned_plan(body, functions, summaries);
+    let candidates = scalar_aliases::owned_plan(body, kinds, functions, summaries);
     let persistent = storage::persistent(body);
     let mut definitions = BTreeMap::<ValueId, usize>::new();
     let mut sites = BTreeMap::<ValueId, Vec<(usize, usize)>>::new();

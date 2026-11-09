@@ -633,8 +633,8 @@ mod tests {
         };
         assert_eq!(location, &span);
         let types = BTreeMap::from([
-            ("Int".into(), hir::Type::Primitive),
-            ("Unit".into(), hir::Type::Primitive),
+            ("Int".into(), hir::Type::Scalar(crate::hir::Scalar::I64)),
+            ("Unit".into(), hir::Type::Scalar(crate::hir::Scalar::Unit)),
         ]);
         let mut program = Program {
             types,

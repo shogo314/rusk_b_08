@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) fn emit(
     function: &Function,
     types: &BTreeMap<String, String>,
+    kinds: &BTreeMap<String, crate::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[crate::lir::ProgramFunction],
     optimize: bool,
@@ -19,7 +20,7 @@ pub(crate) fn emit(
             for instruction in &block.instructions {
                 match instruction {
                     Instruction::Literal { result, .. }
-                        if matches!(result.ty.as_str(), "Int" | "Bool" | "Char" | "Unit") =>
+                        if kinds.get(&result.ty).is_some_and(crate::hir::Type::leaf) =>
                     {
                         scalar.insert(result.id.clone());
                     }
@@ -41,19 +42,19 @@ pub(crate) fn emit(
         }
     }
     let scalar_aliases = if optimize {
-        super::scalar_aliases::plan(function, functions, summaries)
+        super::scalar_aliases::plan(function, kinds, functions, summaries)
     } else {
         BTreeMap::new()
     };
     let parameter_aliases = if optimize {
         current.map_or_else(BTreeMap::new, |current| {
-            super::scalar_aliases::parameter_plan(function, functions, summaries, current)
+            super::scalar_aliases::parameter_plan(function, kinds, functions, summaries, current)
         })
     } else {
         BTreeMap::new()
     };
     let owned = if optimize {
-        super::owned_aliases::plan(function, functions, summaries, &scalar_aliases)
+        super::owned_aliases::plan(function, kinds, functions, summaries, &scalar_aliases)
     } else {
         super::owned_aliases::Plan::default()
     };

@@ -294,12 +294,15 @@ impl Program {
                         }
                     }
                 }
-                Type::Vector(t) | Type::Set(t) | Type::Iterator { element: t } => base.ty(t)?,
+                Type::Buffer(t)
+                | Type::Vector(t)
+                | Type::Set(t)
+                | Type::Iterator { element: t } => base.ty(t)?,
                 Type::Dict { key, value } => {
                     base.ty(key)?;
                     base.ty(value)?;
                 }
-                Type::Primitive | Type::Opaque => {}
+                Type::Scalar(_) | Type::Opaque => {}
             }
         }
         for (id, f) in self.functions.iter().enumerate() {
@@ -355,9 +358,9 @@ mod tests {
         };
         let mut program = Program {
             types: [
-                ("Int".into(), Type::Primitive),
-                ("Bool".into(), Type::Primitive),
-                ("Unit".into(), Type::Primitive),
+                ("Int".into(), Type::Scalar(crate::hir::Scalar::I64)),
+                ("Bool".into(), Type::Scalar(crate::hir::Scalar::Bool)),
+                ("Unit".into(), Type::Scalar(crate::hir::Scalar::Unit)),
             ]
             .into(),
             functions: vec![Function {
