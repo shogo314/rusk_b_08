@@ -8,9 +8,9 @@ mod storage;
 pub(crate) use program::{Context, emit as emit_program};
 pub(crate) struct FunctionInfo {
     pub cpp: String,
-    pub name: String,
     pub result: String,
     pub trusted: bool,
+    pub lowering: Option<crate::native_lowering::Lowering>,
 }
 pub(crate) use cpp::emit as cpp;
 

@@ -171,7 +171,10 @@ fn groups(
                                 && super::borrows_parameter(&summaries[call.function], index)))
                             || (effect.write != Effect::No
                                 && (readonly
-                                    || functions[call.function].name != "__assign__"
+                                    || functions[call.function]
+                                        .lowering
+                                        .as_ref()
+                                        .is_none_or(|l| !l.assignment)
                                     || index != 0
                                     || effect.write != Effect::May))
                             || effect.structural != Effect::No

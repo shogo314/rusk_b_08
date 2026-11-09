@@ -20,3 +20,7 @@ extern fn fold<S,A,F,I,T>(source:S,seed:A,callback:F)->A {
 extern fn scan<S,A,F,I,T>(source:S,seed:A,callback:F)->Vec<A> {
     code: "Obj<@{Vec<A>}> @{fn}(Obj<@{S}> source,Obj<@{A}> seed,Obj<@{F}> callback,Loc loc){auto it=@{call __iter__(S)->I}(source,loc);auto result=make_obj<@{Vec<A>}>(@{Vec<A>}{ });auto accumulator=@{call copy(A)->A}(seed,loc);result->push_back(@{call copy(A)->A}(accumulator,loc));while(*@{call __iter_has_next__(I)->Bool}(it,loc)){auto value=@{call __iter_next__(I)->T}(it,loc);accumulator=@{invoke F(A,T)->A}(callback,accumulator,value,loc);rusk_guard_iter(it,loc);result->push_back(@{call copy(A)->A}(accumulator,loc));}return result;}",
 }
+
+extern fn sort_by_comp<T,F>(source:Vec<T>,callback:F) {
+    code: "void @{fn}(Obj<@{Vec<T>}> source,Obj<@{F}> callback,Loc loc){auto version=source->version;auto values=*source;std::stable_sort(values.begin(),values.end(),[&](const auto& a,const auto& b){if(source->version!=version)fail(loc,\"container changed during callback\");auto result=@{invoke F(T,T)->Bool}(callback,a,b,loc);if(source->version!=version)fail(loc,\"container changed during callback\");return *result;});source->assign(values.begin(),values.end());++source->version;}",
+}

@@ -9,7 +9,8 @@ fn binary_search_is_an_ordinary_declaration_and_works_under_an_unrelated_name() 
         .replace("fn any<", "fn some_item<")
         .replace("fn to_vec<", "fn collect_items<")
         .replace("fn fold<", "fn reduce_items<")
-        .replace("fn scan<", "fn prefixes<");
+        .replace("fn scan<", "fn prefixes<")
+        .replace("fn sort_by_comp<", "fn order_items<");
     let case = Case::new(&format!(
         r#"{declaration}
 let threshold:=40;let predicate:=(x:Int)=>x*x>=threshold;
@@ -63,7 +64,8 @@ fn predicates_use_user_defined_generic_iteration_without_container_name_dispatch
         .replace("fn any<", "fn some_item<")
         .replace("fn to_vec<", "fn collect_items<")
         .replace("fn fold<", "fn reduce_items<")
-        .replace("fn scan<", "fn prefixes<");
+        .replace("fn scan<", "fn prefixes<")
+        .replace("fn sort_by_comp<", "fn order_items<");
     let case = Case::new(&format!(
         r#"{declarations}
 struct Feed<T>{{values:Vec<T>;}}
@@ -144,5 +146,42 @@ let folded:=fold([1,2],initial,(a:Vec<Int>,x:Int)=>{a.push_back(x);a});wt initia
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(out.stdout, b"4 5 5 1 2\n0 0 9 1 0 1 2\n8 4\n0 0 1 2\n");
+    }
+}
+
+#[test]
+fn comparator_sort_preserves_stability_and_is_available_as_a_user_declaration() {
+    let declarations = include_str!("../lib/algorithms.rusk")
+        .replace("fn first_true<", "fn boundary_search<")
+        .replace("fn all<", "fn every_item<")
+        .replace("fn any<", "fn some_item<")
+        .replace("fn fold<", "fn reduce_items<")
+        .replace("fn scan<", "fn prefixes<")
+        .replace("fn to_vec<", "fn collect_items<")
+        .replace("fn sort_by_comp<", "fn order_items<");
+    let case = Case::new(&format!(
+        r#"{declarations}
+struct Row{{key:Int;id:Int;}}
+let values:=[Row{{key:1,id:0}},Row{{key:0,id:1}},Row{{key:1,id:2}}];
+order_items(values,(a:Row,b:Row)=>a.key<b.key);
+for value in values{{wt value.id;}}
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1\n0\n2\n");
+    }
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(
+            "let values:=[2,1];sort_by_comp(values,(a:Int,b:Int)=>{values.push_back(3);a<b});",
+        )
+        .run_with_options("", &options);
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("container changed during callback"));
     }
 }

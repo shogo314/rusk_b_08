@@ -108,6 +108,7 @@ pub struct Compiler {
     generic_calls: BTreeMap<usize, Span>,
     functions: Vec<Function>,
     native_contracts: BTreeMap<usize, crate::effects::Summary>,
+    native_lowerings: BTreeMap<usize, crate::native_lowering::Lowering>,
     native_references: BTreeSet<usize>,
     symbols: BTreeMap<String, String>,
     scopes: Vec<BTreeMap<String, Variable>>,
@@ -275,7 +276,19 @@ impl Compiler {
                     | Stmt::UserFunction(n, _, params, result, _) => {
                         let (cpp, code, body) = match s {
                             Stmt::Function(_, _, _, p) => {
-                                validate(n, p, &["cpp_name", "code", "effects"])?;
+                                validate(
+                                    n,
+                                    p,
+                                    &[
+                                        "cpp_name",
+                                        "code",
+                                        "effects",
+                                        "lower",
+                                        "lower_owned",
+                                        "lower_borrowed",
+                                        "operation",
+                                    ],
+                                )?;
                                 (property(n, p, "cpp_name")?, property(n, p, "code")?, None)
                             }
                             Stmt::UserFunction(_, _, params, _, body) => (
@@ -338,6 +351,16 @@ impl Compiler {
                             )?
                         {
                             self.native_contracts.insert(self.functions.len(), effects);
+                        }
+                        if let Stmt::Function(_, _, _, properties) = s {
+                            self.register_native_lowering(
+                                self.functions.len(),
+                                n,
+                                &params,
+                                &result,
+                                properties,
+                                source.origin,
+                            )?;
                         }
                         self.functions.push(Function {
                             name: n.clone(),
@@ -620,6 +643,14 @@ impl Compiler {
                 )? {
                     self.native_contracts.insert(self.functions.len(), effects);
                 }
+                self.register_native_lowering(
+                    self.functions.len(),
+                    &name,
+                    &parameters,
+                    &result,
+                    &properties,
+                    Origin::StandardLibrary,
+                )?;
                 self.functions.push(Function {
                     cpp: property(&name, &properties, "cpp_name")?,
                     code: property(&name, &properties, "code")?,

@@ -18,6 +18,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'extern_comparator_sort': ('let a:=[0;2000];let total:=0;for round in 0..30{'
+                               'for i in 0..a.len(){a[i]=(i*7919+round)%2003;}'
+                               'sort_by_comp(a,(x:Int,y:Int)=>x<y);total+=a[1000];}wt total;'),
     'extern_predicates': ('let visited:=0;let a:=[1;10000];let total:=0;for i in 0..200{'
                           'if all(a,(x:Int)=>{visited+=1;x==1}){total+=1;}'
                           'if any(a,(x:Int)=>x==1){total+=1;}}wt total,visited;'),

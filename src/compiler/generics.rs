@@ -601,6 +601,16 @@ impl Compiler {
         {
             self.native_contracts.insert(index, effects);
         }
+        if let Some(properties) = &definition.foreign {
+            self.register_native_lowering(
+                index,
+                &definition.name,
+                &self.functions[index].params.clone(),
+                &self.functions[index].result.clone(),
+                properties,
+                definition.origin,
+            )?;
+        }
         self.functions[index].code = code;
         Ok(Some(index))
     }

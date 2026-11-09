@@ -5,11 +5,14 @@ impl Compiler {
         let functions = self
             .functions
             .iter()
-            .map(|f| crate::backend::FunctionInfo {
+            .enumerate()
+            .map(|(id, f)| crate::backend::FunctionInfo {
                 cpp: f.cpp.clone(),
-                name: f.name.text.clone(),
                 result: f.result.clone(),
-                trusted: f.body.is_none() && f.origin == Origin::StandardLibrary,
+                trusted: f.body.is_none()
+                    && (f.origin == Origin::StandardLibrary
+                        || self.native_lowerings.contains_key(&id)),
+                lowering: self.native_lowerings.get(&id).cloned(),
             })
             .collect();
         let mut prelude = String::new();

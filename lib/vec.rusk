@@ -10,6 +10,7 @@ extern fn __vec_repeat__(initial: Element, count: Int) -> Vector {
     code: "Obj<NativeVec> vector_function_1(Obj<NativeElement> initial, Obj<std::int64_t> count, [[maybe_unused]] Loc loc) { if(*count<0) fail(loc,\"negative array length\"); auto a=make_obj<NativeVec>(NativeVec{}); if(static_cast<__int128>(*count)>static_cast<__int128>(a->max_size())) fail(loc,\"array length out of range\"); a->reserve(static_cast<std::size_t>(*count)); for(std::int64_t i=0;i<*count;++i) a->push_back(deep_copy(initial,loc)); return a; }",
 }
 extern fn len(a: Vector) -> Int {
+    lower: "checked_int(static_cast<__int128>($0->size()), $loc)",
     effects: "checked_read_fresh",
     cpp_name: "vector_function_2",
     code: "Obj<std::int64_t> vector_function_2(Obj<NativeVec> a, [[maybe_unused]] Loc loc) { return make_obj<std::int64_t>(checked_int(static_cast<__int128>(a->size()),loc)); }",
@@ -20,6 +21,8 @@ extern fn push_back(a: Vector, x: Element) {
     code: "void vector_function_3(Obj<NativeVec> a, Obj<NativeElement> x, [[maybe_unused]] Loc loc) { a->push_back(x); ++a->version; }",
 }
 extern fn __getitem__(a: Vector, i: Int) -> Element {
+    lower_owned: "(*$0)[checked_index($0->size(),*$1,$loc)]",
+    lower_borrowed: "(*$0)[checked_index($0->size(),*$1,$loc)]",
     effects: "element",
     cpp_name: "vector_function_4",
     code: "Obj<NativeElement> vector_function_4(Obj<NativeVec> a, Obj<std::int64_t> i, [[maybe_unused]] Loc loc) { return (*a)[checked_index(a->size(),*i,loc)]; }",
@@ -40,6 +43,7 @@ extern fn __assign__(a: Vector, b: Vector) {
     code: "void vector_function_7(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { auto snapshot=deep_copy(b,loc); a->assign(snapshot->begin(),snapshot->end()); ++a->version; }",
 }
 extern fn __bool__(a: Vector) -> Bool {
+    lower: "!$0->empty()",
     effects: "read_fresh",
     cpp_name: "vector_function_8",
     code: "Obj<bool> vector_function_8(Obj<NativeVec> a, [[maybe_unused]] Loc loc) { return make_obj<bool>(!a->empty()); }",
@@ -90,10 +94,13 @@ extern fn __iter__(a: Vector) -> Iterator {
     code: "Obj<NativeIterator> vector_function_19(Obj<NativeVec> a, [[maybe_unused]] Loc loc) { return make_obj<NativeIterator>(NativeIterator{a,0,a->version}); }",
 }
 extern fn __iter_has_next__(it: Iterator) -> Bool {
+    lower: "(check_iter($0,$loc), $0->index < $0->owner->size())",
     cpp_name: "vector_function_20",
     code: "Obj<bool> vector_function_20(Obj<NativeIterator> it, [[maybe_unused]] Loc loc) { check_iter(it,loc); return make_obj<bool>(it->index<it->owner->size()); }",
 }
 extern fn __iter_next__(it: Iterator) -> Element {
+    lower_owned: "([&](){check_iter($0,$loc);if($0->index>=$0->owner->size())fail($loc,\"iterator exhausted\");return (*$0->owner)[$0->index++];}())",
+    lower_borrowed: "([&]() -> const auto&{check_iter($0,$loc);if($0->index>=$0->owner->size())fail($loc,\"iterator exhausted\");return (*$0->owner)[$0->index++];}())",
     cpp_name: "vector_function_21",
     code: "Obj<NativeElement> vector_function_21(Obj<NativeIterator> it, [[maybe_unused]] Loc loc) { check_iter(it,loc); if(it->index>=it->owner->size()) fail(loc,\"iterator exhausted\"); return (*it->owner)[it->index++]; }",
 }
@@ -122,6 +129,7 @@ extern fn __ge__(a: Vector, b: Vector) -> Bool {
     code: "Obj<bool> vector_function_27(Obj<NativeVec> a, Obj<NativeVec> b, [[maybe_unused]] Loc loc) { return make_obj<bool>(!value_less(a,b)); }",
 }
 extern fn __not__(a: Vector) -> Bool {
+    lower: "!(!$0->empty())",
     effects: "read_fresh",
     cpp_name: "vector_function_999",
     code: "Obj<bool> vector_function_999(Obj<NativeVec> a, Loc) { return make_obj<bool>(a->empty()); }",

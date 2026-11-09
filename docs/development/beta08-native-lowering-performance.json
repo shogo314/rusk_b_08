@@ -1,0 +1,132 @@
+{
+  "utc": "2026-11-09T18:00:21.613108+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "5cde664642406fb872014740addaedf70b061e72cb5bfc559e62b85e05e7e07b"
+  },
+  "repeats": 7,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "extern_comparator_sort": {
+      "source": "let a:=[0;2000];let total:=0;for round in 0..30{for i in 0..a.len(){a[i]=(i*7919+round)%2003;}sort_by_comp(a,(x:Int,y:Int)=>x<y);total+=a[1000];}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "30090\n",
+          "cpp_sha256": "8fdecef28829f45cf420c0b9e38dd9616cbb3d92888131642710c9809a5b533c",
+          "runs_ms": [
+            9.069114,
+            9.102343,
+            9.012638,
+            9.165401,
+            9.336412,
+            9.058715,
+            8.675783
+          ],
+          "allocations": 625989,
+          "shared_ptr_copies": 984011,
+          "median_ms": 9.069114
+        },
+        "current": {
+          "output": "30090\n",
+          "cpp_sha256": "d20723e97486e6761dbefc05552bddc10f199e7e8f8b6caae3ad8e1c3dd2a0c2",
+          "runs_ms": [
+            9.03711,
+            8.857597,
+            8.760803,
+            9.894327,
+            8.860652,
+            8.946943,
+            8.866433
+          ],
+          "allocations": 625989,
+          "shared_ptr_copies": 984011,
+          "median_ms": 8.866433
+        }
+      },
+      "speedup": 1.022859361820024
+    },
+    "scalar_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let i:=0;let total:=0;while i<500000{total+=add_one(i);i+=1;}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "125000250000\n",
+          "cpp_sha256": "1b88533b6ff0eadd11d85f9fdcbedf23b0f58fd112993a1b2426673bd6b7483b",
+          "runs_ms": [
+            9.590157,
+            9.863178,
+            9.848463,
+            9.689783,
+            9.719499,
+            10.272063,
+            9.665348
+          ],
+          "allocations": 500007,
+          "shared_ptr_copies": 2000002,
+          "median_ms": 9.719499
+        },
+        "current": {
+          "output": "125000250000\n",
+          "cpp_sha256": "1b88533b6ff0eadd11d85f9fdcbedf23b0f58fd112993a1b2426673bd6b7483b",
+          "runs_ms": [
+            9.292851,
+            9.585539,
+            10.019972,
+            9.677481,
+            9.732183,
+            10.253481,
+            9.787639
+          ],
+          "allocations": 500007,
+          "shared_ptr_copies": 2000002,
+          "median_ms": 9.732183
+        }
+      },
+      "speedup": 0.9986966952840901
+    },
+    "element_call": {
+      "source": "fn add_one(x:Int)->Int{return x+1;}let a:=[1;100000];let total:=0;for i in 0..20{for x in a{total+=add_one(x);}}wt total;",
+      "variants": {
+        "baseline": {
+          "output": "4000000\n",
+          "cpp_sha256": "71299decdb5f864baab2b5633eb4bcb69e1e79e4deddf1d6c901a9d172ac282d",
+          "runs_ms": [
+            28.08075,
+            28.190456,
+            28.345313,
+            28.437147,
+            28.343021,
+            28.453905,
+            27.623763
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 28.343021
+        },
+        "current": {
+          "output": "4000000\n",
+          "cpp_sha256": "71299decdb5f864baab2b5633eb4bcb69e1e79e4deddf1d6c901a9d172ac282d",
+          "runs_ms": [
+            28.026229,
+            28.050463,
+            28.061695,
+            27.351757,
+            28.468781,
+            28.716236,
+            28.319056
+          ],
+          "allocations": 2100034,
+          "shared_ptr_copies": 4000066,
+          "median_ms": 28.061695
+        }
+      },
+      "speedup": 1.0100252675399686
+    }
+  }
+}

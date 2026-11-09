@@ -56,12 +56,24 @@ impl Compiler {
         properties: &BTreeMap<String, String>,
         origin: Origin,
     ) -> Result<(), String> {
-        validate(name, properties, &["code", "effects"])?;
+        validate(
+            name,
+            properties,
+            &[
+                "code",
+                "effects",
+                "lower",
+                "lower_owned",
+                "lower_borrowed",
+                "operation",
+            ],
+        )?;
         if properties.contains_key("effects") && origin != Origin::StandardLibrary {
             return Err(name
                 .span
                 .error("native effect contracts are reserved for the embedded standard library"));
         }
+        self.validate_lowering_source(name, properties, origin)?;
         let parts = template::parse(&property(name, properties, "code")?, true)
             .map_err(|e| name.span.error(e))?;
         let calls = parts
