@@ -156,6 +156,15 @@ impl Compiler {
             let definition = format!(
                 "struct {native} {{ Obj<{input_native}> source; Obj<{callback_native}> callback; Obj<{output_native}> cached; bool ready=false; bool finished=false; }};\n"
             );
+            // Legacy iterator copy bodies call the source aggregate's ABI
+            // directly; retain that dependency until those bodies migrate.
+            if let Some(&index) = self
+                .record_copy_functions
+                .get(&source)
+                .or_else(|| self.enum_copy_functions.get(&source))
+            {
+                self.used.insert(index);
+            }
             let callback_copy = self.copy_function(&args[1].ty, span)?;
             let element_copy = self.copy_function(&output, span)?;
             let copy_code = format!(

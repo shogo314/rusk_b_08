@@ -1156,3 +1156,48 @@ extern fn copy(x:Leaf)->Leaf {cpp_name:"assignment_copy",code:"Obj<std::int64_t>
         }
     }
 }
+
+#[test]
+fn unused_aggregate_copies_do_not_require_payload_copy_operations() {
+    let definitions = r#"
+extern type Handle{cpp_name:"std::int64_t",}
+extern fn handle()->Handle{cpp_name:"handle",code:"Obj<std::int64_t> handle(Loc){return make_obj<std::int64_t>(7);}",}
+extern fn number(x:Handle)->Int{cpp_name:"number",code:"Obj<std::int64_t> number(Obj<std::int64_t> x,Loc){return x;}",}
+struct Inner{value:Handle;}
+struct Outer{inner:Inner;}
+enum Choice{Value(Outer),Empty}
+"#;
+    let case = Case::new(&format!(
+        "{definitions}{}",
+        r#"
+let original:=Outer{inner:Inner{value:handle()}};let shared:=original;
+wt number(shared.inner.value);
+let pair:=(original,handle());wt number(pair[1]);
+let value:=Choice::Value(original);match value{Value(x)=>{wt number(x.inner.value);},Empty=>{},};
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"7\n7\n7\n");
+    }
+    for operation in [
+        "let original:=Outer{inner:Inner{value:handle()}};let copied=original;",
+        "let original:=Choice::Value(Outer{inner:Inner{value:handle()}});let copied=original;",
+        "let a:=Outer{inner:Inner{value:handle()}};let b:=a;a=b;",
+    ] {
+        let case = Case::new(&format!("{definitions}{operation}"));
+        let out = case.compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("copy") && error.contains("main.rusk:"),
+            "{error}"
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+}

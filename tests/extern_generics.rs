@@ -1332,3 +1332,32 @@ let n:=0;{let u:=rooted_token(n);rooted_void({});wt n;}wt n;
         assert_eq!(out.stdout, b"12\n0\n1\n");
     }
 }
+
+#[test]
+fn aggregate_copy_effect_queries_request_contracts_without_requesting_unrelated_copies() {
+    let case = Case::new(
+        r#"
+extern type Handle{cpp_name:"std::int64_t",}
+struct Unused{value:Handle;}
+struct Plain{value:Int;}
+enum Choice{Value(Plain),Empty}
+extern fn copy_writes<T>(value:T)->Bool{
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{writes copy(T)->T});}",
+}
+extern fn copy_fails<T>(value:T)->Bool{
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}>,Loc){return make_obj<@{Bool}>(@{fails copy(T)->T});}",
+}
+wt copy_writes(Plain{value:1}),copy_writes((1,2)),copy_writes(Choice::Value(Plain{value:2})),copy_writes(Some({}));
+wt copy_fails(Plain{value:1});
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"No No No No\nYes\n");
+    }
+}

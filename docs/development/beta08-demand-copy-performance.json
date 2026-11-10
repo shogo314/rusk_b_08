@@ -1,0 +1,180 @@
+{
+  "utc": "2026-11-10T01:49:08.592321+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "4a6c446cb316b9077a871d720e7797b3c0c07e02cb4a528f614900a99e064f25"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "record_vector_copy": {
+      "source": "struct Row{value:Int;text:Str;}let a:=[Row{value:1,text:\"ab\"};1000];let total:=0;for round in 0..100{let b=a;total+=b[0].value;}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "6f459f0b16517c795e5ddbf9050e6024a5a7e6aee6f684b3b52ad01bfc2ede0a",
+          "runs_ms": [
+            7.75301,
+            7.812636,
+            6.886346,
+            6.97067,
+            7.357907,
+            7.686533,
+            8.04993,
+            7.380153,
+            7.134066,
+            7.198377,
+            6.880656,
+            6.822248,
+            6.842545,
+            6.884244,
+            6.59745
+          ],
+          "output": "100\n",
+          "allocations": 303216,
+          "shared_ptr_copies": 202608,
+          "median_ms": 7.134066
+        },
+        "current": {
+          "cpp_sha256": "6aaad12685658cb2e87b656542bf84d51e460a6639c85500fd2002f36fbc0066",
+          "runs_ms": [
+            8.22191,
+            6.880185,
+            6.730637,
+            6.728843,
+            6.73036,
+            6.60292,
+            6.96322,
+            8.029028,
+            7.268327,
+            6.998586,
+            7.199178,
+            6.901274,
+            7.075267,
+            7.026747,
+            6.928175
+          ],
+          "output": "100\n",
+          "allocations": 303216,
+          "shared_ptr_copies": 202508,
+          "median_ms": 6.96322
+        }
+      },
+      "speedup": 1.0245354878920958
+    },
+    "enum_vector_copy": {
+      "source": "enum Item{Pair(Int,Str),Empty}let a:=[Item::Pair(1,\"ab\");1000];let total:=0;for round in 0..100{let b=a;match b[0]{Pair(n,s)=>{total+=n;},Empty=>{},};}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "4278d591e46ddd5dc8e8ea101b4ff7656961ca6442a70ab091d40043ed89af63",
+          "runs_ms": [
+            6.072867,
+            6.185437,
+            6.401068,
+            5.979494,
+            6.116938,
+            6.476596,
+            6.211514,
+            6.667141,
+            6.228346,
+            6.393232,
+            6.33895,
+            5.747473,
+            7.046946,
+            6.3391,
+            6.313533
+          ],
+          "output": "100\n",
+          "allocations": 303316,
+          "shared_ptr_copies": 405508,
+          "median_ms": 6.313533
+        },
+        "current": {
+          "cpp_sha256": "64030d8faa7e163eb4273f2a31d8b61510e798ba42ebc0747ae99714e7b346e1",
+          "runs_ms": [
+            6.253712,
+            5.782377,
+            6.252538,
+            5.746832,
+            6.465904,
+            6.013586,
+            6.3942,
+            5.924941,
+            6.292001,
+            6.113582,
+            6.306511,
+            5.750177,
+            6.425442,
+            6.038733,
+            6.088184
+          ],
+          "output": "100\n",
+          "allocations": 303316,
+          "shared_ptr_copies": 405408,
+          "median_ms": 6.113582
+        }
+      },
+      "speedup": 1.0327060306052982
+    },
+    "opaque_record_assignment": {
+      "source": "extern type Leaf{cpp_name:\"std::int64_t\",}extern fn leaf()->Leaf{cpp_name:\"assignment_leaf\",code:\"Obj<std::int64_t> assignment_leaf(Loc){return make_obj<std::int64_t>(1);}\",}extern fn copy(x:Leaf)->Leaf{cpp_name:\"assignment_leaf_copy\",code:\"Obj<std::int64_t> assignment_leaf_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}\",}struct Row{value:Leaf;}let a:=Row{value:leaf()};let b:=Row{value:leaf()};for round in 0..100000{a=b;}wt 1;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "07795f79bc7b0a13905107e5b7b8c47523bf27781b351f338b22b74326223d13",
+          "runs_ms": [
+            2.890477,
+            2.396771,
+            2.575933,
+            2.645,
+            2.487449,
+            2.400037,
+            2.789289,
+            2.433779,
+            2.598206,
+            2.460058,
+            3.442271,
+            2.445221,
+            2.709261,
+            2.507465,
+            2.683984
+          ],
+          "output": "1\n",
+          "allocations": 200014,
+          "shared_ptr_copies": 500007,
+          "median_ms": 2.575933
+        },
+        "current": {
+          "cpp_sha256": "fd6e010721529755a6c13773c8e50ea5712b2e3fca3062437c6a1793577ad0ed",
+          "runs_ms": [
+            3.396386,
+            2.362998,
+            2.359201,
+            2.582085,
+            3.135894,
+            3.300727,
+            2.593347,
+            2.388996,
+            2.633649,
+            2.429444,
+            2.920162,
+            2.59577,
+            3.051756,
+            2.715523,
+            3.086451
+          ],
+          "output": "1\n",
+          "allocations": 200014,
+          "shared_ptr_copies": 500007,
+          "median_ms": 2.633649
+        }
+      },
+      "speedup": 0.9780851586525008
+    }
+  }
+}

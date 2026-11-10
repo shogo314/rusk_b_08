@@ -1,6 +1,14 @@
 //! Source templates and metadata for automatically derived aggregate operations.
 use super::*;
 impl Compiler {
+    pub(super) fn aggregate_copy_needed(&self, index: usize) -> bool {
+        self.used.contains(&index)
+            || self
+                .native_effect_references
+                .iter()
+                .any(|(id, _)| *id == index)
+    }
+
     pub(super) fn render_derived_copy(
         &mut self,
         kind: &str,
@@ -8,6 +16,8 @@ impl Compiler {
         index: usize,
         span: &Span,
     ) -> Result<String, String> {
+        self.native_effect_references
+            .insert((index, crate::effects::Query::Writes));
         let code = self.render_native_derivation(kind, ty, index, "deep_copy", span)?;
         let dependencies = self
             .native_contract_dependencies
@@ -66,8 +76,6 @@ impl Compiler {
     }
 
     pub(super) fn register_derived_copy(&mut self, index: usize) {
-        self.native_effect_references
-            .insert((index, crate::effects::Query::Writes));
         self.native_lowerings.insert(index,crate::native_lowering::Lowering {
             rooted: Some(crate::native_lowering::Template::parse("deep_copy($0,$loc)",1).expect("rooted aggregate copy expression")),
             owned: Some(crate::native_lowering::Template::parse(&format!("([&](){{if constexpr(rusk_writes_{index}){{auto owner=$0;return deep_copy(owner,$loc);}}else return deep_copy($0,$loc);}}())"),1).expect("derived aggregate copy expression")),

@@ -152,7 +152,10 @@ impl Compiler {
         let records: Vec<_> = self
             .records
             .values()
-            .filter(|r| !self.record_copies.contains_key(&r.name.text))
+            .filter(|r| {
+                self.aggregate_copy_needed(self.record_copy_functions[&r.name.text])
+                    && !self.record_copies.contains_key(&r.name.text)
+            })
             .cloned()
             .collect();
         for record in records {
