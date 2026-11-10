@@ -1,4 +1,14 @@
+---
+search:
+  exclude: true
+---
+
 # enumとOption移行の実装
+
+<!-- rusk-docs: history -->
+
+!!! note "過去の開発記録"
+    このページの計画・件数・パス・測定値は記録当時のものです。現在の構成は[開発ガイド](index.md)、対応範囲は[言語リファレンス](../reference/status.md)を参照してください。
 
 β05への追加要件として、型引数付きenum、variantの構築、網羅的なmatch、共有・コピー・代入を実装した。利用者向けの文法と制限は[enumとmatch](../reference/enums.md)を参照する。
 

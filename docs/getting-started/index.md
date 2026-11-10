@@ -26,8 +26,7 @@ C++への変換、コンパイル、実行を順に行います。
 ```bash
 ./target/release/rusk compile main.rusk -o /tmp/main.cpp
 g++ -std=c++20 -O2 /tmp/main.cpp -o /tmp/main
-printf '10 32
-' | /tmp/main
+printf '10 32\n' | /tmp/main
 ```
 
 出力：

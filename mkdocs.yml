@@ -1,5 +1,5 @@
-site_name: Rusk β 08
-site_description: 競技プログラミング向け言語 Rusk β 08 のドキュメント
+site_name: Rusk
+site_description: 競技プログラミング向け言語 Rusk の仕様・ライブラリ・開発ガイド
 site_url: https://shogo314.github.io/rusk_b_08/
 repo_url: https://github.com/shogo314/rusk_b_08
 repo_name: shogo314/rusk_b_08
@@ -22,48 +22,49 @@ nav:
       - コマンドライン: getting-started/cli.md
   - 言語リファレンス:
       - 基本構文と共有: reference/index.md
-      - 共有の持ち出しの制限: reference/escape.md
-      - 読み取り専用のアクセス: reference/access.md
-      - 名前の結び直しの制限: reference/bindings.md
-      - 制御構文: reference/control-flow.md
+      - 型の一覧と対応する操作: reference/types.md
+      - 構造体・タプル・型引数・include: reference/records.md
+      - 演算子: reference/operators.md
       - 関数: reference/functions.md
-      - 対応機能と制限: reference/status.md
-      - 文法一覧（EBNF）: reference/grammar.md
-      - 型・共有・評価の規則: reference/semantics.md
-      - 構造体・タプル・型引数・include: reference/beta02.md
+      - 関数の受け渡しと捕捉: reference/closures.md
+      - 制御構文: reference/control-flow.md
       - ブロック式とラベル付きループ: reference/blocks-labels.md
-      - 最小・最大演算子: reference/minmax.md
-      - パターン分岐・ガード・if let: reference/beta06.md
       - enumとmatch: reference/enums.md
-      - 分岐式・Option・比較の連鎖: reference/beta05.md
-      - 関数の受け渡しと捕捉: reference/beta04.md
+      - パターン分岐・ガード・if let: reference/patterns.md
+      - 分岐式・Option・比較の連鎖: reference/expressions.md
+      - 名前の結び直しの制限: reference/bindings.md
+      - 読み取り専用のアクセス: reference/access.md
+      - 共有の持ち出しの制限: reference/escape.md
+      - 型・共有・評価の規則: reference/semantics.md
+      - 文法一覧（EBNF）: reference/grammar.md
+      - 対応機能と制限: reference/status.md
       - エラーと制限: reference/errors.md
   - ライブラリ:
       - 標準ライブラリ: library/index.md
       - 入出力: library/input-output.md
       - 配列と文字列: library/sequences.md
-      - 辞書・集合と不在を返す操作: library/beta05.md
+      - 辞書・集合と不在を返す操作: library/collections.md
       - Ruskで記述したデータ構造: library/data-structures.md
-      - 関数を使う操作とデータ構造: library/beta04.md
+      - 関数を使う操作とデータ構造: library/algorithms.md
+  - 将来の方針: future.md
   - 開発ガイド:
-      - β08の作業計画: development/beta08.md
-      - β08の専用処理と移行依存関係: development/beta08-inventory.md
-      - β08の移行境界と残す基盤: development/beta08-boundaries.md
-      - β08のジェネリックexternと型参照: development/beta08-extern-prototype.md
-      - β08とβ07の全体性能比較: development/beta08-performance.md
-      - β07の実装・検証と次版候補: development/beta07.md
-      - β07の共有先解析と最適化: development/beta07-performance.md
-      - β06の実装と検証: development/beta06.md
+      - 構成と開発の入口: development/index.md
+      - 処理系とライブラリの境界: development/architecture.md
       - 変換パイプラインとIR: development/pipeline.md
-      - 開発の進め方: development/index.md
+      - extern・C++参照・契約: development/extern.md
       - テストの実行: development/verification.md
-      - β02の性能確認: development/beta02-performance.md
-      - β03の高速化と検証: development/beta03.md
-      - enumとOption移行: development/enums.md
-      - β05の実装と検証: development/beta05.md
-      - β04の実装と検証: development/beta04.md
+      - 性能と最適化: development/performance.md
       - ドキュメントの編集と公開: development/documentation.md
+      - 過去の開発記録: development/history.md
+not_in_nav: |
+  /development/beta*.md
+  /development/enums.md
+  /development/pipeline-history.md
+  /library/beta*.md
+  /reference/beta*.md
+  /reference/minmax.md
 markdown_extensions:
+  - attr_list
   - admonition
   - fenced_code
   - tables

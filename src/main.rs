@@ -1,81 +1,60 @@
 mod analysis;
 mod backend;
+mod cli;
 mod compiler;
 mod frontend;
 mod ir;
 mod native;
 mod stdlib;
 
+use clap::Parser;
+use cli::{Cli, Command, CompileArgs, EmitStage};
 use frontend::{parse_cst, source};
 
-fn run() -> Result<(), String> {
-    let mut args = std::env::args().skip(1);
-    let command = args.next().ok_or(
-        "usage: rusk compile FILE [-o OUTPUT] [--no-opt] [--emit cst|ast|hir|lir|cpp] | dependencies FILE",
-    )?;
-    if command == "--help" || command == "-h" {
-        println!(
-            "usage: rusk compile FILE [-o OUTPUT] [--no-opt] [--emit cst|ast|hir|lir|cpp] | dependencies FILE\nGenerate C++20 source (default: a.cpp), or list source dependencies."
-        );
-        return Ok(());
-    }
-    if command != "compile" && command != "dependencies" {
-        return Err(format!("unknown command '{command}'"));
-    }
-    let file = args.next().ok_or("missing source file")?;
-    if command == "dependencies" {
-        if let Some(arg) = args.next() {
-            return Err(format!("unknown argument '{arg}'"));
-        }
-        for path in source::load(std::path::Path::new(&file))?.dependencies {
-            println!("{}", path.display());
-        }
-        return Ok(());
-    }
-    let mut output = "a.cpp".to_string();
-    let mut optimize = true;
-    let mut emit = "cpp".to_string();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--no-opt" => optimize = false,
-            "--emit" => {
-                emit = args
-                    .next()
-                    .ok_or("--emit requires cst, ast, hir, lir, or cpp")?;
-                if !matches!(emit.as_str(), "cst" | "ast" | "hir" | "lir" | "cpp") {
-                    return Err("--emit requires cst, ast, hir, lir, or cpp".into());
-                }
+fn run(command: Command) -> Result<(), String> {
+    match command {
+        Command::Compile(args) => compile(args),
+        Command::Dependencies { file } => {
+            for path in source::load(&file)?.dependencies {
+                println!("{}", path.display());
             }
-            "-o" | "--output" => output = args.next().ok_or("missing output path")?,
-            _ => return Err(format!("unknown argument '{arg}'")),
+            Ok(())
         }
     }
-    if matches!(emit.as_str(), "cst" | "ast") {
-        let result = if emit == "cst" {
-            let text = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
-            format!("{:#?}\n", parse_cst(&text, &file)?)
+}
+
+fn compile(args: CompileArgs) -> Result<(), String> {
+    let CompileArgs {
+        file,
+        output,
+        no_opt,
+        emit,
+    } = args;
+    if matches!(emit, EmitStage::Cst | EmitStage::Ast) {
+        let result = if matches!(emit, EmitStage::Cst) {
+            let text =
+                std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            format!("{:#?}\n", parse_cst(&text, &file.to_string_lossy())?)
         } else {
-            format!(
-                "{:#?}\n",
-                source::load(std::path::Path::new(&file))?.statements
-            )
+            format!("{:#?}\n", source::load(&file)?.statements)
         };
-        std::fs::write(&output, result).map_err(|e| format!("{output}: {e}"))?;
+        std::fs::write(&output, result).map_err(|e| format!("{}: {e}", output.display()))?;
         return Ok(());
     }
-    let emit = match emit.as_str() {
-        "hir" => backend::Emit::Hir,
-        "lir" => backend::Emit::Lir,
-        _ => backend::Emit::Cpp,
+    let emit = match emit {
+        EmitStage::Hir => backend::Emit::Hir,
+        EmitStage::Lir => backend::Emit::Lir,
+        EmitStage::Cpp => backend::Emit::Cpp,
+        EmitStage::Cst | EmitStage::Ast => unreachable!(),
     };
-    let source = source::load(std::path::Path::new(&file))?.statements;
-    let cpp = compiler::Compiler::with_optimization(optimize)
+    let source = source::load(&file)?.statements;
+    let cpp = compiler::Compiler::with_optimization(!no_opt)
         .compile(&[stdlib::load()?, compiler::Source::user(source)], emit)?;
-    std::fs::write(&output, cpp).map_err(|e| format!("{output}: {e}"))?;
+    std::fs::write(&output, cpp).map_err(|e| format!("{}: {e}", output.display()))?;
     Ok(())
 }
 fn main() {
-    if let Err(e) = run() {
+    if let Err(e) = run(Cli::parse().command) {
         eprintln!("{e}");
         std::process::exit(1);
     }

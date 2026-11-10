@@ -1,4 +1,14 @@
+---
+search:
+  exclude: true
+---
+
 # β07の実装・検証とβ08の候補
+
+<!-- rusk-docs: history -->
+
+!!! note "過去の開発記録"
+    このページの計画・件数・パス・測定値は記録当時のものです。現在の構成は[開発ガイド](index.md)、対応範囲は[言語リファレンス](../reference/status.md)を参照してください。
 
 β06の最終コミット[899a47f](https://github.com/shogo314/rusk_b_06/commit/899a47fdc8811dd64e917550ed5459af99a3146e)を引き継ぎ、β07の開発を開始する。β06の[全テストCI](https://github.com/shogo314/rusk_b_06/actions/runs/42463022653)と[ドキュメント公開](https://github.com/shogo314/rusk_b_06/actions/runs/42463022642)の成功を確認して区切った。このリポジトリのGit履歴は新しく開始している。
 

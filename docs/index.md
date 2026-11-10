@@ -1,10 +1,6 @@
-# Rusk β08
+# Rusk
 
-Ruskは、競技プログラミング向けに開発している言語です。ソースをC++20へ変換し、生成したC++をコンパイルして実行・提出します。このサイトはβ08開発版の実装済みの言語と標準ライブラリを説明します。
-
-β08はfixしたβ07を引き継ぎます。externを含む通常のライブラリ定義を使い、コンパイラ内のライブラリ名ごとの専用処理を減らすことが中心です。[開始点と方針](development/beta08.md)に対象をまとめています。
-
-開始時点の機能はβ07と同じです。効果・共有・脱出の解析、readonly/mutable・fixed/rebindable・noescape/escapeの契約検査、推論結果に基づく値保持・借用を利用できます。[ジェネリックextern・型と関数の参照・捕捉付きコールバック](development/beta08-extern-prototype.md)を共通化し、標準の型・コンテナ・アルゴリズムを通常の宣言へ移しました。[移行境界と制限](development/beta08-boundaries.md)、[β07との全体性能比較](development/beta08-performance.md)に実装と検証の範囲をまとめています。
+Ruskは競技プログラミング向けの言語です。ソースを単一のC++20ソースへ変換し、生成したC++をコンパイルして実行・提出します。このサイトは現在のβ08開発版の使い方、仕様、実装上の制限を説明します。
 
 ```rusk
 in n: Int;
@@ -14,36 +10,34 @@ for x in a { best >?= x; }
 wt a.sum(), best;
 ```
 
-入力が `4` と `3 1 4 2` なら、出力は `10 4` です。トップレベルに実行文を書き、`main`関数は定義しません。
+入力が`4`と`3 1 4 2`なら、出力は`10 4`です。トップレベルに実行文を書き、`main`関数は定義しません。
 
-## 最初に読むページ
+## はじめる
 
-1. [導入と実行](getting-started/index.md)：必要な環境、ビルド、C++への変換。
-2. [小さなプログラムで学ぶ](getting-started/tutorial.md)：入力、配列、共有、関数、Option。
-3. [基本構文と共有](reference/index.md)：`=`と`:=`、評価順、添字、スコープ。
-4. [標準ライブラリ](library/index.md)：操作を目的から探す。
+1. [導入と実行](getting-started/index.md)で処理系をビルドし、C++を生成する。
+2. [チュートリアル](getting-started/tutorial.md)で入力、配列、共有、関数、Optionを試す。
+3. [言語リファレンス](reference/index.md)と[標準ライブラリ](library/index.md)で規則とAPIを調べる。
 
-## 書き方を調べる
+## Ruskの基本
 
-| 調べたいこと | ページ |
+`let b := a;`は同じオブジェクトを共有し、`let b = a;`はコピーします。宣言後の`a = value`は共有中の中身を更新し、`a := value`はその名前の共有先を変更します。整数にもこの規則が適用されます。
+
+関数の引数・戻り値、配列・フィールドへの格納も共有を基本とします。必要な場所でコピーを明示し、`readonly`・`fixed`・`noescape`で変更や共有の持ち出しを制限できます。
+
+## 目的から探す
+
+| 目的 | ページ |
 |---|---|
-| 構文・演算子の優先順位 | [文法一覧](reference/grammar.md) |
-| コピーと共有、代入、型検査 | [型・共有・評価](reference/semantics.md) |
-| if式、ループ、ラベル、ブロック | [制御構文](reference/control-flow.md) |
-| 関数、型引数、クロージャ | [関数](reference/functions.md) |
-| 構造体、タプル、ファイル分割 | [型とinclude](reference/beta02.md) |
-| enum、Option、パターン分岐 | [enum](reference/enums.md)、[パターンとガード](reference/beta06.md) |
-| 最小・最大値の選択と更新 | [最小・最大演算子](reference/minmax.md) |
-| 入力形式、EOF、出力 | [入出力](library/input-output.md) |
-| 配列・文字列のAPIと共有 | [配列と文字列](library/sequences.md) |
-| 対応範囲と制限 | [対応機能](reference/status.md)、[エラー](reference/errors.md) |
+| 型と、コピー・比較・入出力の対応 | [型の一覧](reference/types.md) |
+| 演算子、優先順位、短絡と更新 | [演算子](reference/operators.md) |
+| 文法を厳密に調べる | [文法一覧](reference/grammar.md) |
+| 共有・コピー・更新・評価順 | [基本規則](reference/index.md)、[厳密な規則](reference/semantics.md) |
+| 型の定義、タプル、型引数、ファイル分割 | [構造体とinclude](reference/records.md) |
+| 関数とクロージャ | [関数](reference/functions.md)、[捕捉の詳細](reference/closures.md) |
+| 分岐、ループ、パターン | [制御構文](reference/control-flow.md)、[パターン](reference/patterns.md) |
+| 入力、出力、配列、辞書、データ構造 | [標準ライブラリ](library/index.md) |
+| 使える機能と制限 | [対応範囲](reference/status.md)、[エラー](reference/errors.md) |
+| これからの方向性 | [将来の方針と未決定事項](future.md) |
+| 処理系の実装・extern・テスト | [開発ガイド](development/index.md) |
 
-## Ruskの共有
-
-`let b := a;` は同じオブジェクトを共有し、`let b = a;` はコピーします。既存変数に対する `a = value` は共有中の中身を更新し、`a := value` はその変数の共有先を変更します。基本型の整数にもこの規則が適用されます。
-
-## 実装と検証
-
-[変換パイプライン](development/pipeline.md)では、CST・AST・型付けしたHIR・制御フローを表すLIRからC++生成までを説明します。[テストの実行](development/verification.md)ではローカルとCIの確認方法を扱います。版ごとの変更・性能測定は開発ガイドにまとめています。
-
-このサイトのコードブロックには、単独で実行するプログラムと、説明用の構文断片があります。入力・出力を添えた例は、それらの値で動作を確認できるようにしています。
+現在の仕様と未実装の設計を分けて記載します。版ごとの経緯や測定時点の結果を調べる場合は[開発記録](development/history.md)を参照してください。

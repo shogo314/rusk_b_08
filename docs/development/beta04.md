@@ -1,6 +1,16 @@
+---
+search:
+  exclude: true
+---
+
 # β04の実装と検証
 
-β04は関数の静的な受け渡し・無名関数の捕捉と、それを使う列の操作・探索・データ構造を追加しています。[合意した要件](https://github.com/shogo314/rusk_b_04/blob/main/design/beta04.md)、[文法と捕捉](../reference/beta04.md)、[API](../library/beta04.md) も参照してください。
+<!-- rusk-docs: history -->
+
+!!! note "過去の開発記録"
+    このページの計画・件数・パス・測定値は記録当時のものです。現在の構成は[開発ガイド](index.md)、対応範囲は[言語リファレンス](../reference/status.md)を参照してください。
+
+β04は関数の静的な受け渡し・無名関数の捕捉と、それを使う列の操作・探索・データ構造を追加しています。[合意した要件](https://github.com/shogo314/rusk_b_04/blob/main/design/beta04.md)、[文法と捕捉](../reference/closures.md)、[API](../library/algorithms.md) も参照してください。
 
 ## 処理系の構成
 

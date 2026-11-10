@@ -1,6 +1,16 @@
+---
+search:
+  exclude: true
+---
+
 # β05の実装と検証
 
-β05は、不在を扱う式とハッシュ型の辞書・集合を追加する段階です。対象範囲はリポジトリの `design/beta05.md`、言語仕様は[分岐式・Option・比較の連鎖](../reference/beta05.md)、APIは[辞書・集合と入力](../library/beta05.md)に記録しています。
+<!-- rusk-docs: history -->
+
+!!! note "過去の開発記録"
+    このページの計画・件数・パス・測定値は記録当時のものです。現在の構成は[開発ガイド](index.md)、対応範囲は[言語リファレンス](../reference/status.md)を参照してください。
+
+β05は、不在を扱う式とハッシュ型の辞書・集合を追加する段階です。対象範囲はリポジトリの `design/beta05.md`、言語仕様は[分岐式・Option・比較の連鎖](../reference/expressions.md)、APIは[辞書・集合と入力](../library/collections.md)に記録しています。
 
 !!! note "処理系の構造変更"
     機能追加後に[HIR・LIRを経由する方式](pipeline.md)へ移行しています。このページの215/105テストの結果と測定JSONは、その移行前の記録です。移行後の検証はパイプラインのページに記載します。

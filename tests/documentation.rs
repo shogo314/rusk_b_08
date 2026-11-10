@@ -5,6 +5,174 @@ const BINDINGS: &str = include_str!("../docs/reference/bindings.md");
 const ACCESS: &str = include_str!("../docs/reference/access.md");
 const ESCAPE: &str = include_str!("../docs/reference/escape.md");
 
+// Only runnable programs use rusk fences on these pages; output and syntax
+// fragments use other fences. Read the published source without a second copy.
+fn runnable_examples(document: &str, cases: &[(&str, &str)]) {
+    let blocks: Vec<_> = document
+        .split("```rusk\n")
+        .skip(1)
+        .map(|block| block.split_once("```").unwrap().0)
+        .collect();
+    assert_eq!(blocks.len(), cases.len(), "update example coverage");
+    for (source, (input, expected)) in blocks.into_iter().zip(cases) {
+        // These include examples assume a main.rusk at the repository root.
+        // Tests write main.rusk into a fresh temporary directory instead.
+        let source = source.replace(
+            "include \"examples/",
+            &format!("include \"{}/examples/", env!("CARGO_MANIFEST_DIR")),
+        );
+        let output = Case::new(&source).run(input);
+        assert!(
+            output.status.success(),
+            "{source}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected.as_bytes(), "{source}");
+        assert!(output.stderr.is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn introduction_examples_match_the_published_input_and_output() {
+    runnable_examples(include_str!("../README.md"), &[("4\n3 1 4 2\n", "10\n")]);
+    runnable_examples(
+        include_str!("../docs/index.md"),
+        &[("4\n3 1 4 2\n", "10 4\n")],
+    );
+    runnable_examples(
+        include_str!("../docs/getting-started/index.md"),
+        &[("10 32\n", "42\n"), ("4\n3 1 4 2\n", "10\n")],
+    );
+}
+
+#[test]
+fn tutorial_examples_match_the_published_input_and_output() {
+    runnable_examples(
+        include_str!("../docs/getting-started/tutorial.md"),
+        &[
+            ("5\n3 -2 4 0 -1\n", "7\n"),
+            ("", "20 20 10\n30 20 10\n"),
+            ("", "8 8 2\n8 9 2\n9 2 100 2\n"),
+            ("", "7 3\n12\n"),
+            ("", "1\n-1\n"),
+            ("4\n3 1 4 2\n", "4\n3 8\n"),
+        ],
+    );
+}
+
+#[test]
+fn function_examples_keep_argument_and_capture_sharing() {
+    runnable_examples(
+        include_str!("../docs/reference/functions.md"),
+        &[
+            ("", "25\n"),
+            ("", "9 8 3\n"),
+            ("", "7 abc\n"),
+            ("", "22\n22\n"),
+        ],
+    );
+}
+
+#[test]
+fn closure_examples_keep_capture_copy_and_lazy_consumption() {
+    runnable_examples(
+        include_str!("../docs/reference/closures.md"),
+        &[
+            ("", "4 16 6\n14\n"),
+            ("", "21\n21\n"),
+            ("", "3 6 6\n7 7 6\n"),
+            ("", "1 2 1 2\n"),
+            ("", "0\n10\n1\n30 50\n"),
+        ],
+    );
+}
+
+#[test]
+fn type_catalogue_examples_define_user_types_and_use_existing_standard_types() {
+    runnable_examples(
+        include_str!("../docs/reference/types.md"),
+        &[
+            ("", "42 Yes A abc 7\n"),
+            ("", "3 4 5 five 5\n1 Yes\n"),
+            ("", "6 2 6 10\n"),
+            ("", "2\n7\n"),
+            ("9\n", "7\n9\n"),
+        ],
+    );
+}
+
+#[test]
+fn record_examples_run_without_undeclared_example_types() {
+    runnable_examples(
+        include_str!("../docs/reference/records.md"),
+        &[
+            ("", "3 3\n3 9\n"),
+            ("", "1 2\n"),
+            ("", "2 hello\n2 9\n"),
+            ("", "1 one\n2 two\n"),
+            ("", "2 1\n1 2\n"),
+            ("", "1\n"),
+            ("3\n", "Yes\n"),
+        ],
+    );
+}
+
+#[test]
+fn algorithm_examples_include_the_required_libraries() {
+    runnable_examples(
+        include_str!("../docs/library/algorithms.md"),
+        &[
+            ("", "2 4 6\n16\n0 1 3 6\nYes Yes\n"),
+            ("", "7\n"),
+            ("", "1 9\n2 0\n"),
+            ("", "0 0 1\n"),
+            ("", "1 3\n"),
+            ("", "9\n10 17\n2\n2\n"),
+        ],
+    );
+}
+
+#[test]
+fn data_structure_examples_include_and_define_the_types_they_use() {
+    runnable_examples(
+        include_str!("../docs/library/data-structures.md"),
+        &[
+            ("", "Yes No\nNo Yes\n"),
+            ("", "6 9\n15\n0\n"),
+            ("", "9\n17\nabcdef\nabXef\n"),
+            ("", "10\n"),
+        ],
+    );
+}
+
+#[test]
+fn sequence_examples_preserve_copies_and_character_lifetimes() {
+    runnable_examples(
+        include_str!("../docs/library/sequences.md"),
+        &[
+            ("", "0 7 0\n0 0 0\n"),
+            ("", "3 9 2\n9 2 3\n"),
+            ("", "bat\nbat!\n"),
+        ],
+    );
+}
+
+#[test]
+fn operator_examples_preserve_short_circuiting_updates_and_extreme_copies() {
+    runnable_examples(
+        include_str!("../docs/reference/operators.md"),
+        &[
+            ("", "10 4 21\n-3 2 -3 -2\n2 7 5\nC 2\n"),
+            ("", "Yes 1\nNo 2\n"),
+            ("", "No Yes 0\nYes Yes 2\n"),
+            ("", "5 3 5 7\n"),
+            ("", "10 10 6\n"),
+            ("", "11\n11 99\n"),
+            ("", "7\n6\nYes\n"),
+        ],
+    );
+}
+
 // Read the published examples, rather than maintaining a second copy of them.
 // Counts below make added/removed examples require an explicit coverage choice.
 fn examples(document: &str, count: usize) -> Vec<String> {
@@ -142,10 +310,6 @@ fn commented_readonly_violations_and_the_diagnostic_excerpt_match_the_compiler()
     }
 }
 
-fn box_source(block: &str) -> String {
-    format!("struct Box{{value:Int;}}\n{block}")
-}
-
 #[test]
 fn noescape_examples_are_instantiated_and_run_including_generic_callbacks() {
     let blocks = examples(ESCAPE, 10);
@@ -173,12 +337,7 @@ fn noescape_examples_are_instantiated_and_run_including_generic_callbacks() {
         (8, "wt via_call(3);", "4\n"),
         (9, "wt via_container(3);", "4\n"),
     ] {
-        let source = if index >= 7 {
-            box_source(&blocks[index])
-        } else {
-            blocks[index].clone()
-        };
-        runs(&source, suffix, expected);
+        runs(&blocks[index], suffix, expected);
     }
 }
 
@@ -198,16 +357,10 @@ fn noescape_documented_rejections_are_checked_after_instantiation() {
         "wt invoke(() => value);",
     );
     rejects(&source, "noescape parameter 'callback' may escape");
-    let source = box_source(&replace(
-        &blocks[9],
-        "box.value := value;",
-        "held[0].value := value;",
-    )) + "\nwt via_container(3);";
+    let source = replace(&blocks[9], "box.value := value;", "held[0].value := value;")
+        + "\nwt via_container(3);";
     rejects(&source, "cannot prove noescape for parameter 'value'");
-    let source = box_source(&replace(
-        &blocks[9],
-        "return held[0].value + 1;",
-        "return box.value;",
-    )) + "\nwt via_container(3);";
+    let source = replace(&blocks[9], "return held[0].value + 1;", "return box.value;")
+        + "\nwt via_container(3);";
     rejects(&source, "cannot prove noescape for parameter 'value'");
 }

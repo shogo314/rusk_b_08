@@ -77,7 +77,9 @@ discard_result(() => value);  // 結果を捨てるので許可
 
 ## 現在の保守的な検査
 
-β07の契約検査は保守的です。未登録の外部実装やコンテナ操作は安全と仮定しません。例えば配列の走査イテレータ、遅延map/filterなどには未解析の操作があり、実際には呼び出し内で使うだけでも拒否する場合があります。
+契約検査は保守的です。未登録の外部実装やコンテナ操作は安全と仮定しません。例えば配列の走査イテレータ、遅延map/filterなどには未解析の操作があり、実際には呼び出し内で使うだけでも拒否する場合があります。
+
+以下のBoxは各例で宣言する構造体です。
 
 直接構築した構造体・タプルなどの格納先について、すべての別名が関数内に留まると証明できれば、フィールドへの後からの格納も許可します。
 
@@ -94,6 +96,7 @@ fn local(noescape value: Int) -> Int {
 別名やローカル変数の結び直しも含めて関数全体を確認します。格納先を別の私的な構造体・タプル・enumの中に入れ、フィールドやpayloadから取り出す場合も、到達する共有先を追跡します。
 
 ```text
+struct Box { value: Int; }
 fn nested(noescape value: Int) -> Int {
     let child := Box { value: 0 };
     let parent := (child, 0);
@@ -107,6 +110,7 @@ fn nested(noescape value: Int) -> Int {
 既知の関数が引数自身やそのフィールド・payloadを共有して返す場合も、解析した関係を実引数へ対応させます。呼び出し先がその引数を更新・構造変更・外部保持せず、外部状態も更新しないと証明できれば、受け渡しだけで私的な共有先を公開済みとは扱いません。
 
 ```text
+struct Box { value: Int; }
 fn identity(box: Box) -> Box { return box; }
 fn via_call(noescape value: Int) -> Int {
     let box := Box { value: 0 };
@@ -119,6 +123,7 @@ fn via_call(noescape value: Int) -> Int {
 構造体・タプル・enum・Optionなどの内部に包んで返される共有も、返却結果から元の共有先への到達関係として追跡します。関数内に留めるだけなら、元の別名を使った私的な格納を妨げません。
 
 ```text
+struct Box { value: Int; }
 fn pack(box: Box) -> (Box, Int) { return (box, 0); }
 fn via_container(noescape value: Int) -> Int {
     let box := Box { value: 0 };
@@ -138,7 +143,7 @@ fn via_container(noescape value: Int) -> Int {
 
 Optionの構築・判定・値取得には既知の契約を登録しています。`Some(value)` は新しいOptionを作って内部へ共有を保持し、`value` / `?!` はpayloadへの共有を返します。これらを呼んだだけで外部へ保存されたとは判定せず、その後の利用を追跡します。Option全体のコピーなど、ほかの操作には未解析のものも残っています。
 
-これらの解析精度は今後改善します。注釈がなくても同じ効果解析を行い、`escape` を明示した場合も、証明できた非脱出性をIRへ記録します。[引数借用と閉じたBoolの値保持](../development/beta07-performance.md)にも解析結果を利用します。注釈そのものを最適化の根拠にはしません。
+これらの解析精度は今後改善します。注釈がなくても同じ効果解析を行い、`escape` を明示した場合も、証明できた非脱出性をIRへ記録します。[引数借用と値保持](../development/performance.md)にも解析結果を利用します。注釈そのものを最適化の根拠にはしません。
 
 ## 診断とIR
 

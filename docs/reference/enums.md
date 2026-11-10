@@ -77,22 +77,22 @@ enumは構造体のフィールド、配列、辞書の値、別のenumのpayloa
 
 標準ライブラリーの定義は次の形です。
 
-```rusk
+```text
 enum Option<T> {
     Some(T),
     None,
 }
 ```
 
-利用者のプログラムにはすでに読み込まれているため、この定義を書き直す必要はありません。`Option::Some(x)`、`Option::<Int>::None` と一般のenumと同じ書き方を使えます。互換の `Some(x)`、`Some::<T>(x)`、`None`、`None::<T>()`、`Option::<T>()` も使えます。`match` も通常のenumと同じです。
+利用者のプログラムにはすでに読み込まれているため、この定義を書き直す必要はありません。`Option::Some(x)`、`Option::<Int>::None` と一般のenumと同じ書き方を使えます。標準の短い構築記法`Some(x)`、`Some::<T>(x)`、`None`、`None::<T>()`、`Option::<T>()` も使えます。`match` も通常のenumと同じです。
 
 ```rusk
 let value := Some(12);
 wt match value { Some(n) => n, None => 0, };
 ```
 
-`??`・`?!`・`value`・`is_some`・`is_none`・真偽値変換はOption向けに残しています。`Dict.get`・`Set.get`・`Vec.find`・`try_read` が返すOptionも同じenum表現です。[OptionのAPI](beta05.md)を参照してください。
+標準のOptionは`value`・`is_some`・`is_none`・真偽値変換を提供します。`??`は通常の存在検査・値取得操作、`?!`は通常の`value`呼び出しへ接続するため、利用者の型でも対応する関数を定義できます。`Dict.get`・`Set.get`・`Vec.find`・`try_read` が返すOptionも同じenum表現です。[OptionのAPI](expressions.md)を参照してください。
 
 ## パターンの拡張と制限
 
-β06では、入れ子のenum・定数・構造体・タプル・orパターン・ガードと、if let・while letに対応します。[パターン分岐の仕様](beta06.md)を参照してください。再帰型は引き続き未対応です。
+入れ子のenum・定数・構造体・タプル・orパターン・ガードと、if let・while letに対応します。[パターン分岐の仕様](patterns.md)を参照してください。再帰型は未対応です。

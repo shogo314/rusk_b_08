@@ -36,7 +36,7 @@ wt duplicate(7), duplicate::<Str>("abc");
 
 `value.f(args)`は通常`f(value, args)`の糖衣構文です。この形式を**UFCS（Uniform Function Call Syntax）**と呼びます。一般的な概念は[Wikipedia日本語版](https://ja.wikipedia.org/wiki/Uniform_Function_Call_Syntax)、Ruskでの評価順は[メソッド形式](index.md#method-syntax)を参照してください。
 
-ただし関数を保持する構造体フィールドなどの呼び出しは、その関数値を呼びます。明示的な型引数を使う場合は`f::<T>(value, args)`と書きます。[型引数と構造体](beta02.md)も参照してください。
+ただし関数を保持する構造体フィールドなどの呼び出しは、その関数値を呼びます。明示的な型引数を使う場合は`f::<T>(value, args)`と書きます。[型引数と構造体](records.md)も参照してください。
 
 ## 無名関数と捕捉
 
@@ -62,4 +62,4 @@ wt add(2);
 
 具体的な名前付き関数は`let f := square;`のように渡せます。オーバーロード集合や型引数が未確定の関数は、`(x: Int) => copy(x)`のように包んで呼び出しを決めます。名前付き関数はトップレベルの実行文で宣言した変数を捕捉しません。
 
-[関数の受け渡しと捕捉](beta04.md)に環境のコピー・再束縛・遅延走査の詳細、[関数を使うAPI](../library/beta04.md)にmap・filter・探索・ソートなどの使い方があります。
+[関数の受け渡しと捕捉](closures.md)に環境のコピー・再束縛・遅延走査の詳細、[関数を使うAPI](../library/algorithms.md)にmap・filter・探索・ソートなどの使い方があります。

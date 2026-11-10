@@ -456,7 +456,7 @@ fn invalid_native_generics_report_rusk_source_locations() {
 
 #[test]
 fn documented_generic_extern_example_runs() {
-    let document = include_str!("../docs/development/beta08-extern-prototype.md");
+    let document = include_str!("../docs/development/extern.md");
     let examples = document
         .split("```rusk\n")
         .skip(1)

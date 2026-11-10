@@ -17,7 +17,7 @@ independent.unite(2, 3);
 wt uf.same(0, 3), independent.same(0, 3); // No Yes
 ```
 
-| 関数 | 内容 |
+| 呼び出し | 結果・内容 |
 |---|---|
 | `UnionFind(n: Int) -> UnionFind` | 頂点 `0..n` の集合を作る。`n >= 0` |
 | `leader(uf: UnionFind, vertex: Int) -> Int` | 代表頂点を返す。経路圧縮で状態を更新する |
@@ -27,6 +27,8 @@ wt uf.same(0, 3), independent.same(0, 3); // No Yes
 頂点は `0 <= vertex < n`。構築はO(n)、サイズによる併合と経路圧縮により一連の操作は償却O(α(n))です。コピーはO(n)です。存在しない頂点へのアクセスは配列の範囲検査で失敗します。
 
 ## Fenwick Tree
+
+以下の`T`は格納する要素型を表します。呼び出しでは配列・ゼロ元・更新値から推論し、明示する場合は`Fenwick::<Int>(4, 0)`のように`::<...>`を使います。
 
 ```rusk
 include "examples/beta02/library/fenwick.rusk";
@@ -38,13 +40,13 @@ let empty := Fenwick(0, 0);
 wt empty.range_sum(0, 0); // 0
 ```
 
-| 関数 | 内容 |
+| 呼び出し | 結果・内容 |
 |---|---|
-| `Fenwick<T>(n: Int, zero: T) -> Fenwick<T>` | `n` 要素をゼロ元で初期化。`n >= 0` |
-| `Fenwick<T>(values: Vec<T>, zero: T) -> Fenwick<T>` | 初期配列から構築 |
-| `add<T>(fw: Fenwick<T>, position: Int, delta: T)` | 位置に `delta` を加算 |
-| `prefix_sum<T>(fw: Fenwick<T>, end: Int) -> T` | 半開区間 `[0, end)` の集計 |
-| `range_sum<T>(fw: Fenwick<T>, left: Int, right: Int) -> T` | 半開区間 `[left, right)` の集計 |
+| `Fenwick(n, zero) -> Fenwick<T>` | `n` 要素をゼロ元で初期化。`n >= 0` |
+| `Fenwick(values, zero) -> Fenwick<T>` | 初期配列から構築 |
+| `fw.add(position, delta)` | 位置に `delta` を加算 |
+| `fw.prefix_sum(end) -> T` | 半開区間 `[0, end)` の集計 |
+| `fw.range_sum(left, right) -> T` | 半開区間 `[left, right)` の集計 |
 
 更新位置は `0 <= position < n`、区間は `0 <= left <= right <= n`。空区間はゼロ元です。不正な位置・区間は `assert` で失敗します。初期配列と内部状態は独立するため、構築後に元の配列を書き換えても木は変わりません。
 
@@ -66,11 +68,11 @@ words.set(1, "X");
 wt words.prod(0, 3); // abXef
 ```
 
-| 関数 | 内容 |
+| 呼び出し | 結果・内容 |
 |---|---|
-| `SumSegTree<T>(values: Vec<T>, zero: T) -> SumSegTree<T>` | 配列から構築 |
-| `set<T>(seg: SumSegTree<T>, position: Int, value: T)` | 要素を `value` のコピーで置換 |
-| `prod<T>(seg: SumSegTree<T>, left: Int, right: Int) -> T` | 半開区間 `[left, right)` を左から右へ集計 |
+| `SumSegTree(values, zero) -> SumSegTree<T>` | 配列から構築 |
+| `seg.set(position, value)` | 要素を `value` のコピーで置換 |
+| `seg.prod(left, right) -> T` | 半開区間 `[left, right)` を左から右へ集計 |
 
 更新位置は `0 <= position < n`、区間は `0 <= left <= right <= n`。空配列の構築と空区間の集計も可能です。空区間は単位元を返します。不正な位置・区間は `assert` で失敗します。
 
