@@ -59,3 +59,13 @@ template<class K> struct RuskSet {
     Entries entries;
     std::uint64_t version=0;
 };
+template<class Owner> struct RuskHashIterator {
+    Obj<Owner> owner;
+    typename Owner::Entries::iterator position,end;
+    std::uint64_t version;
+    bool finished=false;
+    explicit RuskHashIterator(Obj<Owner> value):owner(value),position(value->entries.begin()),end(value->entries.end()),version(value->version){}
+};
+template<class Owner> void rusk_guard_iter(const Obj<RuskHashIterator<Owner>>& it,Loc loc){
+    if(!it->finished && it->version!=it->owner->version)fail(loc,"container changed during iteration");
+}

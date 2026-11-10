@@ -5,7 +5,6 @@ use super::*;
 pub(super) enum Shape {
     Dict,
     Set,
-    Iterator { owner: String, element: String },
 }
 #[derive(Clone)]
 pub(super) struct Container {
@@ -22,14 +21,6 @@ impl Compiler {
                     .records
                     .get(ty)
                     .is_some_and(|r| r.fields.iter().all(|(_, t)| self.key_type(&t.text))))
-    }
-    pub(super) fn collection_element(&self, ty: &str) -> Option<String> {
-        let c = self.containers.get(ty)?;
-        match &c.shape {
-            Shape::Dict => Some(format!("Tuple<{},{}>", c.arguments[0], c.arguments[1])),
-            Shape::Set => Some(c.arguments[0].clone()),
-            Shape::Iterator { element, .. } => Some(element.clone()),
-        }
     }
     pub(super) fn specialize_container(&mut self, name: &Name) -> Result<bool, String> {
         let Some((base, args)) = type_parts(&name.text) else {
@@ -85,66 +76,7 @@ impl Compiler {
         )?;
         let assign = "x->entries=std::move(snapshot->entries);++x->version;";
         self.native_function("__assign__",vec![ty.clone(),ty.clone()],"Unit",|cpp|format!("void {cpp}(Obj<{native}> x,Obj<{native}> y,Loc loc){{auto snapshot=deep_copy(y,loc);{assign}}}"),&name.span)?;
-        if matches!(shape, Shape::Dict | Shape::Set) {
-            self.register_collection_iterator(ty, &name.span)?;
-        }
         Ok(true)
-    }
-    fn register_collection_iterator(&mut self, owner: &str, span: &Span) -> Result<(), String> {
-        let element = self.collection_element(owner).unwrap();
-        self.check_type(&Name {
-            text: element.clone(),
-            span: span.clone(),
-        })?;
-        let c = self.containers[owner].clone();
-        let source = c.native.clone();
-        let ty = format!("__RuskCollectionIterator{}", self.containers.len());
-        let native = format!("RuskContainer{}", self.containers.len());
-        self.types.insert(ty.clone(), native.clone());
-        self.containers.insert(
-            ty.clone(),
-            Container {
-                shape: Shape::Iterator {
-                    owner: owner.into(),
-                    element: element.clone(),
-                },
-                arguments: vec![],
-                native: native.clone(),
-            },
-        );
-        self.native_function("__iter__",vec![owner.into()],&ty,|cpp|format!("Obj<{native}> {cpp}(Obj<{source}> owner,Loc){{return make_obj<{native}>({native}(owner));}}"),span)?;
-        self.native_function(
-            "__iter__",
-            vec![ty.clone()],
-            &ty,
-            |cpp| format!("Obj<{native}> {cpp}(Obj<{native}> it,Loc){{return it;}}"),
-            span,
-        )?;
-        let has=self.native_function("__iter_has_next__",vec![ty.clone()],"Bool",|cpp|format!("Obj<bool> {cpp}(Obj<{native}> it,Loc loc){{if(it->finished)return make_obj<bool>(false);if(it->version!=it->owner->version)fail(loc,\"container changed during iteration\");if(it->position==it->end){{it->finished=true;return make_obj<bool>(false);}}return make_obj<bool>(true);}}"),span)?;
-        let has_cpp = self.functions[has].cpp.clone();
-        self.used.insert(has);
-        let key_copy = self.copy_function(&c.arguments[0], span)?;
-        let result_native = self.types[&element].clone();
-        let take = if matches!(c.shape, Shape::Dict) {
-            format!(
-                "auto key={key_copy}(it->position->first,loc);auto value=it->position->second;++it->position;return make_obj<{result_native}>({result_native}{{key,value}});"
-            )
-        } else {
-            format!("auto value={key_copy}(*it->position,loc);++it->position;return value;")
-        };
-        self.native_function("__iter_next__",vec![ty.clone()],&element,|cpp|format!("Obj<{result_native}> {cpp}(Obj<{native}> it,Loc loc){{if(!*{has_cpp}(it,loc))fail(loc,\"iterator exhausted\");{take}}}"),span)?;
-        self.native_function(
-            "copy",
-            vec![ty.clone()],
-            &ty,
-            |cpp| {
-                format!(
-                    "Obj<{native}> {cpp}(Obj<{native}> it,Loc loc){{return deep_copy(it,loc);}}"
-                )
-            },
-            span,
-        )?;
-        Ok(())
     }
     pub(super) fn read_function(
         &mut self,
@@ -244,18 +176,8 @@ impl Compiler {
             let base = match c.shape {
                 Shape::Dict => "RuskDict",
                 Shape::Set => "RuskSet",
-                Shape::Iterator { .. } => continue,
             };
             code += &format!("struct {native}:{base}<{args}>{{}};\n");
-        }
-        for c in self.containers.values() {
-            if let Shape::Iterator { owner, .. } = &c.shape {
-                let native = &c.native;
-                let owner = &self.types[owner];
-                code += &format!(
-                    "struct {native}{{Obj<{owner}> owner;{owner}::Entries::iterator position,end;std::uint64_t version;bool finished=false;explicit {native}(Obj<{owner}> value):owner(value),position(value->entries.begin()),end(value->entries.end()),version(value->version){{}}}};\n"
-                );
-            }
         }
         code
     }
@@ -269,9 +191,6 @@ impl Compiler {
                 )
             })
             .collect()
-    }
-    pub(super) fn container_guards(&self) -> String {
-        self.containers.values().filter(|c|matches!(c.shape,Shape::Iterator{..})).map(|c|format!("void rusk_guard_iter(const Obj<{}>& it,Loc loc){{if(!it->finished && it->version!=it->owner->version)fail(loc,\"container changed during iteration\");}}\n",c.native)).collect()
     }
     // Compatibility for the existing physical hash-key representation. Normal
     // Tuple comparison now resolves logical field operations in the library.
@@ -342,9 +261,6 @@ impl Compiler {
                 Shape::Set => format!(
                     "auto result=make_obj<{native}>({native}{{}});for(const auto& entry:value->entries)result->entries.insert({}(entry,loc));return result;",
                     copies[0]
-                ),
-                Shape::Iterator { .. } => format!(
-                    "rusk_guard_iter(value,loc);auto result=make_obj<{native}>({native}(value->owner));if(value->finished)result->finished=true;else result->position=value->position;return result;"
                 ),
             };
             code +=

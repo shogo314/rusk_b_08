@@ -39,9 +39,6 @@ impl Compiler {
                             value: c.arguments[1].clone(),
                         },
                         containers::Shape::Set => Type::Set(c.arguments[0].clone()),
-                        containers::Shape::Iterator { element, .. } => Type::Iterator {
-                            element: element.clone(),
-                        },
                     }
                 } else if let Some(it) = self.iterator_types.get(name) {
                     Type::Iterator {

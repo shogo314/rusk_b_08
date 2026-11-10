@@ -18,6 +18,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'dictionary_iteration': ('let d:=Dict::<Int,Int>();for i in 0..1000{d.set(i,i*3);}'
+        'let total:=0;for round in 0..200{for entry in d{total+=entry[0]+entry[1];}}wt total;'),
+    'set_iterator_copy': ('let s:=Set::<Int>();for i in 0..1000{s.insert(i);}'
+        'let total:=0;for round in 0..200{let it:=s.filter((x:Int)=>x%2==0).map((x:Int)=>x+1);'
+        'let duplicate=it;total+=it.fold(0,(a:Int,b:Int)=>a+b);'
+        'total+=duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;'),
     'dictionary_operations': ('let d:=Dict::<Int,Int>();let total:=0;'
         'for round in 0..100000{let key:=round%1000;d.set(key,round);'
         'total+=d[key];if d.contains(key){total+=1;}total+=d.get(key)?!;'

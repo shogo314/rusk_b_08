@@ -1,0 +1,24 @@
+// Keys leave the table by copy; dictionary values keep their shared identity.
+let dictionary:=Dict::<Str,Vec<Int>>();dictionary.set("key",[4]);
+let cursor:=__iter__(dictionary);let duplicate=cursor;
+let entry:=__iter_next__(cursor);entry[0][0]='X';entry[1][0]+=1;
+let other:=__iter_next__(duplicate);
+wt other[0],other[1],dictionary.contains("key"),dictionary.contains("Xey");
+wt __iter_has_next__(cursor),__iter_has_next__(duplicate);
+dictionary.clear();let exhausted=cursor;wt __iter_has_next__(exhausted);
+
+let members:=Set::<Str>();members.insert("item");
+let position:=__iter__(members);let position_copy=position;
+let key:=__iter_next__(position);key[0]='X';
+wt __iter_next__(position_copy),members.contains("item"),members.contains("Xtem");
+wt __iter_has_next__(position);members.clear();let done=position;wt __iter_has_next__(done);
+
+// A table may store an iterator with a different table as its owner.
+let source:=Dict::<Int,Int>();source.set(2,9);
+let holders:=Dict::<Int,Iter<Dict<Int,Int>>>();holders.set(0,__iter__(source));
+let cloned=holders;wt __iter_next__(cloned.get(0)?!);
+wt __iter_next__(holders.get(0)?!);
+
+// Replacing values leaves an active dictionary iterator valid.
+let live:=Dict::<Int,Int>();live.set(1,3);let active:=__iter__(live);
+live.set(1,8);wt __iter_next__(active);

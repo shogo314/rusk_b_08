@@ -120,3 +120,56 @@ extern fn keys<K>(x:Set<K>)->Vec<K> {
 extern fn values<K>(x:Set<K>)->Vec<K> {
     code:"Obj<@{Vec<K>}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){auto result=make_obj<@{Vec<K>}>(@{Vec<K>}{});result->reserve(x->entries.size());for(const auto& entry:x->entries)result->push_back(@{boxed_call copy(K)->K}(entry,loc));return result;}",
 }
+
+// Iterator state and operations use the same generic extern path as Vec.
+extern type<K,V> Iter<Dict<K,V>> {
+    cpp_name:"RuskHashIterator<{Dict<K,V>}>",
+    representation:"iterator<Tuple<K,V>>",
+}
+
+extern fn __iter__<K,V>(owner:Dict<K,V>)->Iter<Dict<K,V>> {
+    code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Dict<K,V>}> owner,[[maybe_unused]] Loc loc){return make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}(owner));}",
+}
+
+extern fn __iter__<K,V>(it:Iter<Dict<K,V>>)->Iter<Dict<K,V>> {
+    code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,[[maybe_unused]] Loc loc){return it;}",
+}
+
+extern fn __iter_has_next__<K,V>(it:Iter<Dict<K,V>>)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,Loc loc){if(it->finished)return make_obj<@{Bool}>(false);rusk_guard_iter(it,loc);if(it->position==it->end){it->finished=true;return make_obj<@{Bool}>(false);}return make_obj<@{Bool}>(true);}",
+}
+
+extern fn __iter_next__<K,V>(it:Iter<Dict<K,V>>)->Tuple<K,V> {
+    return_abi:"object",
+    code:"Obj<@{Tuple<K,V>}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,Loc loc){if(!*@{boxed_call __iter_has_next__(Iter<Dict<K,V>>)->Bool}(it,loc))fail(loc,\"iterator exhausted\");auto key=@{boxed_call copy(K)->K}(it->position->first,loc);auto value=it->position->second;++it->position;return make_obj<@{Tuple<K,V>}>(@{Tuple<K,V>}{key,value});}",
+}
+
+extern fn copy<K,V>(it:Iter<Dict<K,V>>)->Iter<Dict<K,V>> {
+    code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,Loc loc){rusk_guard_iter(it,loc);auto result=make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}(it->owner));if(it->finished)result->finished=true;else result->position=it->position;return result;}",
+}
+
+extern type<K> Iter<Set<K>> {
+    cpp_name:"RuskHashIterator<{Set<K>}>",
+    representation:"iterator<K>",
+}
+
+extern fn __iter__<K>(owner:Set<K>)->Iter<Set<K>> {
+    code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Set<K>}> owner,[[maybe_unused]] Loc loc){return make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}(owner));}",
+}
+
+extern fn __iter__<K>(it:Iter<Set<K>>)->Iter<Set<K>> {
+    code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Iter<Set<K>>}> it,[[maybe_unused]] Loc loc){return it;}",
+}
+
+extern fn __iter_has_next__<K>(it:Iter<Set<K>>)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Iter<Set<K>>}> it,Loc loc){if(it->finished)return make_obj<@{Bool}>(false);rusk_guard_iter(it,loc);if(it->position==it->end){it->finished=true;return make_obj<@{Bool}>(false);}return make_obj<@{Bool}>(true);}",
+}
+
+extern fn __iter_next__<K>(it:Iter<Set<K>>)->K {
+    return_abi:"object",
+    code:"Obj<@{K}> @{fn}(Obj<@{Iter<Set<K>>}> it,Loc loc){if(!*@{boxed_call __iter_has_next__(Iter<Set<K>>)->Bool}(it,loc))fail(loc,\"iterator exhausted\");auto value=@{boxed_call copy(K)->K}(*it->position,loc);++it->position;return value;}",
+}
+
+extern fn copy<K>(it:Iter<Set<K>>)->Iter<Set<K>> {
+    code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Iter<Set<K>>}> it,Loc loc){rusk_guard_iter(it,loc);auto result=make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}(it->owner));if(it->finished)result->finished=true;else result->position=it->position;return result;}",
+}

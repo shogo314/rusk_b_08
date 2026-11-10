@@ -1,0 +1,8 @@
+struct Item{value:Int;}
+let items:=[Item{value:3},Item{value:7}];
+let it:=items.map((x:Item)=>x.value);wt __iter_next__(it);let duplicate=it;
+wt it.to_vec(),duplicate.to_vec();
+let direct:=__iter__(items);let second=direct;
+let first:=__iter_next__(direct);first.value=8;wt __iter_next__(second).value;
+let range:=(0..4).map((x:Int)=>x*2);wt __iter_next__(range);let saved=range;
+wt range.to_vec(),saved.to_vec();

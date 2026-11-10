@@ -84,17 +84,6 @@ impl Compiler {
         source: &Value,
         span: &Span,
     ) -> Result<(String, String, String, String, String), String> {
-        let element = if let Some(element) = vector_element(&source.ty) {
-            element.to_string()
-        } else if source.ty == "Range" {
-            "Int".into()
-        } else if let Some(it) = self.iterator_types.get(&source.ty) {
-            it.element.clone()
-        } else if let Some(element) = self.collection_element(&source.ty) {
-            element
-        } else {
-            return Err(span.error("expected an array, integer range, or lazy iterator"));
-        };
         let create = self
             .resolve("__iter__", std::slice::from_ref(source), None, span)?
             .ok_or_else(|| span.error("source is not iterable"))?;
@@ -114,6 +103,8 @@ impl Compiler {
         let next = self
             .resolve("__iter_next__", &[dummy], None, span)?
             .ok_or_else(|| span.error("iterator has no next operation"))?;
+        self.same("Bool", &self.functions[has].result, span)?;
+        let element = self.functions[next].result.clone();
         self.used.extend([create, has, next]);
         Ok((
             element,
@@ -156,19 +147,11 @@ impl Compiler {
             let definition = format!(
                 "struct {native} {{ Obj<{input_native}> source; Obj<{callback_native}> callback; Obj<{output_native}> cached; bool ready=false; bool finished=false; }};\n"
             );
-            // Legacy iterator copy bodies call the source aggregate's ABI
-            // directly; retain that dependency until those bodies migrate.
-            if let Some(&index) = self
-                .record_copy_functions
-                .get(&source)
-                .or_else(|| self.enum_copy_functions.get(&source))
-            {
-                self.used.insert(index);
-            }
+            let source_copy = self.copy_function(&source, span)?;
             let callback_copy = self.copy_function(&args[1].ty, span)?;
             let element_copy = self.copy_function(&output, span)?;
             let copy_code = format!(
-                "Obj<{native}> deep_copy(const Obj<{native}>& it,Loc loc) {{ return make_obj<{native}>({native}{{deep_copy(it->source,loc),{callback_copy}(it->callback,loc),it->cached?{element_copy}(it->cached,loc):Obj<{output_native}>{{}},it->ready,it->finished}}); }}\n"
+                "Obj<{native}> deep_copy(const Obj<{native}>& it,Loc loc) {{ return make_obj<{native}>({native}{{{source_copy}(it->source,loc),{callback_copy}(it->callback,loc),it->cached?{element_copy}(it->cached,loc):Obj<{output_native}>{{}},it->ready,it->finished}}); }}\n"
             );
             self.types.insert(ty.clone(), native.clone());
             self.iterator_types.insert(
@@ -266,7 +249,6 @@ impl Compiler {
             code.push_str(&it.definition);
         }
         code.push_str("template<class T> void rusk_guard_iter(const Obj<T>&,Loc){}\ntemplate<class T> void rusk_guard_iter(const Obj<RuskIter<T>>& it,Loc loc){check_iter(it,loc);}\n");
-        code.push_str(&self.container_guards());
         for it in self.iterator_types.values() {
             let native = &it.native;
             code.push_str(&format!(

@@ -1,0 +1,126 @@
+{
+  "utc": "2026-11-10T04:30:09.822251+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "ce0a73554dbd0f65f9ccc078f3c51a321109a91c6400727e6b899d59e417ac9d"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "dictionary_iteration": {
+      "source": "let d:=Dict::<Int,Int>();for i in 0..1000{d.set(i,i*3);}let total:=0;for round in 0..200{for entry in d{total+=entry[0]+entry[1];}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "e220fddedc7b1fb5ce3e1387abfb1be57755c1d4aab6fbec264634b4859d8d10",
+          "runs_ms": [
+            8.731288,
+            8.262683,
+            8.304761,
+            8.181316,
+            8.086609,
+            8.395963,
+            8.389049,
+            7.810779,
+            8.223992,
+            8.217669,
+            8.121639,
+            8.085242,
+            8.232085,
+            8.75004,
+            8.690286
+          ],
+          "output": "399600000\n",
+          "allocations": 804422,
+          "shared_ptr_copies": 2411007,
+          "median_ms": 8.232085
+        },
+        "current": {
+          "cpp_sha256": "99aa229a452db31a961fe3f4cba3bd21f545bf67661c1a2089e27f5201f24abd",
+          "runs_ms": [
+            8.108025,
+            8.686192,
+            9.728703,
+            8.511779,
+            8.34673,
+            8.485519,
+            8.425668,
+            8.241383,
+            8.53522,
+            8.53434,
+            8.348374,
+            9.33134,
+            8.332804,
+            8.552074,
+            8.646491
+          ],
+          "output": "399600000\n",
+          "allocations": 804422,
+          "shared_ptr_copies": 2411007,
+          "median_ms": 8.511779
+        }
+      },
+      "speedup": 0.9671403592597974
+    },
+    "set_iterator_copy": {
+      "source": "let s:=Set::<Int>();for i in 0..1000{s.insert(i);}let total:=0;for round in 0..200{let it:=s.filter((x:Int)=>x%2==0).map((x:Int)=>x+1);let duplicate=it;total+=it.fold(0,(a:Int,b:Int)=>a+b);total+=duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "4e4756b67a6b5404d9d71da0a0935fb3e8f5d5d19177e4714f43fd20724b8e1f",
+          "runs_ms": [
+            31.365884,
+            30.123653,
+            30.287468,
+            31.468965,
+            32.177389,
+            29.770431,
+            30.148006,
+            30.345024,
+            30.221564,
+            30.308278,
+            30.001141,
+            34.567062,
+            30.622373,
+            30.220262,
+            30.269414
+          ],
+          "output": "100000000\n",
+          "allocations": 3008422,
+          "shared_ptr_copies": 4214407,
+          "median_ms": 30.287468
+        },
+        "current": {
+          "cpp_sha256": "c1072d6a52d6c61b516d6385ddb8323e1fe47de99c3fa71b0a02ffd603771761",
+          "runs_ms": [
+            32.942009,
+            31.58498,
+            31.114172,
+            31.651868,
+            31.638743,
+            31.04968,
+            31.045798,
+            31.238714,
+            31.263924,
+            32.265563,
+            31.458695,
+            30.997308,
+            32.222834,
+            31.801959,
+            31.674494
+          ],
+          "output": "100000000\n",
+          "allocations": 3008422,
+          "shared_ptr_copies": 4214807,
+          "median_ms": 31.58498
+        }
+      },
+      "speedup": 0.9589199676555121
+    }
+  }
+}

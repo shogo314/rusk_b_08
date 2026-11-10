@@ -9,6 +9,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/iterator_state_copies.rusk').read_text(),b'',b'3\n7 7\n8\n0\n2 4 6 2 4 6\n'),
+    ((ROOT/'examples/beta08/hash_collection_iterators.rusk').read_text(),b'',b'key 5 Yes No\nNo No\nNo\nitem Yes No\nNo\nNo\n2 9\n2 9\n1 8\n'),
     ((ROOT/'examples/beta08/hash_collection_operations.rusk').read_text(),b'',b'2 No No Yes Yes 7\nempty some\n3 4 1\n5\nYes No\nYes No\nYes\nYes No 0 Yes\nZb\nZb!\n'),
     ((ROOT/'examples/beta08/dictionary_unit_values.rusk').read_text(),b'',b'Yes Yes Yes\nNo 2\n2 Yes\n'),
     ((ROOT/'examples/beta08/tuple_comparison_lifetime.rusk').read_text(),b'',b'1,1;1,1;30,40;Yes 4\n1,1;1,1;2,3;Yes 0\n4\n'),

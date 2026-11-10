@@ -1705,7 +1705,10 @@ fn hash_collection_operations_work_with_unrelated_user_type_and_constructor_name
         .collect::<Vec<_>>()
         .join("\n}\n")
         .lines()
-        .filter(|line| !line.trim_start().starts_with("effects:"))
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("effects:") && !line.starts_with("representation:")
+        })
         .collect::<Vec<_>>()
         .join("\n")
         .replace("Dict", "Store")
@@ -1720,6 +1723,8 @@ wt store.get("empty")?!.is_none(),store["some"]?!,store.len();
 let keys:=store.keys();keys.sort();wt keys;
 let vectors:Store<Int,Vec<Int>>:=Store();vectors[1].push_back(8);wt vectors[1];
 let members:Members<Str>:=Members();wt members.insert("hello"),members.get("hello")?!;
+wt store.map((p:(Str,Option<Int>))=>p[1]??0).fold(0,(a:Int,b:Int)=>a+b);
+wt members.map((s:Str)=>s.len()).fold(0,(a:Int,b:Int)=>a+b);
 wt members.erase("hello"),!members;
 "#
     ));
@@ -1730,7 +1735,10 @@ wt members.erase("hello"),!members;
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_eq!(out.stdout, b"Yes 3 2\nempty some\n8\nYes hello\nYes Yes\n");
+        assert_eq!(
+            out.stdout,
+            b"Yes 3 2\nempty some\n8\nYes hello\n3\n5\nYes Yes\n"
+        );
     }
 }
 
@@ -1768,6 +1776,7 @@ extern fn slot()->Slot{cpp_name:"context_slot",code:"Obj<std::int64_t> context_s
 extern fn __getitem__<T>(slot:Slot,index:Int)->T{
     code:"Obj<@{T}> @{fn}(Obj<@{Slot}> slot,Obj<@{Int}> index,Loc){return make_obj<@{T}>(static_cast<@{T}>(*slot+*index));}",
 }
+
 let value:=slot();let number:Int:=value[4];let flag:Bool:=value[-3];wt number,flag;
 "#;
     for options in [vec![], vec!["--no-opt"]] {
@@ -1778,5 +1787,70 @@ let value:=slot();let number:Int:=value[4];let flag:Bool:=value[-3];wt number,fl
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(out.stdout, b"7 No\n");
+    }
+}
+
+#[test]
+fn hash_iterators_preserve_keys_values_positions_and_exhaustion() {
+    let case = Case::new(include_str!(
+        "../examples/beta08/hash_collection_iterators.rusk"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"key 5 Yes No\nNo No\nNo\nitem Yes No\nNo\nNo\n2 9\n2 9\n1 8\n"
+        );
+    }
+}
+
+#[test]
+fn hash_iterator_copy_checks_mutation_before_copying_saved_positions() {
+    for (setup, element) in [
+        ("let owner:=Dict::<Int,Int>();owner.set(1,2);", "(Int,Int)"),
+        ("let owner:=Set::<Int>();owner.insert(1);", "Int"),
+    ] {
+        for operation in [
+            "let cursor:=__iter__(owner);owner.clear();let copied=cursor;",
+            "let cursor:=owner.map((x:E)=>x);owner.clear();let copied=cursor;",
+            "let cursor:=owner.filter((x:E)=>true);owner.clear();let copied=cursor;",
+            "let cursor:=__iter__(owner);owner.clear();wt __iter_has_next__(cursor);",
+            "let cursor:=__iter__(owner);owner.clear();let value:=__iter_next__(cursor);",
+        ] {
+            for options in [vec![], vec!["--no-opt"]] {
+                let operation = operation.replace(":E", &format!(":{element}"));
+                let source = format!("{setup}wt \"before\";{operation}");
+                let out = Case::new(&source).run_with_options("", &options);
+                assert!(!out.status.success(), "{source}");
+                assert_eq!(out.stdout, b"before\n");
+                let error = String::from_utf8_lossy(&out.stderr);
+                assert!(
+                    error.contains("main.rusk:")
+                        && error.contains("container changed during iteration"),
+                    "{source}\n{error}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn lazy_iterator_copy_uses_declared_vector_and_range_state_copies() {
+    let case = Case::new(include_str!(
+        "../examples/beta08/iterator_state_copies.rusk"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3\n7 7\n8\n0\n2 4 6 2 4 6\n");
     }
 }
