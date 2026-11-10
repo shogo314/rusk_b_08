@@ -43,6 +43,13 @@ fn bound(pattern: &str, parameters: &[Name], bindings: &BTreeMap<String, String>
     })
 }
 
+// Candidate selection is read-only; registration and native expansion happen
+// only after a unique template and complete bindings have been selected.
+struct SelectedGeneric {
+    template: usize,
+    bindings: BTreeMap<String, String>,
+}
+
 struct QueryBudget {
     remaining: usize,
 }
@@ -598,6 +605,21 @@ impl Compiler {
                 })?;
             }
         }
+        let Some(selection) = self.select_generic_candidate(name, base, args, expected, span)?
+        else {
+            return Ok(None);
+        };
+        self.instantiate_generic(selection, name, args, span)
+            .map(Some)
+    }
+    fn select_generic_candidate(
+        &self,
+        name: &str,
+        base: &str,
+        args: &[Value],
+        expected: Option<&str>,
+        span: &Span,
+    ) -> Result<Option<SelectedGeneric>, String> {
         let mut candidates = vec![];
         for (index, f) in self.generic_functions.iter().enumerate() {
             if f.name.text != base || f.arguments.len() != args.len() {
@@ -620,9 +642,18 @@ impl Compiler {
         if candidates.len() > 1 {
             return Err(span.error(format!("ambiguous generic call to '{name}'")));
         }
-        let Some((template, bindings)) = candidates.pop() else {
-            return Ok(None);
-        };
+        Ok(candidates
+            .pop()
+            .map(|(template, bindings)| SelectedGeneric { template, bindings }))
+    }
+    fn instantiate_generic(
+        &mut self,
+        selection: SelectedGeneric,
+        name: &str,
+        args: &[Value],
+        span: &Span,
+    ) -> Result<usize, String> {
+        let SelectedGeneric { template, bindings } = selection;
         let definition = self.generic_functions[template].clone();
         let type_arguments = definition
             .parameters
@@ -631,7 +662,7 @@ impl Compiler {
             .collect::<Vec<_>>();
         let key = (template, type_arguments);
         if let Some(index) = self.generic_instances.get(&key) {
-            return Ok(Some(*index));
+            return Ok(*index);
         }
         if self.generic_instances.len() >= 256 {
             return Err(span.error("generic function specialization limit exceeded"));
@@ -671,6 +702,18 @@ impl Compiler {
         });
         self.generic_instances.insert(key, index);
         self.generic_calls.insert(index, span.clone());
+        self.expand_generic_body(index, &definition, &bindings, name, span)?;
+        Ok(index)
+    }
+    fn expand_generic_body(
+        &mut self,
+        index: usize,
+        definition: &GenericFunction,
+        bindings: &BTreeMap<String, String>,
+        name: &str,
+        span: &Span,
+    ) -> Result<(), String> {
+        let cpp = self.functions[index].cpp.clone();
         if let Some(properties) = &definition.foreign {
             self.register_return_abi(
                 index,
@@ -682,7 +725,7 @@ impl Compiler {
         let code = if let Some(properties) = &definition.foreign {
             self.render_native(
                 &property(&definition.name, properties, "code")?,
-                &bindings,
+                bindings,
                 Some(&cpp),
                 &definition.name.span,
                 true,
@@ -721,7 +764,7 @@ impl Compiler {
                 if let Some(expression) = properties.get(key).cloned() {
                     let expression = self.render_native(
                         &expression,
-                        &bindings,
+                        bindings,
                         Some(&cpp),
                         &definition.name.span,
                         true,
@@ -746,7 +789,7 @@ impl Compiler {
             })?;
         }
         self.functions[index].code = code;
-        Ok(Some(index))
+        Ok(())
     }
 }
 
