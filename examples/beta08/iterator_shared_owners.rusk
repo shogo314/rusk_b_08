@@ -1,0 +1,13 @@
+fn local(readonly noescape owner:Vec<Int>){
+    let it:=__iter__(owner);let saved=it;wt owner.len();
+}
+fn dictionary(readonly noescape owner:Dict<Int,Int>){
+    let it:=__iter__(owner);let saved=it;wt owner.len();
+}
+fn set(readonly noescape owner:Set<Int>){
+    let it:=__iter__(owner);let saved=it;wt owner.len();
+}
+local([1,2]);dictionary(Dict::<Int,Int>());set(Set::<Int>());
+let values:=[1,2];let it:=__iter__(values);let saved=it;
+values[0]=7;wt __iter_next__(it),__iter_next__(saved);
+values:=[9];wt __iter_next__(saved),values;

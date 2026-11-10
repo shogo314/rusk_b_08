@@ -209,9 +209,15 @@ fn vector_operations_are_generic_declarations_with_independent_names() {
     let mut declarations = source[source.find("extern fn").unwrap()..]
         .lines()
         .filter(|line| {
-            !["effects:", "lower:", "lower_owned:", "lower_borrowed:"]
-                .iter()
-                .any(|property| line.trim_start().starts_with(property))
+            ![
+                "effects:",
+                "aliases:",
+                "lower:",
+                "lower_owned:",
+                "lower_borrowed:",
+            ]
+            .iter()
+            .any(|property| line.trim_start().starts_with(property))
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -1709,6 +1715,8 @@ fn hash_collection_operations_work_with_unrelated_user_type_and_constructor_name
             let line = line.trim_start();
             !line.starts_with("effects:")
                 && !line.starts_with("representation:")
+                && !line.starts_with("retains:")
+                && !line.starts_with("aliases:")
                 && !line.starts_with("lower_")
                 && !line.starts_with("lower:")
         })
@@ -2089,7 +2097,11 @@ fn lazy_algorithms_and_types_work_under_unrelated_user_names() {
         .lines()
         .filter(|line| {
             let line = line.trim_start();
-            !line.starts_with("representation:") && !line.starts_with("lower_")
+            !line.starts_with("representation:")
+                && !line.starts_with("lower_")
+                && !line.starts_with("retains:")
+                && !line.starts_with("aliases:")
+                && !line.starts_with("effects:")
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -2143,6 +2155,32 @@ wt number(mapped.to_vec()[0]);
         let error = String::from_utf8_lossy(&out.stderr);
         assert!(
             error.contains("native nonunit reference") && error.contains("main.rusk:"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn iterator_copies_keep_owner_restrictions_without_retaining_them_outside_the_result() {
+    let source = include_str!("../examples/beta08/iterator_shared_owners.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"2\n0\n0\n7 7\n2 9\n");
+    }
+    for source in [
+        "fn leak(noescape owner:Vec<Int>)->Iter<Vec<Int>>{return copy(__iter__(owner));}leak([1]);",
+        "fn leak(noescape owner:Dict<Int,Int>)->Iter<Dict<Int,Int>>{return copy(__iter__(owner));}leak(Dict::<Int,Int>());",
+        "fn write(readonly owner:Vec<Int>){let it:=__iter__(owner);let saved=it;__iter_next__(saved)=9;}write([1]);",
+    ] {
+        let out = Case::new(source).compile();
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && (error.contains("noescape") || error.contains("readonly")),
             "{error}"
         );
     }

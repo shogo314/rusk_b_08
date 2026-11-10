@@ -123,6 +123,15 @@ pub(crate) fn projection_name(ty: &str, projection: &Projection, program: &lir::
                 |name| format!("field '{name}' of '{ty}'"),
             )
         }
+        Projection::Retained(index) => {
+            let name = program
+                .types
+                .get(ty)
+                .and_then(|kind| kind.retained_fields().get(*index))
+                .map(|(name, _)| name.as_str())
+                .unwrap_or("unknown");
+            format!("retained '{name}' of '{ty}'")
+        }
         Projection::VariantField { variant, field } => {
             let name = match program.types.get(ty) {
                 Some(crate::hir::Type::Enum(variants)) => {

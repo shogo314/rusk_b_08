@@ -9,11 +9,15 @@ pub(super) struct Metadata {
 }
 
 pub(super) fn references(kind: &Type) -> Vec<&str> {
-    match kind {
-        Type::Buffer(t) | Type::Vector(t) | Type::Set(t) | Type::Iterator { element: t } => vec![t],
-        Type::Dict { key, value } => vec![key, value],
+    let mut children = match kind {
+        Type::Buffer(t) | Type::Vector(t) | Type::Set(t) | Type::Iterator { element: t, .. } => {
+            vec![t.as_str()]
+        }
+        Type::Dict { key, value } => vec![key.as_str(), value.as_str()],
         _ => vec![],
-    }
+    };
+    children.extend(kind.retained_fields().iter().map(|(_, ty)| ty.as_str()));
+    children
 }
 
 pub(super) fn parse_properties(
@@ -21,13 +25,28 @@ pub(super) fn parse_properties(
     properties: &BTreeMap<String, String>,
     origin: Origin,
 ) -> Result<Option<Type>, String> {
-    let Some(text) = properties.get("representation") else {
+    let text = properties.get("representation");
+    let retained = properties.get("retains");
+    if text.is_none() && retained.is_none() {
         return Ok(None);
-    };
+    }
     if origin != Origin::StandardLibrary {
         return Err(name
             .span
             .error("native type representations are reserved for the embedded standard library"));
+    }
+    let retained = retained
+        .map(|text| parse_retained(text))
+        .transpose()
+        .map_err(|e| name.span.error(e))?
+        .unwrap_or_default();
+    let Some(text) = text else {
+        return Ok(Some(Type::Shared(retained)));
+    };
+    if !retained.is_empty() && !text.starts_with("iterator<") {
+        return Err(name
+            .span
+            .error("native retained members require an iterator or an opaque representation"));
     }
     let scalar = match text.as_str() {
         "i64" => Some(Scalar::I64),
@@ -45,6 +64,7 @@ pub(super) fn parse_properties(
             ("vector", [t]) => Type::Vector((*t).into()),
             ("iterator", [t]) => Type::Iterator {
                 element: (*t).into(),
+                retained,
             },
             ("set", [t]) => Type::Set((*t).into()),
             ("dict", [key, value]) => Type::Dict {
@@ -58,15 +78,50 @@ pub(super) fn parse_properties(
     Ok(Some(kind))
 }
 
+fn parse_retained(text: &str) -> Result<Vec<(String, String)>, String> {
+    let mut fields = Vec::new();
+    for item in text.split(';') {
+        let (name, ty) = item
+            .split_once(':')
+            .ok_or("invalid native retained member")?;
+        if !valid_member(name) || ty.is_empty() || fields.iter().any(|(n, _)| n == name) {
+            return Err("invalid or duplicate native retained member".into());
+        }
+        fields.push((name.to_string(), ty.to_string()));
+        if fields.len() > 64 {
+            return Err("native retained member limit exceeded".into());
+        }
+    }
+    Ok(fields)
+}
+
+pub(super) fn valid_member(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 pub(super) fn substitute(kind: &Type, bindings: &BTreeMap<String, String>) -> Type {
     let ty = |t: &str| generics::substitute(t, bindings);
     match kind {
         Type::Buffer(t) => Type::Buffer(ty(t)),
         Type::Vector(t) => Type::Vector(ty(t)),
         Type::Set(t) => Type::Set(ty(t)),
-        Type::Iterator { element } => Type::Iterator {
+        Type::Iterator { element, retained } => Type::Iterator {
             element: ty(element),
+            retained: retained
+                .iter()
+                .map(|(name, t)| (name.clone(), ty(t)))
+                .collect(),
         },
+        Type::Shared(retained) => Type::Shared(
+            retained
+                .iter()
+                .map(|(name, t)| (name.clone(), ty(t)))
+                .collect(),
+        ),
         Type::Dict { key, value } => Type::Dict {
             key: ty(key),
             value: ty(value),
@@ -346,5 +401,86 @@ let iterator:=cursor();
         let error =
             compile(&source, Origin::StandardLibrary, crate::backend::Emit::Cpp).unwrap_err();
         assert!(error.contains("unknown type 'Missing'"), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod retained_tests {
+    use super::*;
+    const TYPES: &str = r#"
+extern type Int {cpp_name:"std::int64_t",representation:"i64",}
+extern type Unit {cpp_name:"Unit",representation:"unit",}
+"#;
+    fn compile(definitions: &str, user: &str) -> Result<String, String> {
+        Compiler::default().compile(
+            &[
+                Source::standard(
+                    crate::parse(&format!("{TYPES}{definitions}"), "shared-definitions.rusk")
+                        .unwrap(),
+                ),
+                Source::user(crate::parse(user, "shared-use.rusk").unwrap()),
+            ],
+            crate::backend::Emit::Lir,
+        )
+    }
+    const WRAPPER: &str = r#"
+extern type<T> Capsule {cpp_name:"std::shared_ptr<{T}>",retains:"value:T",}
+extern fn capsule<T>(x:T)->Capsule<T>{code:"unused",effects:"read_fresh",aliases:"return.value=0",}
+extern fn unwrap<T>(x:Capsule<T>)->T{code:"unused",effects:"read_fresh",aliases:"return=0.value",}
+extern fn same<T>(x:T)->T{code:"unused",effects:"read_fresh",aliases:"return=0",}
+extern fn replace(x:Int,y:Int){cpp_name:"replace",code:"unused",effects:"write_first",}
+"#;
+    #[test]
+    fn native_shared_members_follow_declarations_and_flow_through_rusk_functions() {
+        let hir = compile(WRAPPER, "let x:=capsule(3);let y:=unwrap(x);").unwrap();
+        assert!(hir.contains("Shared("), "{hir}");
+        assert!(hir.contains("Retained("), "{hir}");
+        compile(
+            WRAPPER,
+            "fn keep(readonly noescape x:Int){let boxed:=capsule(x);let y:=unwrap(boxed);}keep(3);",
+        )
+        .unwrap();
+        for user in [
+            "fn bad(readonly x:Int){let held:=capsule(x);replace(unwrap(held),3);}bad(3);",
+            "fn relay<T>(x:Capsule<T>)->Capsule<T>{return same(x);}fn bad(readonly x:Int){replace(unwrap(relay(capsule(x))),3);}bad(3);",
+            "fn leak(noescape x:Int)->Capsule<Int>{return capsule(x);}leak(3);",
+            "fn relay<T>(x:Capsule<T>)->T{return unwrap(x);}fn leak(noescape x:Int)->Int{return relay(capsule(x));}leak(3);",
+        ] {
+            let error = compile(WRAPPER, user).unwrap_err();
+            assert!(
+                error.contains("readonly") || error.contains("noescape"),
+                "{error}"
+            );
+        }
+    }
+    #[test]
+    fn retained_and_alias_annotations_reject_invalid_shapes_and_untrusted_origins() {
+        for definitions in [
+            "extern type<T> Bad{cpp_name:\"int\",retains:\"value:Missing\",}",
+            "extern type<T> Bad{cpp_name:\"int\",retains:\"value:T;value:T\",}",
+            "extern type<T> Bad{cpp_name:\"int\",retains:\"value:\",}",
+            "extern type Bad{cpp_name:\"int\",representation:\"i64\",retains:\"value:Int\",}",
+            "extern fn bad<T>(x:T)->T{code:\"unused\",aliases:\"return=0\",}",
+            "extern fn bad<T>(x:T)->T{code:\"unused\",effects:\"read_fresh\",aliases:\"return=1\",}",
+        ] {
+            let error = compile(definitions, "").unwrap_err();
+            assert!(error.contains("shared-definitions.rusk:"), "{error}");
+        }
+        for user in [
+            "extern type<T> Spoof{cpp_name:\"int\",retains:\"value:T\",}",
+            "extern type Spoof{cpp_name:\"int\",retains:\"value:Int\",}",
+            "extern fn spoof<T>(x:T)->T{code:\"unused\",aliases:\"return=0\",effects:\"read_fresh\",}",
+            "extern fn spoof(x:Int)->Int{cpp_name:\"spoof\",code:\"unused\",aliases:\"return=0\",}",
+        ] {
+            let error = compile("", user).unwrap_err();
+            assert!(error.contains("reserved"), "{error}");
+        }
+        for aliases in ["return.missing=0", "return.value=0.value"] {
+            let definitions = format!(
+                r#"extern type<T> Capsule{{cpp_name:"std::shared_ptr<{{T}}>",retains:"value:T",}}extern fn make<T>(x:T)->Capsule<T>{{code:"unused",effects:"read_fresh",aliases:"{aliases}",}}"#
+            );
+            let error = compile(&definitions, "make(3);").unwrap_err();
+            assert!(error.contains("native alias member"), "{error}");
+        }
     }
 }

@@ -80,6 +80,7 @@ impl ParameterEffects {
 pub(crate) enum Projection {
     Element,
     Field(usize),
+    Retained(usize),
     VariantField { variant: usize, field: usize },
 }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -343,6 +344,9 @@ pub(crate) fn project_type(
                 Some(crate::hir::Type::Vector(element) | crate::hir::Type::Buffer(element)),
                 Projection::Element,
             ) => Some(element.clone()),
+            (Some(kind), Projection::Retained(index)) => {
+                kind.retained_fields().get(*index).map(|(_, ty)| ty.clone())
+            }
             (Some(kind), Projection::Field(index)) => kind
                 .fields()
                 .and_then(|fields| fields.get(*index))

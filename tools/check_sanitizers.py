@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/iterator_shared_owners.rusk').read_text(),b'',b'2\n0\n0\n7 7\n2 9\n'),
     ((ROOT/'examples/beta08/lazy_iterators.rusk').read_text(),b'',b'0\nYes 2\nYes 2\n2 2 2\n4 4\n4 4\n2 2 4\n6 8 6 8\na ab!\nYes\n'),
     ((ROOT/'examples/beta08/hash_key_policies.rusk').read_text(),b'',b'3 4 5 6 0\n2 Yes Yes\n7 8\nYes 9\n1 0\n'),
     ((ROOT/'examples/beta08/native_type_function_references.rusk').read_text(),b'',b'8 11\n10 11 11\n109 14\n12\n'),

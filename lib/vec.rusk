@@ -6,6 +6,7 @@ extern type<T> Vec {
 extern type<T> Iter<Vec<T>> {
     cpp_name: "RuskIter<{T}>",
     representation: "iterator<T>",
+    retains: "owner:Vec<T>",
 }
 
 extern fn __write__<T>(a:Vec<T>) {
@@ -83,11 +84,15 @@ extern fn __iadd__<T>(a: Vec<T>, b: Vec<T>) {
 }
 
 extern fn __iter__<T>(a: Vec<T>) -> Iter<Vec<T>> {
+    effects: "read_fresh",
+    aliases: "return.owner=0",
     code: "Obj<@{Iter<Vec<T>>}> @{fn}(Obj<@{Vec<T>}> a, [[maybe_unused]] Loc loc) { return make_obj<@{Iter<Vec<T>>}>(@{Iter<Vec<T>>}{a,0,a->version}); }",
 }
 
 // Iterator copies preserve position and share the owner, regardless of T.
 extern fn copy<T>(it: Iter<Vec<T>>) -> Iter<Vec<T>> {
+    effects: "read_fresh",
+    aliases: "return.owner=0.owner",
     lower_owned: "make_obj<@{Iter<Vec<T>>}>(*$0)",
     code: "Obj<@{Iter<Vec<T>>}> @{fn}(Obj<@{Iter<Vec<T>>}> it, [[maybe_unused]] Loc loc) { return make_obj<@{Iter<Vec<T>>}>(*it); }",
 }

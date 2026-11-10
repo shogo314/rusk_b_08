@@ -1,5 +1,7 @@
 //! Explicit semantic contracts for the embedded runtime. These describe Rusk
 //! operations, never C++ names or source patterns. They are a trust boundary.
+pub(crate) mod aliases;
+
 use crate::effects::{Effect, ReturnAlias, Summary};
 use std::collections::BTreeMap;
 

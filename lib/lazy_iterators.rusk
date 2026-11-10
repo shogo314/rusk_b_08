@@ -6,6 +6,7 @@ extern symbol __runtime_lazy_iterators__ {
 extern type<I,F,T,R> Mapped {
     cpp_name:"RuskLazyIterator<{I},{F},{R},false>",
     representation:"iterator<R>",
+    retains:"source:I;callback:F;cached:R",
 }
 
 extern fn map<S,F,I,T,R>(source:S,callback:F)->Mapped<I,F,T,R> {
@@ -13,6 +14,8 @@ extern fn map<S,F,I,T,R>(source:S,callback:F)->Mapped<I,F,T,R> {
 }
 
 extern fn __iter__<I,F,T,R>(it:Mapped<I,F,T,R>)->Mapped<I,F,T,R> {
+    effects:"read_fresh",
+    aliases:"return=0",
     code:"Obj<@{Mapped<I,F,T,R>}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,[[maybe_unused]] Loc loc){return it;}",
 }
 
@@ -38,6 +41,7 @@ extern fn __assign__<I,F,T,R>(target:Mapped<I,F,T,R>,source:Mapped<I,F,T,R>)->Un
 extern type<I,F,T> Filtered {
     cpp_name:"RuskLazyIterator<{I},{F},{T},true>",
     representation:"iterator<T>",
+    retains:"source:I;callback:F;cached:T",
 }
 
 extern fn filter<S,F,I,T>(source:S,callback:F)->Filtered<I,F,T> {
@@ -45,6 +49,8 @@ extern fn filter<S,F,I,T>(source:S,callback:F)->Filtered<I,F,T> {
 }
 
 extern fn __iter__<I,F,T>(it:Filtered<I,F,T>)->Filtered<I,F,T> {
+    effects:"read_fresh",
+    aliases:"return=0",
     code:"Obj<@{Filtered<I,F,T>}> @{fn}(Obj<@{Filtered<I,F,T>}> it,[[maybe_unused]] Loc loc){return it;}",
 }
 

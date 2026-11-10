@@ -294,10 +294,18 @@ impl Program {
                         }
                     }
                 }
-                Type::Buffer(t)
-                | Type::Vector(t)
-                | Type::Set(t)
-                | Type::Iterator { element: t } => base.ty(t)?,
+                Type::Buffer(t) | Type::Vector(t) | Type::Set(t) => base.ty(t)?,
+                Type::Iterator { element, retained } => {
+                    base.ty(element)?;
+                    for (_, ty) in retained {
+                        base.ty(ty)?;
+                    }
+                }
+                Type::Shared(retained) => {
+                    for (_, ty) in retained {
+                        base.ty(ty)?;
+                    }
+                }
                 Type::Dict { key, value } => {
                     base.ty(key)?;
                     base.ty(value)?;

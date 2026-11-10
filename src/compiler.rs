@@ -239,7 +239,7 @@ impl Compiler {
                     {
                         return Err(n.span.error("duplicate type"));
                     }
-                    validate(n, p, &["cpp_name", "representation"])?;
+                    validate(n, p, &["cpp_name", "representation", "retains"])?;
                     if self
                         .types
                         .insert(n.text.clone(), property(n, p, "cpp_name")?)
@@ -310,6 +310,7 @@ impl Compiler {
                                         "cpp_name",
                                         "code",
                                         "effects",
+                                        "aliases",
                                         "lower",
                                         "lower_owned",
                                         "lower_borrowed",

@@ -94,7 +94,7 @@ impl Compiler {
         {
             return Err(name.span.error("duplicate type"));
         }
-        validate(name, properties, &["cpp_name", "representation"])?;
+        validate(name, properties, &["cpp_name", "representation", "retains"])?;
         let representation = type_metadata::parse_properties(name, properties, origin)?;
         let pattern = type_patterns::pattern(name, parameters);
         let mut bound = BTreeMap::new();
@@ -134,6 +134,7 @@ impl Compiler {
             &[
                 "code",
                 "effects",
+                "aliases",
                 "lower",
                 "lower_owned",
                 "lower_borrowed",
@@ -152,6 +153,18 @@ impl Compiler {
             return Err(name
                 .span
                 .error("native effect contracts are reserved for the embedded standard library"));
+        }
+        if let Some(aliases) = properties.get("aliases") {
+            if origin != Origin::StandardLibrary {
+                return Err(name.span.error(
+                    "native alias contracts are reserved for the embedded standard library",
+                ));
+            }
+            if !properties.contains_key("effects") {
+                return Err(name.span.error("native alias contract requires effects"));
+            }
+            crate::native_effects::aliases::parse(aliases, arguments.len())
+                .map_err(|e| name.span.error(e))?;
         }
         self.validate_lowering_source(name, properties, origin)?;
         property(name, properties, "code")?;

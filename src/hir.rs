@@ -181,7 +181,10 @@ pub(crate) enum Type {
     Set(String),
     Iterator {
         element: String,
+        retained: Vec<(String, String)>,
     },
+    /// Analytical shared members of an opaque native value, not Rusk fields.
+    Shared(Vec<(String, String)>),
     Opaque,
 }
 impl Type {
@@ -193,6 +196,12 @@ impl Type {
     }
     pub fn leaf(&self) -> bool {
         matches!(self, Self::Scalar(_))
+    }
+    pub fn retained_fields(&self) -> &[(String, String)] {
+        match self {
+            Self::Iterator { retained, .. } | Self::Shared(retained) => retained,
+            _ => &[],
+        }
     }
     pub fn fields(&self) -> Option<&[(String, String)]> {
         match self {

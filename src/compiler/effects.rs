@@ -103,7 +103,15 @@ impl Compiler {
         properties: &BTreeMap<String, String>,
         origin: Origin,
     ) -> Result<Option<crate::effects::Summary>, String> {
+        if properties.contains_key("aliases") && origin != Origin::StandardLibrary {
+            return Err(name
+                .span
+                .error("native alias contracts are reserved for the embedded standard library"));
+        }
         let Some(specification) = properties.get("effects") else {
+            if properties.contains_key("aliases") {
+                return Err(name.span.error("native alias contract requires effects"));
+            }
             return Ok(None);
         };
         if origin != Origin::StandardLibrary {
@@ -111,9 +119,21 @@ impl Compiler {
                 .span
                 .error("native effect contracts are reserved for the embedded standard library"));
         }
-        crate::native_effects::contract(specification, parameters, result, &self.ir_types())
-            .map(Some)
-            .map_err(|error| name.span.error(error))
+        let types = self.ir_types();
+        let mut summary =
+            crate::native_effects::contract(specification, parameters, result, &types)
+                .map_err(|error| name.span.error(error))?;
+        if let Some(aliases) = properties.get("aliases") {
+            crate::native_effects::aliases::apply(
+                &mut summary,
+                aliases,
+                parameters,
+                result,
+                &types,
+            )
+            .map_err(|error| name.span.error(error))?;
+        }
+        Ok(Some(summary))
     }
 }
 

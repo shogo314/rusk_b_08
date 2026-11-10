@@ -147,13 +147,18 @@ extern fn values<K>(x:Set<K>)->Vec<K> {
 extern type<K,V> Iter<Dict<K,V>> {
     cpp_name:"RuskHashIterator<{Dict<K,V>}>",
     representation:"iterator<Tuple<K,V>>",
+    retains:"owner:Dict<K,V>",
 }
 
 extern fn __iter__<K,V>(owner:Dict<K,V>)->Iter<Dict<K,V>> {
+    effects:"read_fresh",
+    aliases:"return.owner=0",
     code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Dict<K,V>}> owner,[[maybe_unused]] Loc loc){return make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}(owner));}",
 }
 
 extern fn __iter__<K,V>(it:Iter<Dict<K,V>>)->Iter<Dict<K,V>> {
+    effects:"read_fresh",
+    aliases:"return=0",
     code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,[[maybe_unused]] Loc loc){return it;}",
 }
 
@@ -167,6 +172,8 @@ extern fn __iter_next__<K,V>(it:Iter<Dict<K,V>>)->Tuple<K,V> {
 }
 
 extern fn copy<K,V>(it:Iter<Dict<K,V>>)->Iter<Dict<K,V>> {
+    effects:"checked_read_fresh",
+    aliases:"return.owner=0.owner",
     lower_owned:"([&](){rusk_guard_iter($0,$loc);auto result=make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}($0->owner));if($0->finished)result->finished=true;else result->position=$0->position;return result;}())",
     code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,Loc loc){rusk_guard_iter(it,loc);auto result=make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}(it->owner));if(it->finished)result->finished=true;else result->position=it->position;return result;}",
 }
@@ -174,13 +181,18 @@ extern fn copy<K,V>(it:Iter<Dict<K,V>>)->Iter<Dict<K,V>> {
 extern type<K> Iter<Set<K>> {
     cpp_name:"RuskHashIterator<{Set<K>}>",
     representation:"iterator<K>",
+    retains:"owner:Set<K>",
 }
 
 extern fn __iter__<K>(owner:Set<K>)->Iter<Set<K>> {
+    effects:"read_fresh",
+    aliases:"return.owner=0",
     code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Set<K>}> owner,[[maybe_unused]] Loc loc){return make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}(owner));}",
 }
 
 extern fn __iter__<K>(it:Iter<Set<K>>)->Iter<Set<K>> {
+    effects:"read_fresh",
+    aliases:"return=0",
     code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Iter<Set<K>>}> it,[[maybe_unused]] Loc loc){return it;}",
 }
 
@@ -194,6 +206,8 @@ extern fn __iter_next__<K>(it:Iter<Set<K>>)->K {
 }
 
 extern fn copy<K>(it:Iter<Set<K>>)->Iter<Set<K>> {
+    effects:"checked_read_fresh",
+    aliases:"return.owner=0.owner",
     lower_owned:"([&](){rusk_guard_iter($0,$loc);auto result=make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}($0->owner));if($0->finished)result->finished=true;else result->position=$0->position;return result;}())",
     code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Iter<Set<K>>}> it,Loc loc){rusk_guard_iter(it,loc);auto result=make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}(it->owner));if(it->finished)result->finished=true;else result->position=it->position;return result;}",
 }

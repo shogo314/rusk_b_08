@@ -1,0 +1,44 @@
+{
+  "parent_commit": "ebb0126",
+  "compiler_sha256": {
+    "parent": "8ee4bcfb162a211f1009f49d5995eff8c81f261e880108613337518b845c41ff",
+    "current": "0fd0cab864fab1d345c48e34d36f25d0c8ddd55264368c1c37602c6bcafbef39"
+  },
+  "cases": {
+    "lazy_pipeline": {
+      "cpp_identical": true,
+      "cpp_sha256": {
+        "parent": "660ef4c7705d4abbe85b9ea8eb14c026b411a4d95ad6f544c85a4d75976d3da6",
+        "current": "660ef4c7705d4abbe85b9ea8eb14c026b411a4d95ad6f544c85a4d75976d3da6"
+      }
+    },
+    "lazy_cached_copy": {
+      "cpp_identical": true,
+      "cpp_sha256": {
+        "parent": "136cc62c675f6dbb17b2f6a6bc0478be2c62d77bbb1b858cd6ebaf8268412e6e",
+        "current": "136cc62c675f6dbb17b2f6a6bc0478be2c62d77bbb1b858cd6ebaf8268412e6e"
+      }
+    },
+    "lazy_state_assignment": {
+      "cpp_identical": true,
+      "cpp_sha256": {
+        "parent": "08ddd9dea2360f38ad8196978d596d17601e76393f9f21cd944cfcd3c7770d6c",
+        "current": "08ddd9dea2360f38ad8196978d596d17601e76393f9f21cd944cfcd3c7770d6c"
+      }
+    },
+    "set_iterator_copy": {
+      "cpp_identical": true,
+      "cpp_sha256": {
+        "parent": "de689bac3cd05876f94c1a740da96538207a475f73772f67e982f1fb661b0149",
+        "current": "de689bac3cd05876f94c1a740da96538207a475f73772f67e982f1fb661b0149"
+      }
+    },
+    "dictionary_iteration": {
+      "cpp_identical": true,
+      "cpp_sha256": {
+        "parent": "f652d7fe62a2ab91b65d910f19ec640fb71bba1d26e17648e1fe5659d9322914",
+        "current": "f652d7fe62a2ab91b65d910f19ec640fb71bba1d26e17648e1fe5659d9322914"
+      }
+    }
+  }
+}
