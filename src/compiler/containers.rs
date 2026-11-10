@@ -396,44 +396,28 @@ impl Compiler {
             text: ty.into(),
             span: span.clone(),
         })?;
-        let native = self.types[ty].clone();
-        let code = if let Some(element) = vector_element(ty).map(str::to_string) {
+        let kind = if vector_element(ty).is_some() {
             if dimensions == 0 {
                 return Err(span.error("array input requires one length per array dimension"));
             }
-            let child = self.read_function(&element, dimensions - 1, span)?;
-            self.used.insert(child);
-            let read = self.abi_reference(child, true);
-            let params = (0..dimensions)
-                .map(|i| format!("Obj<std::int64_t> d{i}"))
-                .collect::<Vec<_>>()
-                .join(",");
-            let validate = (0..dimensions)
-                .map(|i| format!("if(*d{i}<0)fail(loc,\"negative array length\");"))
-                .collect::<String>();
-            let child_args = (1..dimensions)
-                .map(|i| format!("d{i},"))
-                .collect::<String>();
-            format!(
-                "Obj<{native}> $fn({params},Loc loc){{{validate}auto n=*d0;if(n<0)fail(loc,\"negative array length\");auto result=make_obj<{native}>({native}{{}});if(static_cast<__int128>(n)>result->max_size())fail(loc,\"array length out of range\");result->reserve(static_cast<std::size_t>(n));for(std::int64_t i=0;i<n;++i)result->push_back({read}({child_args}loc));return result;}}"
-            )
+            "vector_read"
         } else if ty.starts_with("Tuple<") && dimensions == 0 {
-            let index = self.native_function("__read__", vec![], ty, |_| String::new(), span)?;
-            self.native_derivation_tasks
-                .insert(index, ("tuple_read".into(), ty.into()));
-            return Ok(index);
+            "tuple_read"
         } else {
             return Err(span.error(format!(
                 "no input reader for '{ty}' with {dimensions} dimensions"
             )));
         };
-        self.cached_native(
+        let index = self.native_function(
             "__read__",
             vec!["Int".into(); dimensions],
             ty,
-            |cpp| code.replace("$fn", cpp),
+            |_| String::new(),
             span,
-        )
+        )?;
+        self.native_derivation_tasks
+            .insert(index, (kind.into(), ty.into()));
+        Ok(index)
     }
 
     pub(super) fn prepare_container_copies(&mut self) -> Result<(), String> {

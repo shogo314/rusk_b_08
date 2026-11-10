@@ -19,6 +19,12 @@ pub(super) enum InvokeKind {
 
 #[derive(Clone)]
 pub(super) enum Part {
+    Arguments {
+        offset: usize,
+        element: String,
+        index: String,
+        parts: Vec<Part>,
+    },
     Variants {
         ty: String,
         index: String,
@@ -70,6 +76,64 @@ pub(super) fn valid_type(text: &str) -> bool {
         }
     }
     check(text, 0)
+}
+
+// Whitespace is removed from callable signatures before parsing their types.
+pub(super) fn argument_offset(text: &str) -> Option<usize> {
+    let offset = text.strip_prefix("...arguments")?;
+    if offset.is_empty() || !offset.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    offset.parse().ok()
+}
+
+pub(super) fn expand_arguments(
+    patterns: &[String],
+    actual: &[String],
+    budget: &mut usize,
+) -> Result<Vec<String>, String> {
+    let mut result = vec![];
+    for pattern in patterns {
+        let types = if let Some(offset) = argument_offset(pattern) {
+            actual
+                .get(offset..)
+                .ok_or("native argument offset out of range")?
+        } else {
+            std::slice::from_ref(pattern)
+        };
+        if types.len() > *budget {
+            return Err("native field expansion work limit exceeded".into());
+        }
+        *budget -= types.len();
+        result.extend_from_slice(types);
+    }
+    Ok(result)
+}
+
+pub(super) fn validate_argument_bounds(parts: &[Part], count: usize) -> Result<(), String> {
+    for part in parts {
+        match part {
+            Part::Arguments { offset, parts, .. } => {
+                if *offset > count {
+                    return Err("native argument offset out of range".into());
+                }
+                validate_argument_bounds(parts, count)?;
+            }
+            Part::Fields { parts, .. } | Part::Variants { parts, .. } => {
+                validate_argument_bounds(parts, count)?;
+            }
+            Part::Call { arguments, .. } | Part::Invoke { arguments, .. }
+                if arguments
+                    .iter()
+                    .filter_map(|a| argument_offset(a))
+                    .any(|n| n > count) =>
+            {
+                return Err("native argument offset out of range".into());
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn reference(text: &str, body: bool) -> Result<Part, String> {
@@ -125,15 +189,15 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
             vec![]
         } else {
             let pattern = format!("Args<{params}>");
-            if !valid_type(&pattern) {
+            let (_, types) =
+                type_parts(&pattern).ok_or("invalid native callable parameter types")?;
+            if types
+                .iter()
+                .any(|ty| !valid_type(ty) && argument_offset(ty).is_none())
+            {
                 return Err("invalid native callable parameter types".into());
             }
-            type_parts(&pattern)
-                .unwrap()
-                .1
-                .into_iter()
-                .map(String::from)
-                .collect()
+            types.into_iter().map(String::from).collect()
         };
         return Ok(
             if text.starts_with("invoke ")
@@ -229,7 +293,38 @@ fn parse_parts(
                 Err("native field expansion end without fields".into())
             };
         }
-        if body && let Some(header) = header.strip_prefix("variants ") {
+        if body && let Some(header) = header.strip_prefix("arguments ") {
+            let (prefix, binders) = header.split_once("as ").ok_or(
+                "invalid native arguments reference; expected arguments [from N] as Type,Index",
+            )?;
+            let offset = if prefix.trim().is_empty() {
+                0
+            } else {
+                let offset = prefix
+                    .trim()
+                    .strip_prefix("from ")
+                    .ok_or("invalid native argument offset")?;
+                if offset.is_empty() || !offset.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err("invalid native argument offset".into());
+                }
+                offset
+                    .parse::<usize>()
+                    .map_err(|_| "invalid native argument offset")?
+            };
+            let (element, index) = binders
+                .split_once(',')
+                .ok_or("invalid native arguments bindings")?;
+            let (element, index) = (element.trim(), index.trim());
+            if !identifier(element) || !identifier(index) || element == index {
+                return Err("invalid native arguments bindings".into());
+            }
+            parts.push(Part::Arguments {
+                offset,
+                element: element.into(),
+                index: index.into(),
+                parts: parse_parts(rest, body, depth + 1, budget)?,
+            });
+        } else if body && let Some(header) = header.strip_prefix("variants ") {
             let (ty, index) = header
                 .split_once(" as ")
                 .ok_or("invalid native variants reference; expected variants Type as Index")?;

@@ -166,38 +166,46 @@ impl Compiler {
                 parts.extend(template::parse(text, true).map_err(|e| name.span.error(e))?);
             }
         }
-        let calls = parts
-            .iter()
-            .filter_map(|part| match part {
-                Part::Call {
-                    name,
-                    arguments,
-                    result,
-                    ..
-                } => Some(generics::CallRequirement {
-                    name: name.clone(),
-                    arguments: arguments.clone(),
-                    result: result.clone(),
-                }),
-                _ => None,
-            })
-            .collect();
-        let callbacks = parts
-            .into_iter()
-            .filter_map(|part| match part {
-                Part::Invoke {
-                    name,
-                    arguments,
-                    result,
-                    ..
-                } => Some(generics::CallbackRequirement {
-                    ty: name,
-                    parameters: arguments,
-                    result,
-                }),
-                _ => None,
-            })
-            .collect();
+        let mut calls = vec![];
+        let mut callbacks = vec![];
+        if !properties.contains_key("derive") {
+            let actual = arguments
+                .iter()
+                .map(|(_, ty)| ty.text.clone())
+                .collect::<Vec<_>>();
+            let mut budget = 4096;
+            for part in &parts {
+                match part {
+                    Part::Call {
+                        name: target,
+                        arguments,
+                        result,
+                        ..
+                    } => {
+                        calls.push(generics::CallRequirement {
+                            name: target.clone(),
+                            arguments: template::expand_arguments(arguments, &actual, &mut budget)
+                                .map_err(|e| name.span.error(e))?,
+                            result: result.clone(),
+                        });
+                    }
+                    Part::Invoke {
+                        name: target,
+                        arguments,
+                        result,
+                        ..
+                    } => {
+                        callbacks.push(generics::CallbackRequirement {
+                            ty: target.clone(),
+                            parameters: template::expand_arguments(arguments, &actual, &mut budget)
+                                .map_err(|e| name.span.error(e))?,
+                            result: result.clone(),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
         for (argument, _) in arguments {
             if argument.binding.is_some() || argument.access.is_some() || argument.escape.is_some()
             {
@@ -225,7 +233,8 @@ impl Compiler {
             }
             generics::parameters_valid(parameters)?;
             let assignment = matches!(kind.as_str(), "record_assign" | "enum_assign");
-            let input = kind == "tuple_read";
+            let vector_input = kind == "vector_read";
+            let input = kind == "tuple_read" || vector_input;
             let valid_kind =
                 assignment || input || matches!(kind.as_str(), "record_copy" | "enum_copy");
             if !valid_kind
@@ -242,12 +251,18 @@ impl Compiler {
                     .iter()
                     .any(|(_, ty)| ty.text != parameters[0].text)
                 || result.as_ref().is_none_or(|r| {
-                    r.text
-                        != if assignment {
-                            "Unit"
-                        } else {
-                            &parameters[0].text
-                        }
+                    if vector_input {
+                        let mut bindings = BTreeMap::new();
+                        !generics::unify(&r.text, &r.text, parameters, &mut bindings)
+                            || !bindings.contains_key(&parameters[0].text)
+                    } else {
+                        r.text
+                            != if assignment {
+                                "Unit"
+                            } else {
+                                &parameters[0].text
+                            }
+                    }
                 })
                 || (assignment && parameters[0].text == "Unit")
                 || properties
@@ -256,6 +271,8 @@ impl Compiler {
             {
                 return Err(name.span.error(if assignment {
                     "invalid native assignment derivation; expected one type parameter and (T,T)->Unit"
+                }else if vector_input {
+                    "invalid native input derivation; expected one type parameter bound by the result pattern and no declared arguments"
                 }else if input {
                     "invalid native input derivation; expected one type parameter and ()->T"
                 }else{
@@ -435,6 +452,28 @@ impl Compiler {
                         return Err(span.error(format!("unbound native field index '{index}'")));
                     }
                 }
+                Part::Arguments {
+                    element,
+                    index,
+                    parts,
+                    ..
+                } => {
+                    for name in [&element, &index] {
+                        if parameters.iter().any(|p| &p.text == name) || indices.contains(name) {
+                            return Err(span.error(format!(
+                                "native arguments binding '{name}' shadows an existing binding"
+                            )));
+                        }
+                    }
+                    let mut parameters = parameters.to_vec();
+                    parameters.push(Name {
+                        text: element,
+                        span: span.clone(),
+                    });
+                    let mut indices = indices.clone();
+                    indices.insert(index);
+                    self.validate_native_parts(parts, &parameters, &indices, span)?;
+                }
                 Part::Variants { ty, index, parts } => {
                     self.validate_scoped_native_type(&ty, parameters, indices, span)?;
                     if parameters.iter().any(|p| p.text == index) || indices.contains(&index) {
@@ -486,9 +525,12 @@ impl Compiler {
                     ..
                 } => {
                     self.validate_scoped_native_type(&name, parameters, indices, span)?;
-                    for ty in arguments.iter().chain(std::iter::once(&result)) {
-                        self.validate_scoped_native_type(ty, parameters, indices, span)?;
+                    for ty in &arguments {
+                        if template::argument_offset(ty).is_none() {
+                            self.validate_scoped_native_type(ty, parameters, indices, span)?;
+                        }
                     }
+                    self.validate_scoped_native_type(&result, parameters, indices, span)?;
                 }
                 Part::Call {
                     name,
@@ -501,9 +543,12 @@ impl Compiler {
                             self.validate_scoped_native_type(arg, parameters, indices, span)?;
                         }
                     }
-                    for ty in arguments.iter().chain(std::iter::once(&result)) {
-                        self.validate_scoped_native_type(ty, parameters, indices, span)?;
+                    for ty in &arguments {
+                        if template::argument_offset(ty).is_none() {
+                            self.validate_scoped_native_type(ty, parameters, indices, span)?;
+                        }
                     }
+                    self.validate_scoped_native_type(&result, parameters, indices, span)?;
                 }
                 _ => {}
             }
@@ -554,8 +599,17 @@ impl Compiler {
                 "lower_rooted",
             ] {
                 if let Some(text) = properties.get(key) {
+                    let parts =
+                        template::parse(text, true).map_err(|e| definition.name.span.error(e))?;
+                    if properties
+                        .get("derive")
+                        .is_none_or(|kind| kind != "vector_read")
+                    {
+                        template::validate_argument_bounds(&parts, definition.arguments.len())
+                            .map_err(|e| definition.name.span.error(e))?;
+                    }
                     self.validate_native_parts(
-                        template::parse(text, true).map_err(|e| definition.name.span.error(e))?,
+                        parts,
                         &definition.parameters,
                         &BTreeSet::new(),
                         &definition.name.span,
@@ -577,6 +631,32 @@ impl Compiler {
     ) -> Result<String, String> {
         let parts = template::parse(text, body).map_err(|e| span.error(e))?;
         self.render_native_parts(parts, bindings, function, span, owner, &mut 4096)
+    }
+
+    fn expand_native_arguments(
+        &self,
+        arguments: &[String],
+        bindings: &BTreeMap<String, String>,
+        owner: Option<usize>,
+        budget: &mut usize,
+        span: &Span,
+    ) -> Result<Vec<String>, String> {
+        // Substitute explicit types before splicing. Concrete argument types must
+        // never be interpreted as local binder names a second time.
+        let patterns = arguments
+            .iter()
+            .map(|ty| {
+                if template::argument_offset(ty).is_some() {
+                    ty.clone()
+                } else {
+                    generics::substitute(ty, bindings)
+                }
+            })
+            .collect::<Vec<_>>();
+        let actual = owner
+            .map(|id| self.functions[id].params.as_slice())
+            .unwrap_or_default();
+        template::expand_arguments(&patterns, actual, budget).map_err(|e| span.error(e))
     }
 
     fn render_native_parts(
@@ -603,6 +683,36 @@ impl Compiler {
                             span.error(format!("unbound native field index '{index}'"))
                         })?;
                     output.push_str(value);
+                }
+                Part::Arguments {
+                    offset,
+                    element,
+                    index,
+                    parts,
+                } => {
+                    let owner = owner
+                        .ok_or_else(|| span.error("argument reference outside native function"))?;
+                    let arguments = self.functions[owner].params.clone();
+                    if offset > arguments.len() {
+                        return Err(span.error("native argument offset out of range"));
+                    }
+                    for (i, ty) in arguments.into_iter().enumerate().skip(offset) {
+                        if *budget == 0 {
+                            return Err(span.error("native field expansion work limit exceeded"));
+                        }
+                        *budget -= 1;
+                        let mut scoped = bindings.clone();
+                        scoped.insert(element.clone(), ty);
+                        scoped.insert(index.clone(), i.to_string());
+                        output.push_str(&self.render_native_parts(
+                            parts.clone(),
+                            &scoped,
+                            function,
+                            span,
+                            Some(owner),
+                            budget,
+                        )?);
+                    }
                 }
                 Part::Variants { ty, index, parts } => {
                     let ty = generics::substitute(&ty, bindings);
@@ -761,10 +871,8 @@ impl Compiler {
                     let callback = self.callables.get(&ty).cloned().ok_or_else(|| {
                         span.error(format!("type '{ty}' is not statically callable"))
                     })?;
-                    let arguments = arguments
-                        .iter()
-                        .map(|ty| generics::substitute(ty, bindings))
-                        .collect::<Vec<_>>();
+                    let arguments =
+                        self.expand_native_arguments(&arguments, bindings, owner, budget, span)?;
                     if callback.parameters != arguments {
                         return Err(span.error("native callback parameter type mismatch"));
                     }
@@ -803,9 +911,10 @@ impl Compiler {
                         text: result.clone(),
                         span: span.clone(),
                     })?;
+                    let arguments =
+                        self.expand_native_arguments(&arguments, bindings, owner, budget, span)?;
                     let mut values = vec![];
                     for ty in arguments {
-                        let ty = generics::substitute(&ty, bindings);
                         self.check_type(&Name {
                             text: ty.clone(),
                             span: span.clone(),
@@ -1016,7 +1125,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             .unwrap()
             .into_iter()
             .filter(
-                |s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive")),
+                |s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive") && p["derive"] != "vector_read"),
             )
             .collect::<Vec<_>>();
             for statement in &mut declarations {
@@ -1153,7 +1262,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
         )
         .unwrap()
         .into_iter()
-        .filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive")))
+        .filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive") && p["derive"] != "vector_read"))
         .collect::<Vec<_>>();
         for statement in &mut declarations {
             if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement
@@ -1185,5 +1294,108 @@ extern fn __read__()->Int{{cpp_name:"input_field",code:"Obj<std::int64_t> input_
         assert!(cpp.contains("/* input_source */ Obj<RuskRecord0>"));
         assert!(cpp.contains("auto value_0=input_field(loc);auto value_1=input_field(loc);"));
         assert!(!cpp.contains("renamed_product_reader("));
+    }
+    #[test]
+    fn dimensions_input_roles_validate_trust_and_bind_the_result_pattern() {
+        let definition = r#"extern fn arbitrary_reader<T>()->Box<T>{derive:"vector_read",code:"@{arguments from 1 as P,I}@{end}",}"#;
+        let types = format!(r#"{TYPES} extern type<T> Box{{cpp_name:"std::shared_ptr<{{T}}>",}}"#);
+        for (source, standard, expected) in [
+            (
+                definition.to_string(),
+                false,
+                Some("reserved for the embedded standard library"),
+            ),
+            (definition.to_string(), true, None),
+            (
+                definition.replace("()->Box<T>", "(x:T)->Box<T>"),
+                true,
+                Some("invalid native input derivation"),
+            ),
+            (
+                definition.replace("()->Box<T>", "()->Int"),
+                true,
+                Some("invalid native input derivation"),
+            ),
+            (
+                definition.replace("<T>()", "<T,R>()"),
+                true,
+                Some("invalid native input derivation"),
+            ),
+            (
+                format!("{definition}{definition}"),
+                true,
+                Some("duplicate native derivation"),
+            ),
+            (
+                definition.replace("as P,I", "as T,I"),
+                true,
+                Some("shadows"),
+            ),
+            (
+                definition.replace("Box<T>", "Missing<T>"),
+                true,
+                Some("unknown type constructor"),
+            ),
+        ] {
+            let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let declarations = if standard {
+                Source::standard(statements)
+            } else {
+                Source::user(statements)
+            };
+            let result = Compiler::default().compile(
+                &[
+                    Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                    declarations,
+                ],
+                crate::backend::Emit::Cpp,
+            );
+            if let Some(expected) = expected {
+                let error = result.unwrap_err();
+                assert!(error.contains(expected), "{error}");
+            } else {
+                result.unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn dimensions_input_role_uses_the_source_body_under_an_unrelated_name() {
+        let mut declarations = crate::parse(include_str!("../../lib/collections.rusk"), "other-standard.rusk")
+            .unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v| v == "vector_read"))).collect::<Vec<_>>();
+        for statement in &mut declarations {
+            if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
+                name.text = "unrelated_dimensions_name".into();
+                properties
+                    .get_mut("code")
+                    .unwrap()
+                    .insert_str(0, "/* dimensions_source */ ");
+            }
+        }
+        let types = format!(
+            r#"{TYPES}
+extern type<T> Vec{{cpp_name:"RuskVec<{{T}}>",representation:"vector<T>",}}
+extern fn __read__()->Int{{cpp_name:"field_input",code:"Obj<std::int64_t> field_input(Loc){{return make_obj<std::int64_t>(1);}}",}}
+"#
+        );
+        let cpp = Compiler::default()
+            .compile(
+                &[
+                    Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                    Source::standard(declarations),
+                    Source::user(
+                        crate::parse("in rows(2,3):Vec<Vec<Int>>;", "caller.rusk").unwrap(),
+                    ),
+                ],
+                crate::backend::Emit::Cpp,
+            )
+            .unwrap();
+        assert_eq!(
+            cpp.matches("/* dimensions_source */ Obj<RuskVec<").count(),
+            2
+        );
+        assert!(cpp.contains("Obj<std::int64_t> d0,Obj<std::int64_t> d1,Loc loc"));
+        assert!(cpp.contains("field_input(loc)"));
+        assert!(!cpp.contains("unrelated_dimensions_name("));
     }
 }

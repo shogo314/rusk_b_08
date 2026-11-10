@@ -49,6 +49,9 @@ CASES = {
                              'total+=a.len();}wt total;'),
     'vector_output': ('let values:=[123;1000];let matrix:=[values,values];'
                       'let rows:=[(1,2);1000];for round in 0..500{wt matrix,rows;}'),
+    'dimensions_input': ('in cube(100,30,100):Vec<Vec<Vec<Int>>>;'
+                         'let total:=0;for round in 0..20000{in row(2,2):Vec<Vec<Int>>;total+=row[1][1];}'
+                         'wt cube.len(),cube[-1][-1][-1],total;'),
     'vector_input': ('in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;'
                      'wt values.len(),values[-1],rows.len(),rows[-1][1];'),
     'vector_ordering': ('let a:=[0;4000];let total:=0;for round in 0..60{'
@@ -89,7 +92,7 @@ CASES = {
     'sum_rusk': ('fn rusk_total(a:Vec<Int>)->Int{let total:=0;for x in a{total+=x;}return total;}'
                  'let a:=[1;1000000];let total:=0;for i in 0..20{total+=rusk_total(a);}wt total;'),
 }
-INPUTS = {'vector_input': b'1 '*500000, 'option_input': b'1 '*200000}
+INPUTS = {'dimensions_input': b'1 '*380000, 'vector_input': b'1 '*500000, 'option_input': b'1 '*200000}
 ALLOCATION_COUNTER = r'''
 #include <new>
 #include <cstdio>

@@ -1361,3 +1361,116 @@ wt copy_fails(Plain{value:1});
         assert_eq!(out.stdout, b"No No No No\nYes\n");
     }
 }
+
+#[test]
+fn native_arguments_keep_logical_types_original_indices_and_callback_inference() {
+    let case = Case::new(
+        r#"
+extern type Score {cpp_name:"std::int64_t",}
+extern fn score(x:Int)->Score {cpp_name:"arg_score",code:"Obj<std::int64_t> arg_score(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn number(x:Score)->Int {cpp_name:"arg_number",code:"Obj<std::int64_t> arg_number(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn copy(x:Score)->Score {cpp_name:"arg_copy",code:"Obj<std::int64_t> arg_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x+100);}",}
+extern fn tail<arguments1,B>(head:arguments1,value:B)->B {
+    code:"Obj<@{B}> @{fn}(@{arguments as P,I}Obj<@{P}> d@{index I},@{end}Loc loc){@{arguments from 1 as P,I}return @{boxed_call copy(...arguments 1)->P}(d@{index I},loc);@{end}}",
+}
+extern fn apply<F,T,R>(f:F,x:T)->R {
+    code:"@{return R} @{fn}(@{arguments as P,I}Obj<@{P}> d@{index I},@{end}Loc loc){return @{invoke F(...arguments 1)->R}(d0,d1,loc);}",
+}
+extern fn empty<T>()->Int {
+    code:"Obj<@{Int}> @{fn}(@{arguments as P,I}Obj<@{P}> d@{index I},@{end}Loc){int n=0;@{arguments as P,I}++n;@{end}return make_obj<@{Int}>(n);}",
+}
+struct P {value:Int;}
+struct I {value:Int;}
+let p:=P{value:7};let i:=I{value:8};
+wt number(tail(0,score(2))),tail(0,3),tail(p,i).value,tail(i,p).value,empty::<Int>();
+let bias:=5;wt apply((x:Int)=>x+bias,4),apply((x:Str)=>x+"!","ok");
+apply((x:Int)=>{wt x;},9);
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"102 3 8 7 0\n9 ok!\n9\n");
+    }
+}
+
+#[test]
+fn invalid_native_arguments_are_rejected_in_unused_declarations() {
+    for (code, expected) in [
+        ("@{arguments from 2 as P,I}@{end}", "offset out of range"),
+        ("@{call copy(...arguments 2)->T}", "offset out of range"),
+        (
+            "@{arguments from -1 as P,I}@{end}",
+            "invalid native argument offset",
+        ),
+        (
+            "@{arguments from 18446744073709551616 as P,I}@{end}",
+            "invalid native argument offset",
+        ),
+        (
+            "@{call copy(...arguments)->T}",
+            "invalid native callable parameter types",
+        ),
+        (
+            "@{arguments as P,P}@{end}",
+            "invalid native arguments bindings",
+        ),
+        ("@{arguments as T,I}@{end}", "shadows"),
+        (
+            "@{arguments as P,I}@{arguments as Q,I}@{end}@{end}",
+            "shadows",
+        ),
+        (
+            "@{arguments as P,I}@{I}@{end}",
+            "index cannot be used as a type",
+        ),
+        ("@{arguments as P,I}@{Missing}@{end}", "unknown type"),
+        ("@{arguments as P,I}@{end}@{P}", "unknown type"),
+        (
+            "@{arguments as P,I}@{end}@{index I}",
+            "unbound native field index",
+        ),
+    ] {
+        let case = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{code}\",}}"));
+        let out = case.compile();
+        assert!(!out.status.success(), "{code}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(expected),
+            "{code}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+}
+
+#[test]
+fn native_arguments_share_structural_depth_and_work_limits() {
+    let nested = (0..65)
+        .map(|i| format!("@{{arguments as P{i},I{i}}}"))
+        .collect::<String>()
+        + &"@{end}".repeat(65);
+    let case = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{nested}\",}}"));
+    let out = case.compile();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("nesting limit exceeded"));
+    let params = (0..70)
+        .map(|i| format!("x{i}:Int"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let values = vec!["1"; 70].join(",");
+    let case = Case::new(&format!(
+        r#"extern fn wide<T>({params}){{code:"void @{{fn}}(@{{arguments as P,I}}Obj<@{{P}}> d@{{index I}},@{{end}}Loc){{@{{arguments as P,I}}@{{arguments as Q,J}}@{{index J}};@{{end}}@{{end}}}}",}}wide::<Int>({values});"#
+    ));
+    let out = case.compile();
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("work limit exceeded"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!case.0.join("main.cpp").exists());
+}

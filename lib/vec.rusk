@@ -15,7 +15,7 @@ extern fn __write__<T>(a:Vec<T>) {
 }
 
 extern fn __read__<T>(count:Int)->Vec<T> {
-    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{Int}> count,Loc loc){const auto size=*count;if(size<0)fail(loc,\"negative array length\");auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{ });if(static_cast<__int128>(size)>static_cast<__int128>(result->max_size()))fail(loc,\"array length out of range\");result->reserve(static_cast<std::size_t>(size));for(std::int64_t i=0;i<size;++i)result->push_back(@{call __read__()->T}(loc));return result;}",
+    code: "Obj<@{Vec<T>}> @{fn}(Obj<@{Int}> count,Loc loc){const auto size=*count;if(size<0)fail(loc,\"negative array length\");auto result=make_obj<@{Vec<T>}>(@{Vec<T>}{ });if(static_cast<__int128>(size)>static_cast<__int128>(result->max_size()))fail(loc,\"array length out of range\");result->reserve(static_cast<std::size_t>(size));for(std::int64_t i=0;i<size;++i)result->push_back(@{boxed_call __read__()->T}(loc));return result;}",
 }
 
 extern fn __vec_new__<T>() -> Vec<T> {

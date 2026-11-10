@@ -1313,3 +1313,128 @@ fn tuple_reader_effect_queries_validate_fields_without_consuming_input() {
     );
     assert!(!case.0.join("main.cpp").exists());
 }
+
+#[test]
+fn multidimensional_input_preserves_length_snapshots_order_and_unit_objects() {
+    let case = Case::new(include_str!("../examples/beta08/dimensions_input.rusk"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("1 2 3 4 5 6 7 8 a b c d", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"0 1 2 3 1 4\n5 6 7 8\n0\n4\n");
+    }
+    let case = Case::new(
+        "fn __read__()->Unit{in ignored:Int;}in units(2,2):Vec<Vec<Unit>>;wt units.len(),units[0].len();",
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("1 2 3 4", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"2 2\n");
+    }
+    let case = Case::new(
+        r#"
+fn __read__(n:Int,m:Int)->Vec<Vec<Int>> {wt "custom",n,m;return [[n+m]];}
+in rows(2,3):Vec<Vec<Int>>,cube(2,4,5):Vec<Vec<Vec<Int>>>;
+wt rows,cube;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"custom 2 3\ncustom 4 5\ncustom 4 5\n5 9 9\n");
+    }
+}
+
+#[test]
+fn multidimensional_reader_validation_precedes_input_and_keeps_caller_locations() {
+    for source in [
+        "in rows(2,3,4,5):Vec<Vec<Vec<Int>>>;",
+        "in rows(2,3):Vec<Vec<Vec<Int>>>;",
+    ] {
+        let case = Case::new(source);
+        let out = case.compile();
+        assert!(!out.status.success());
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("main.rusk:"),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+
+    for (source, input, message) in [
+        (
+            "wt \"before\";in rows(0,-1):Vec<Vec<Int>>;",
+            "bad",
+            "negative array length",
+        ),
+        (
+            "wt \"before\";in rows(0,0,-1):Vec<Vec<Vec<Int>>>;",
+            "bad",
+            "negative array length",
+        ),
+        (
+            "wt \"before\";in rows(2,2):Vec<Vec<Int>>;",
+            "1 2 3",
+            "unexpected end of input",
+        ),
+        (
+            "wt \"before\";in rows(2,2):Vec<Vec<Int>>;",
+            "1 2 3 bad",
+            "invalid integer input",
+        ),
+        (
+            "wt \"before\";in rows(9223372036854775807,0):Vec<Vec<Int>>;",
+            "",
+            "array length out of range",
+        ),
+    ] {
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = Case::new(source).run_with_options(input, &options);
+            assert!(!out.status.success(), "{source}");
+            assert_eq!(out.stdout, b"before\n");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains(message) && error.contains("main.rusk:"),
+                "{source}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn dimensions_template_works_as_an_unrelated_fixed_arity_user_extern() {
+    let source = include_str!("../lib/collections.rusk");
+    let start = source.find("extern fn dimensions_read_body<").unwrap();
+    let end = source[start..]
+        .find("// Language-generated record/")
+        .unwrap()
+        + start;
+    let declaration = source[start..end]
+        .replace(
+            "dimensions_read_body<T>()",
+            "unrelated<T>(height:Int,width:Int)",
+        )
+        .replace("derive:\"vector_read\",", "");
+    let case = Case::new(&format!("{declaration} wt unrelated::<Vec<Int>>(2,2);"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("1 2 3 4", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 2 3 4\n");
+    }
+}

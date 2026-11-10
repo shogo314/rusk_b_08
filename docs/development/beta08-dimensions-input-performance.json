@@ -1,0 +1,130 @@
+{
+  "utc": "2026-11-10T02:47:35.823068+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "e526364f4a63f78f8a5b3d3aa37a59211509960778f5c2377446b9cc429cce79"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "dimensions_input": {
+      "source": "in cube(100,30,100):Vec<Vec<Vec<Int>>>;let total:=0;for round in 0..20000{in row(2,2):Vec<Vec<Int>>;total+=row[1][1];}wt cube.len(),cube[-1][-1][-1],total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "5e6d4a460ae359c402212994193a71d386623ffca564292cbd5f10c4b8cb15f1",
+          "runs_ms": [
+            13.272268,
+            14.534241,
+            12.881422,
+            13.147838,
+            13.279023,
+            14.106914,
+            13.68054,
+            12.873155,
+            13.346801,
+            13.270093,
+            13.595033,
+            13.321772,
+            13.88581,
+            13.291358,
+            13.316618
+          ],
+          "output": "100 1 20000\n",
+          "allocations": 546215,
+          "shared_ptr_copies": 163212,
+          "median_ms": 13.316618
+        },
+        "current": {
+          "cpp_sha256": "dc12188cd1553592469b3000cbe378b3f321747fba1bca44a8c645231c62ae00",
+          "runs_ms": [
+            13.431646,
+            13.492869,
+            12.934741,
+            13.442177,
+            13.612609,
+            14.080568,
+            13.646028,
+            13.412403,
+            13.181889,
+            13.865758,
+            13.633931,
+            13.45901,
+            13.665681,
+            13.36247,
+            68.722212
+          ],
+          "output": "100 1 20000\n",
+          "allocations": 546215,
+          "shared_ptr_copies": 163212,
+          "median_ms": 13.492869
+        }
+      },
+      "input_bytes": 760000,
+      "input_sha256": "30ed7095808818f901398b5f79e8c2f4bf0c8ed38fd8c61651f7e5f5a7825f8a",
+      "speedup": 0.9869374704519847
+    },
+    "vector_input": {
+      "source": "in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;wt values.len(),values[-1],rows.len(),rows[-1][1];",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "4541456e83011991391a2d8116a79a389154d1beb8df4510af0572fa67ec55db",
+          "runs_ms": [
+            19.760219,
+            19.513641,
+            19.807981,
+            19.460351,
+            20.882522,
+            19.826824,
+            19.743276,
+            19.884861,
+            19.934203,
+            20.228001,
+            20.940518,
+            19.232475,
+            19.7061,
+            19.243766,
+            120.189792
+          ],
+          "output": "300000 1 100000 1\n",
+          "allocations": 600012,
+          "shared_ptr_copies": 200011,
+          "median_ms": 19.807981
+        },
+        "current": {
+          "cpp_sha256": "1d31f9ed13e56156e6da3154af3f94dbc29fb17e5379b6c5a6209aba1dc19fca",
+          "runs_ms": [
+            19.603727,
+            19.499072,
+            19.953486,
+            19.461723,
+            19.556098,
+            19.903576,
+            19.991599,
+            19.999044,
+            20.54365,
+            20.003149,
+            19.802749,
+            20.381835,
+            19.212578,
+            19.21904,
+            170.841905
+          ],
+          "output": "300000 1 100000 1\n",
+          "allocations": 600012,
+          "shared_ptr_copies": 200011,
+          "median_ms": 19.903576
+        }
+      },
+      "input_bytes": 1000000,
+      "input_sha256": "9d3c8986edd01da50a625fa16e03cb3322fa9f95491078b0660a8cc93bbae42f",
+      "speedup": 0.9951970942307051
+    }
+  }
+}

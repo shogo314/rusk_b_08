@@ -1,0 +1,26 @@
+// Readers may mutate the original lengths. Each active row keeps its snapshot.
+extern symbol dimension_state {
+    code:"Obj<std::int64_t> outer_length,inner_length;std::int64_t released_units=0;",
+}
+extern type Step {cpp_name:"std::int64_t",}
+extern fn bind_lengths(n:Int,m:Int) {
+    cpp_name:"bind_lengths",code:"void bind_lengths(Obj<std::int64_t> n,Obj<std::int64_t> m,Loc){outer_length=n;inner_length=m;}",
+}
+extern fn __read__()->Step {
+    cpp_name:"read_step",code:"Obj<std::int64_t> read_step(Loc loc){auto value=read_token(loc);*outer_length=0;*inner_length=1;return make_obj<std::int64_t>(std::stoll(value));}",
+}
+extern fn number(x:Step)->Int {
+    cpp_name:"step_number",code:"Obj<std::int64_t> step_number(Obj<std::int64_t> x,Loc){return x;}",
+}
+extern fn __read__()->Unit {
+    return_abi:"object",cpp_name:"read_dimension_unit",code:"Obj<Unit> read_dimension_unit(Loc loc){read_token(loc);return Obj<Unit>(new Unit{},[](auto* p){++released_units;delete p;});}",
+}
+extern fn released()->Int {
+    cpp_name:"units_released",code:"Obj<std::int64_t> units_released(Loc){return make_obj<std::int64_t>(released_units);}",
+}
+let n:=2;let m:=3;bind_lengths(n,m);
+in grid(n,m):Vec<Vec<Step>>;
+wt n,m,grid.len(),grid[0].len(),grid[1].len(),number(grid[1][0]);
+in cube(2,1,2):Vec<Vec<Vec<Int>>>;wt cube;
+in units(2,2):Vec<Vec<Unit>>;
+wt released();units=[];wt released();

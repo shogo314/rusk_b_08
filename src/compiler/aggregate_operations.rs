@@ -65,15 +65,34 @@ impl Compiler {
             .ok_or_else(|| span.error(format!("missing standard {kind} derivation")))?;
         self.functions[index].origin = definition.origin;
         self.native_derived_functions.insert(index);
-        let bindings = BTreeMap::from([(definition.parameters[0].text.clone(), ty.to_string())]);
-        let code = self.render_native(
-            &definition.foreign.as_ref().unwrap()["code"],
-            &bindings,
-            Some(cpp),
-            &definition.name.span,
-            true,
-            Some(index),
-        )?;
+        let pattern = if matches!(kind, "record_assign" | "enum_assign") {
+            &definition.arguments[0].1.text
+        } else {
+            &definition.result.as_ref().unwrap().text
+        };
+        let mut bindings = BTreeMap::new();
+        if !generics::unify(pattern, ty, &definition.parameters, &mut bindings) {
+            return Err(span.error(format!("standard {kind} derivation does not match '{ty}'")));
+        }
+        let code = self
+            .render_native(
+                &definition.foreign.as_ref().unwrap()["code"],
+                &bindings,
+                Some(cpp),
+                // Derived children inherit the original request site. Otherwise a
+                // deferred child reader loses the user's location at each level.
+                span,
+                true,
+                Some(index),
+            )
+            .map_err(|error| {
+                format!(
+                    "{error}\nwhile expanding standard {kind} declared at {}:{}:{}",
+                    definition.name.span.file,
+                    definition.name.span.line,
+                    definition.name.span.column,
+                )
+            })?;
         Ok(code)
     }
 

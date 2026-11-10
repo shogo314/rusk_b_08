@@ -284,7 +284,7 @@ extern fn copy(x:Int)->Int{{cpp_name:"copy_int",code:"unused",effects:"read_fres
             crate::parse(include_str!("../../lib/collections.rusk"), "standard-derivations.rusk")
                 .unwrap()
                 .into_iter()
-                .filter(|statement| matches!(statement, Stmt::GenericExternFunction(_,_,_,_,properties) if properties.contains_key("derive")))
+                .filter(|statement| matches!(statement, Stmt::GenericExternFunction(_,_,_,_,properties) if properties.contains_key("derive") && properties["derive"] != "vector_read"))
                 .collect(),
         );
         for (callback, expected) in [
