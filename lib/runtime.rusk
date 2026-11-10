@@ -1,0 +1,12 @@
+// Runtime resources and their dependencies are ordinary declarations.
+extern symbol __core__ {
+    code_files:"base.hpp;io.hpp;token_io.hpp;scalar.hpp",
+}
+extern symbol __runtime_collections__ {
+    code_files:"sequence_runtime.hpp;containers.hpp",
+    depends:"__core__",
+}
+extern symbol __runtime_lazy_iterators__ {
+    code_file:"lazy_iterators.hpp",
+    depends:"__runtime_collections__",
+}

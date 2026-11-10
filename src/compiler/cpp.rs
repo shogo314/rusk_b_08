@@ -17,8 +17,8 @@ impl Compiler {
             })
             .collect();
         let mut prelude = String::new();
-        for code in self.symbols.values() {
-            prelude += code;
+        for name in &self.symbol_order {
+            prelude += &self.symbols[name].code;
             prelude += "\n";
         }
         prelude += &self.enum_forwards();

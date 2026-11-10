@@ -14,6 +14,7 @@ mod native_lowering;
 mod readonly;
 mod rusk_grammar;
 mod source;
+mod stdlib;
 #[allow(warnings)]
 mod rusk_grammar_trait {
     include!(concat!(env!("OUT_DIR"), "/rusk_grammar_trait.rs"));
@@ -27,7 +28,6 @@ use parol_runtime::Report;
 struct ErrorReporter;
 impl Report for ErrorReporter {}
 
-const CORE: &str = include_str!("../lib/core.rusk");
 fn parse_cst<'t>(text: &'t str, file: &str) -> Result<rusk_grammar_trait::Rusk<'t>, String> {
     let mut grammar = rusk_grammar::RuskGrammar::default();
     rusk_parser::parse(text, file, &mut grammar).map_err(|e| {
@@ -103,52 +103,9 @@ fn run() -> Result<(), String> {
         "lir" => backend::Emit::Lir,
         _ => backend::Emit::Cpp,
     };
-    let mut core = parse(CORE, "<stdlib/core.rusk>")?;
-    for statement in &mut core {
-        if let ast::Stmt::Symbol(_, properties) = statement
-            && let Some(code) = properties.get_mut("code")
-        {
-            *code = code.replace("/* RUSK_IO_RUNTIME */", include_str!("../lib/io.hpp"));
-            code.push_str(include_str!("../lib/scalar.hpp"));
-        }
-    }
-    let mut collections = parse(
-        include_str!("../lib/collections.rusk"),
-        "<stdlib/collections.rusk>",
-    )?;
-    for statement in &mut collections {
-        if let ast::Stmt::Symbol(_, properties) = statement
-            && let Some(code) = properties.get_mut("code")
-        {
-            code.push_str(include_str!("../lib/containers.hpp"));
-        }
-    }
     let source = source::load(std::path::Path::new(&file))?.statements;
-    let algorithms = parse(
-        include_str!("../lib/algorithms.rusk"),
-        "<stdlib/algorithms.rusk>",
-    )?;
-    let cpp = compiler::Compiler::with_optimization(optimize).compile(
-        &[
-            compiler::Source::standard(core),
-            compiler::Source::standard(collections),
-            compiler::Source::standard(parse(
-                include_str!("../lib/vec.rusk"),
-                "<stdlib/vec.rusk>",
-            )?),
-            compiler::Source::standard(parse(
-                include_str!("../lib/hash_collections.rusk"),
-                "<stdlib/hash_collections.rusk>",
-            )?),
-            compiler::Source::standard(parse(
-                include_str!("../lib/lazy_iterators.rusk"),
-                "<stdlib/lazy_iterators.rusk>",
-            )?),
-            compiler::Source::standard(algorithms),
-            compiler::Source::user(source),
-        ],
-        emit,
-    )?;
+    let cpp = compiler::Compiler::with_optimization(optimize)
+        .compile(&[stdlib::load()?, compiler::Source::user(source)], emit)?;
     std::fs::write(&output, cpp).map_err(|e| format!("{output}: {e}"))?;
     Ok(())
 }

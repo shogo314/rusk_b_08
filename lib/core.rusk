@@ -1,8 +1,8 @@
 // C++ backend definitions. code/cpp_name are provisional prototype properties.
 
-extern symbol __core__ {
-    code: "#include <cstdint>\n#include <cstdlib>\n#include <iostream>\n#include <memory>\n#include <utility>\n#include <string>\n#include <charconv>\n#include <limits>\n#include <system_error>\nstruct Unit {};\nstruct Loc { const char* file; unsigned line, column; };\ntemplate<class T> using Obj = std::shared_ptr<T>;\ntemplate<class T> Obj<T> make_obj(T value) { return std::make_shared<T>(std::move(value)); }\n[[noreturn]] inline void fail(Loc loc, const char* message) {\n    std::cerr << loc.file << ':' << loc.line << ':' << loc.column << \": \" << message << '\\n';\n    std::exit(1);\n}\ninline std::int64_t checked_int(__int128 value, Loc loc) {\n    if (value < std::numeric_limits<std::int64_t>::min() || value > std::numeric_limits<std::int64_t>::max()) fail(loc, \"integer overflow\");\n    return static_cast<std::int64_t>(value);\n}\ninline bool ascii_space(int c) { return c == ' ' || (c >= 9 && c <= 13); }\n/* RUSK_IO_RUNTIME */\ninline std::string read_token(Loc loc) {\n    while (ascii_space(rusk_peek())) rusk_get();\n    if (rusk_peek() == std::char_traits<char>::eof()) fail(loc, \"unexpected end of input\");\n    std::string token;\n    while (rusk_peek() != std::char_traits<char>::eof() && !ascii_space(rusk_peek())) token.push_back(static_cast<char>(rusk_get()));\n    return token;\n}\ninline void require_ascii(const std::string& text, Loc loc) {\n    for (unsigned char c : text) if (c > 127) fail(loc, \"non-ASCII input\");\n}\n\n\n",
-}
+
+
+
 
 extern type Int {
     representation: "i64",

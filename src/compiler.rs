@@ -19,6 +19,7 @@ mod ir_types;
 mod native_functions;
 mod patterns;
 mod records;
+mod symbols;
 mod tuples;
 mod type_metadata;
 
@@ -127,7 +128,8 @@ pub struct Compiler {
     native_types: BTreeMap<String, type_metadata::Metadata>,
     native_unit_objects: BTreeSet<usize>,
     native_unit_bridges: BTreeSet<(usize, crate::native_abi::UnitBridge)>,
-    symbols: BTreeMap<String, String>,
+    symbols: BTreeMap<String, symbols::Symbol>,
+    symbol_order: Vec<String>,
     scopes: Vec<BTreeMap<String, Variable>>,
     body: Body,
     no_optimization: bool,
@@ -406,20 +408,12 @@ impl Compiler {
                             checked: None,
                         });
                     }
-                    Stmt::Symbol(n, p) => {
-                        validate(n, p, &["code"])?;
-                        if self
-                            .symbols
-                            .insert(n.text.clone(), property(n, p, "code")?)
-                            .is_some()
-                        {
-                            return Err(n.span.error("duplicate symbol"));
-                        }
-                    }
+                    Stmt::Symbol(n, p) => self.register_symbol(n, p)?,
                     _ => {}
                 }
             }
         }
+        self.prepare_symbols()?;
         self.prepare_native_types()?;
         // Check every body, including unused functions, in an isolated variable scope.
         for i in 0..self.functions.len() {

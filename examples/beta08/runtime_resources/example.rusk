@@ -1,0 +1,7 @@
+extern symbol Alpha { code_file:"outer.hpp", depends:"Zeta", }
+extern symbol Zeta { code_file:"leaf.hpp", }
+extern fn resource()->Int {
+    cpp_name:"read_resource",
+    code:"Obj<std::int64_t> read_resource(Loc){return make_obj<std::int64_t>(resource_value());}",
+}
+wt resource();let values:=[resource(),2];wt values.map((x:Int)=>x+1).to_vec();

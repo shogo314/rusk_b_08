@@ -200,27 +200,12 @@ extern type Str {cpp_name:"std::string",}
 
     #[test]
     fn lowered_value_references_can_call_both_unit_abi_bridges() {
-        let mut core = crate::parse(include_str!("../../lib/core.rusk"), "core.rusk").unwrap();
-        let mut collections = crate::parse(
+        let core = crate::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk").unwrap();
+        let collections = crate::parse(
             include_str!("../../lib/collections.rusk"),
-            "collections.rusk",
+            "renamed-collections.rusk",
         )
         .unwrap();
-        for statement in &mut core {
-            if let Stmt::Symbol(_, properties) = statement {
-                let code = properties.get_mut("code").unwrap();
-                *code = code.replace("/* RUSK_IO_RUNTIME */", include_str!("../../lib/io.hpp"));
-                code.push_str(include_str!("../../lib/scalar.hpp"));
-            }
-        }
-        for statement in &mut collections {
-            if let Stmt::Symbol(_, properties) = statement {
-                properties
-                    .get_mut("code")
-                    .unwrap()
-                    .push_str(include_str!("../../lib/containers.hpp"));
-            }
-        }
         let definitions=crate::parse(r#"
 extern fn touch(x:Unit){cpp_name:"lower_touch",code:"void lower_touch(Obj<Unit>,Loc){}",}
 extern fn flag<T>(x:T)->Bool{
@@ -242,6 +227,7 @@ extern fn via<T>(x:T)->Bool{
         std::fs::create_dir(&temp).unwrap();
         for optimize in [true, false] {
             let sources = [
+                Source::standard(crate::stdlib::runtime()),
                 Source::standard(core.clone()),
                 Source::standard(collections.clone()),
                 Source::standard(

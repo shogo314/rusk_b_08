@@ -133,3 +133,130 @@ fn include_aliases_through_symlinks_load_once() {
     assert!(out.status.success());
     assert_eq!(out.stdout, b"1\n");
 }
+
+#[test]
+fn native_code_files_resolve_relative_to_includes_and_follow_symbol_dependencies() {
+    let case = Case::new(
+        r#"include "lib/defs.rusk";include "lib/../lib/defs.rusk";wt answer(),marker();"#,
+    );
+    file(
+        &case,
+        "lib/defs.rusk",
+        r#"
+extern symbol Alpha{code_file:"alpha.hpp",depends:"Zeta",}
+extern symbol Zeta{code_file:"zeta.hpp",}
+extern fn answer()->Int{cpp_name:"native_answer",code:"Obj<std::int64_t> native_answer(Loc){return make_obj<std::int64_t>(alpha());}",}
+extern fn marker()->Str{cpp_name:"native_marker",code:"Obj<std::string> native_marker(Loc){return make_obj<std::string>(literal_marker());}",}
+"#,
+    );
+    file(
+        &case,
+        "lib/alpha.hpp",
+        "inline int alpha(){return zeta()+3;}\n",
+    );
+    file(
+        &case,
+        "lib/zeta.hpp",
+        r#"inline int zeta(){return 4;}
+inline const char* literal_marker(){return "/* RUSK_IO_RUNTIME */ @{Int} {Int}";}
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"7 /* RUSK_IO_RUNTIME */ @{Int} {Int}\n");
+    }
+    let dependencies = Command::new(env!("CARGO_BIN_EXE_rusk"))
+        .arg("dependencies")
+        .arg(case.0.join("main.rusk"))
+        .output()
+        .unwrap();
+    assert!(dependencies.status.success());
+    let paths = String::from_utf8(dependencies.stdout).unwrap();
+    assert_eq!(paths.lines().count(), 4, "{paths}");
+    for name in ["main.rusk", "defs.rusk", "alpha.hpp", "zeta.hpp"] {
+        assert!(paths.contains(name), "{paths}");
+    }
+    let cpp = fs::read_to_string(case.0.join("main.cpp")).unwrap();
+    assert_eq!(cpp.matches("inline int zeta()").count(), 1);
+    assert!(cpp.find("inline int zeta()").unwrap() < cpp.find("inline int alpha()").unwrap());
+}
+
+#[test]
+fn native_resource_failures_report_the_declaring_file_and_do_not_write_output() {
+    for definition in [
+        "extern symbol Demo{code_file:\"missing.hpp\",}",
+        "extern symbol Demo{code_file:\"missing.hpp\",code:\"inline int x;\",}",
+        "extern symbol Demo{code:\"inline int x;\",depends:\"Missing\",}",
+        "extern symbol Demo{code:\"inline int x;\",depends:\"Other\",}extern symbol Other{code:\"inline int y;\",depends:\"Demo\",}",
+    ] {
+        let case = Case::new("include \"lib/defs.rusk\";");
+        file(&case, "lib/defs.rusk", definition);
+        let out = case.compile();
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && error.contains("defs.rusk:1:"),
+            "{error}"
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+}
+
+#[test]
+fn embedded_standard_resources_work_from_an_unrelated_directory_and_keep_user_code_untrusted() {
+    let case = Case::new("wt [1,2].map((x:Int)=>x*3).to_vec();");
+    let out = Command::new(env!("CARGO_BIN_EXE_rusk"))
+        .current_dir(&case.0)
+        .args(["compile", "main.rusk", "-o", "standalone.cpp"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = Command::new("g++")
+        .current_dir(&case.0)
+        .args(["-std=c++20", "standalone.cpp", "-o", "standalone"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = Command::new(case.0.join("standalone")).output().unwrap();
+    assert!(out.status.success());
+    assert_eq!(out.stdout, b"3 6\n");
+    file(&case, "main.rusk", "include \"lib/fake.rusk\";");
+    file(
+        &case,
+        "lib/fake.rusk",
+        r#"extern symbol Fake{code_file:"native.hpp",}extern type Counter{cpp_name:"int",representation:"i64",}"#,
+    );
+    file(&case, "lib/native.hpp", "inline int native_counter;\n");
+    let out = case.compile();
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && error.contains("type representations are reserved"),
+        "{error}"
+    );
+}
+
+#[test]
+fn native_resource_example_combines_user_fragments_with_embedded_libraries() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/beta08/runtime_resources/example.rusk"
+    );
+    let case = Case::new(&format!("include {path:?};"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"10\n11 3\n");
+    }
+}

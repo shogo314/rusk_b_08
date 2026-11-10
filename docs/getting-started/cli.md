@@ -46,4 +46,4 @@ rusk compile main.rusk --emit lir -o /tmp/main.lir
 rusk dependencies main.rusk
 ```
 
-読み込み対象のソースパスを出力します。依存ファイルの確認に使うコマンドで、プログラム全体の型検査や実行は行いません。ファイル分割の書き方は[include](../reference/beta02.md)を参照してください。
+読み込み対象のRuskソースと、`extern symbol`の`code_file`・`code_files`で参照するC++ファイルのパスを出力します。依存ファイルの確認に使うコマンドで、プログラム全体の型検査や実行は行いません。ファイル分割の書き方は[include](../reference/beta02.md)を参照してください。

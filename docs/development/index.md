@@ -17,9 +17,12 @@
 | `src/lir.rs` | 基本ブロック・分岐・ジャンプ・解放を持つLIRと検査 |
 | `src/backend/` | LIRからのC++出力、標準演算と値の表現の最適化 |
 | `lib/io.hpp` と `lib/scalar.hpp` | 生成C++に埋め込むバッファ入出力と一時値のランタイム |
-| `src/source.rs` | 相対パスによるinclude展開・重複と循環の検査・依存ファイル一覧 |
+| `src/source.rs` | ファイル・埋込資源に共通のincludeとC++資源読込・依存ファイル一覧 |
+| `src/stdlib.rs`・`lib/prelude.rusk` | 埋込資源のカタログと通常のincludeによる標準prelude |
+| `lib/runtime.rusk`・`src/compiler/symbols.rs` | C++資源の宣言とシンボル依存順序の検査 |
 | `lib/core.rusk` | 基本型・演算・入出力の定義 |
-| `lib/collections.rusk` | 配列・イテレータ・文字の共有を管理するC++ランタイム |
+| `lib/collections.rusk` | Option・構造展開による導出・共通操作の宣言 |
+| `lib/base.hpp`・`lib/token_io.hpp`・`lib/sequence_runtime.hpp`・`lib/lazy_iterators.hpp` | 基本ABI・トークン入力・共有コンテナと遅延反復のC++レイアウト |
 | `lib/vec.rusk` | 配列の基本操作と配列反復型のジェネリックextern宣言 |
 | `lib/hash_collections.rusk` | Dict/Setの型・キー演算・反復・コピー・操作のジェネリックextern宣言 |
 | `lib/containers.hpp` | キー演算を受け取るC++コンテナの共通レイアウトとenumのABI補助 |
@@ -51,7 +54,7 @@ extern fn __add__(a: Int, b: Int) -> Int {
 }
 ```
 
-これは標準ライブラリから抜粋した例で、利用プログラムに再定義する必要はありません。`extern symbol 名前 { code: "...", }` は共通コードを出力します。すべてのsymbolと、必要になった外部関数のコードを出力します。symbol間は名前順です。外部関数間の依存は型付きの関数参照で登録でき、前方参照と相互再帰にも対応します。ジェネリックexternと参照記法は[β08の試作](beta08-extern-prototype.md)を参照してください。
+これは標準ライブラリから抜粋した例で、利用プログラムに再定義する必要はありません。`extern symbol 名前 { code: "...", }` は共通コードを出力します。すべてのsymbolと、必要になった外部関数のコードを出力します。symbol間は`depends`で指定した依存先を先に出し、その時点で依存を満たした候補間は名前順です。未定義の依存と循環はRusk側で診断します。共通コードは`code_file`や順序付きの`code_files`からも読み込めます。外部関数間の依存は型付きの関数参照で登録でき、前方参照と相互再帰にも対応します。ジェネリックexternと参照記法は[β08の試作](beta08-extern-prototype.md)を参照してください。
 
 ABI は引数と戻り値を `Obj<T>`（現在は `std::shared_ptr<T>`）で渡し、末尾にエラー位置の `Loc` を受け取ります。戻り型省略時は C++側を `void` にします。外部関数には正しい C++ と共有・コピーの契約を守る責任があります。
 

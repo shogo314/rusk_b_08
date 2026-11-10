@@ -197,28 +197,12 @@ extern fn __assign__(x:Number,y:Number) {cpp_name:"store_number",code:"void stor
 extern fn __write__(x:Number) {cpp_name:"print_number",code:"void print_number(Obj<std::int64_t> x,Loc){rusk_write(*x);}",lower:"rusk_write(*$0)",effects:"io_write",}
 let x:=number(3);let alias:=x;alias=number(9);wt x;
 "#;
-        let mut core =
-            crate::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk").unwrap();
-        let mut collections = crate::parse(
+        let core = crate::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk").unwrap();
+        let collections = crate::parse(
             include_str!("../../lib/collections.rusk"),
             "renamed-collections.rusk",
         )
         .unwrap();
-        for statement in &mut core {
-            if let Stmt::Symbol(_, properties) = statement {
-                let code = properties.get_mut("code").unwrap();
-                *code = code.replace("/* RUSK_IO_RUNTIME */", include_str!("../../lib/io.hpp"));
-                code.push_str(include_str!("../../lib/scalar.hpp"));
-            }
-        }
-        for statement in &mut collections {
-            if let Stmt::Symbol(_, properties) = statement {
-                properties
-                    .get_mut("code")
-                    .unwrap()
-                    .push_str(include_str!("../../lib/containers.hpp"));
-            }
-        }
         let temp = std::env::temp_dir().join(format!(
             "rusk-native-representation-{}-{}",
             std::process::id(),
@@ -230,6 +214,7 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
         std::fs::create_dir(&temp).unwrap();
         for optimize in [true, false] {
             let sources = [
+                Source::standard(crate::stdlib::runtime()),
                 Source::standard(core.clone()),
                 Source::standard(collections.clone()),
                 Source::standard(
@@ -287,6 +272,7 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
         let cpp = Compiler::default()
             .compile(
                 &[
+                    Source::standard(crate::stdlib::runtime()),
                     Source::standard(core),
                     Source::standard(collections),
                     Source::standard(
