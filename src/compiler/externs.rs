@@ -76,18 +76,6 @@ impl Compiler {
         origin: Origin,
     ) -> Result<(), String> {
         generics::parameters_valid(parameters)?;
-        let base = tuples::type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base);
-        if name.text.starts_with("__Rusk")
-            || (base == "Vec" && origin != Origin::StandardLibrary)
-            || matches!(
-                tuples::type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base),
-                "Tuple" | "Option"
-            )
-        {
-            return Err(name
-                .span
-                .error("generic extern requires an unreserved type constructor name"));
-        }
         if self.types.contains_key(&name.text)
             || self.generic_records.contains_key(&name.text)
             || self.generic_extern_types.contains_key(&name.text)

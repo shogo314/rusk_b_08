@@ -2279,3 +2279,40 @@ fn coalesce_protocols_preserve_readonly_noescape_and_validate_unselected_paths()
     assert_eq!(out.stdout, b"1\n");
     assert!(String::from_utf8_lossy(&out.stderr).contains("absent Option value"));
 }
+
+#[test]
+fn option_constructor_names_follow_ordinary_function_overload_rules() {
+    let source = r#"
+fn Some(x:Str)->Int{return x.len();}
+fn Some<T>(x:T,unused:Int)->T{return x;}
+fn None(x:Int)->Int{return x+1;}
+fn Option(x:Int)->Int{return x+2;}
+fn try_read(x:Int)->Int{return x+3;}
+wt Some("abc"),Some(7)??0,Some(8,0),None(9),Option(10),try_read(11);
+let absent:Option<Int>:=None;wt absent??12,None::<Int>()??13,Option::<Int>()??14;
+let values:=[1];let held:=Some(values,0);held[0]=4;wt values;
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3 7 8 10 12 14\n12 13 14\n4\n");
+    }
+    for source in [
+        "fn Some<T>(x:T)->Option<T>{return Option::Some(x);}",
+        "fn None<T>()->Option<T>{return Option::None;}",
+        "fn Option<T>()->Option<T>{return Option::None;}",
+        "fn try_read<T>()->Option<T>{return Option::None;}",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("main.rusk:") && error.contains("duplicate generic function"),
+            "{error}"
+        );
+    }
+}

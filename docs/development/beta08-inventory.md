@@ -20,7 +20,7 @@
 | N02 | `compiler.rs::check_type/specialize_vector`のVec型の専用登録と要素制限 | 移行済み：Vec・配列反復型と32操作を通常のジェネリックexternへ移行。型・操作の専用登録、要素型の列挙、広域置換を削除し、コピーも要素の通常の操作を解決する | G1、G2、G4 | `e2e`、`records`、`enums`、`beta06`、`library_migration`、`extern_generics` |
 | N03 | `compiler.rs::call`のenum→container→通常解決→collection→higher_orderという専用経路 | 移行中：Dict/Setの構築・主要操作も通常の候補解決へ移し、container/collectionの呼び出し経路を削除。enum構文と、遅延反復等の残る処理は別項目で扱う | G1〜G5 | `generics`、`higher_order`、`beta05`、`enums` |
 | N04 | `compiler.rs::return_selected`、`containers.rs::container_argument_hint`のread・Vec構築・Some・Dict操作に固有の型ヒント | Dict/Setのキー・値・添字の専用ヒントを削除し、宣言の引数と結果の期待型を通常の推論へ接続。残る構文のヒントは個別に確認する | G1、G2 | `generics`、`beta05`、`enums`＋期待型だけで決まるextern |
-| N05 | `compiler.rs::compile`、`enums.rs::register_enum`の標準型・構築関数の予約名 | 要設計：内部生成名の保護は残す。標準型・関数の予約は重複宣言と構文上の必要性を個別に確認 | G1、G5 | `generics`、`records`、`enums`の不正宣言 |
+| N05 | `compiler.rs::compile`、`enums.rs::register_enum`の標準型・構築関数の予約名 | 標準型の予約一覧を削除し、型系列の共通の重複検査へ統合。Some/None/Option/try_readの利用者関数禁止も削除し通常の候補・署名検査を使う。内部生成名とTupleの言語構築子だけを全宣言共通で保護。bare Noneの構文判定はN07で継続 | G1、G5 | `generics`、`records`、`enums`の不正宣言 |
 | N06 | `generics.rs`の型引数の照合・AST代入・具体化キャッシュ・再帰上限 | 基盤候補：任意の宣言の具体化。Rusk ASTの識別子代入はC++本体の広域置換とは別で、G1に拡張する | G1、G2 | `generics`、`enums`の型変数とvariant名の衝突 |
 | N07 | `compiler.rs::expr/statement/binary_name`、`expressions.rs`、`tuples.rs::assign_tuple_value`の演算子・配列・範囲・for・代入・短絡の展開 | 基盤候補：構文から操作を呼ぶ規約と評価順序は残す。呼び出す標準操作の実装は移行。`??`の型名・variant位置と`?!`のOption限定検査は通常の操作宣言へ分離済み。予約名とbare None等はN05で継続 | G5 | `bindings`、`tuples`、`blocks_labels`、`beta05`、`optimization` |
 | N08 | `ast.rs`のリテラル型、`compiler.rs::literal`、`patterns/coverage.rs`のBool・Int・Str等の被覆判定 | 基盤候補：リテラルとパターンの言語仕様。基本型の登録・表現情報との境界を明記する | G4、G5 | `enums`、`pipeline`、`e2e` |
@@ -118,3 +118,5 @@
 | A02・G4の子の効果と返却別名の合成 | 共通の対応付きcall/invoke参照と遅延copyへ適用 | 子の引数・結果を外側の引数・保持先へ対応付け、通常の署名・ABI・論理型で検査する。子の効果を固定点で解決して合成し、所有元の共有を保つ。破棄結果の局所性、捕捉環境、変更・外部保持・IO・失敗・停止性を扱い、直接または子の変更後は、別の引数が後続の操作の対象になる可能性に備えて引数効果も保守的に広げ、返却元を不明へ広げる。未知・循環と対応のない参照は安全と仮定しない。遅延copyに適用し、非変更の場合だけ追加保持を省く。他の遅延操作・導出・反復アルゴリズム、共通の読込と依存順序、例外の確定と全体の最終比較は継続 |
 | A09・A10のランタイム読込とシンボル依存 | 通常の宣言と共通ローダーへ移行 | 標準preludeを通常のinclude、C++資源をcode_file/code_files、断片間の生成順をdependsへ移した。利用者にも同じ読込と依存検査を使い、mainのマーカー置換とヘッダー追記を削除。資源カタログは梱包に限定し、信頼元はSourceで保持する。相対パス・重複・循環・不正な依存・制限・原文保持・単独実行と利用者の信頼境界を検証。既存121入力の両モード、計242ケースの生成C++が373a656と全文一致。論理型・関数署名とレイアウトの依存は既存の共通基盤として最終監査する |
 | N07・L12の??・?! | 型名・variant位置の固定を通常の操作宣言へ移行 | 短絡と評価順・初期化は構文に維持し、有無と取得を通常の候補解決へ接続。標準enumの意味情報を検査し、同じvariantの検査済み取得は従来のIRへ接続する。任意のvariant/payload番号と論理型・Unit ABIを検証し、参照した呼び出しを省かない。別名の標準enum、利用者のChoice/Envelope、標準Noneとの期待型の共存とreadonly/noescapeを検証。予約名・bare None等の分類と他の効果・保存先の対応、最終監査・性能比較は継続 |
+
+| N05の標準名予約 | 通常の型系列・関数署名検査へ統合 | Vec・Option・Iterは標準宣言がなければ通常の利用者型名として使え、標準宣言があるときは他の型と同じ衝突検査を使う。Some・None・Option・try_readの別引数の通常／ジェネリック関数を受理し、同一のジェネリック署名は拒否する。内部生成名とTupleの予約だけを共通の型宣言検査へ集約し、具体externの抜け道も拒否する。bare Noneの式の判定と効果・保存先・最終監査は継続 |

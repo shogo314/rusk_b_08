@@ -25,7 +25,7 @@ include struct enum match fn return extern type symbol let fixed rebindable read
 if else for while loop break continue true false
 ```
 
-`__Rusk` で始まる型名は処理系内部用のため定義できません。`Int`、`Bool`、`Char`、`Str`、`Unit` は標準型名、`Vec`・`Tuple`・`Option`・`Dict`・`Set` は処理系が扱う型構築子です。`Some`・`None`・`Option`・`Dict`・`Set`・`try_read` は標準の構築・入力用の関数名として予約しています。`__add__` などの名前は演算フックにも使うため、通常の変数・関数には説明的な名前を使います。
+`__Rusk`で始まる型名は処理系内部用、`Tuple`はタプル構文の型構築子のため定義できません。`Int`・`Bool`・`Char`・`Str`・`Unit`・`Vec`・`Option`・`Dict`・`Set`等は標準ライブラリの宣言であり、利用者の型宣言との衝突は通常の型系列の重複として検査します。`Some`・`None`・`Option`・`Dict`・`Set`・`try_read`は通常の標準関数です。引数の異なるオーバーロードを定義できますが、同じ署名のジェネリック関数を重複定義することはできません。`__add__`などの名前は演算フックにも使うため、通常の変数・関数には説明的な名前を使います。
 
 ## プログラムと文
 

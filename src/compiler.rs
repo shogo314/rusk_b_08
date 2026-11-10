@@ -208,11 +208,6 @@ impl Compiler {
                     )?;
                 }
                 if let Stmt::Struct(name, parameters, fields) = s {
-                    if name.text.starts_with("__Rusk")
-                        || matches!(name.text.as_str(), "Vec" | "Tuple" | "Iter" | "Option")
-                    {
-                        return Err(name.span.error("reserved built-in type constructor"));
-                    }
                     if !parameters.is_empty() {
                         self.register_generic_record(generics::GenericRecord {
                             name: name.clone(),
@@ -237,9 +232,6 @@ impl Compiler {
                     );
                 }
                 if let Stmt::Type(n, p) = s {
-                    if n.text.starts_with("__Rusk") {
-                        return Err(n.span.error("reserved internal type name"));
-                    }
                     if self.generic_records.contains_key(&n.text)
                         || self.generic_extern_types.contains_key(&n.text)
                     {
@@ -294,11 +286,6 @@ impl Compiler {
         self.prepare_records()?;
         for source in sources {
             for s in source {
-                if let Stmt::UserFunction(name, ..) = s
-                    && matches!(name.text.as_str(), "Some" | "None" | "Option" | "try_read")
-                {
-                    return Err(name.span.error("reserved built-in constructor name"));
-                }
                 if let Stmt::UserFunction(_, parameters, ..) = s
                     && !parameters.is_empty()
                 {
