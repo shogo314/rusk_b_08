@@ -114,33 +114,72 @@ impl Compiler {
         expected: Option<&str>,
         span: &Span,
     ) -> Result<Value, String> {
-        let hint = expected.map(|ty| format!("Option<{ty}>"));
-        let value = self.expr(left, hint.as_deref())?;
+        let hints = self.argument_hints("__coalesce_value__", 1, &[], expected);
+        let hints = hints
+            .into_iter()
+            .filter(|ty| self.expression_accepts_hint(left, ty))
+            .collect::<Vec<_>>();
+        let hint = (hints.len() == 1).then(|| hints[0].as_str());
+        let value = self.expr(left, hint)?;
         if self.diverged {
             return Ok(Value::never());
         }
-        let element = self
-            .option_element(&value.ty)
-            .ok_or_else(|| span.error("left operand of ?? must be Option<T>"))?;
-        let condition = self.emit(
-            "Bool",
-            Rvalue::VariantTest {
-                owner: value.clone(),
-                index: 0,
-            },
-        );
+        let getter = self
+            .resolve_callable(
+                "__coalesce_value__",
+                std::slice::from_ref(&value),
+                expected,
+                span,
+            )?
+            .ok_or_else(|| {
+                span.error(format!(
+                    "no matching coalesce value operation for '{}'",
+                    value.ty
+                ))
+            })?;
+        let element = self.functions[getter].result.clone();
+        let test = self
+            .resolve_callable(
+                "__coalesce_test__",
+                std::slice::from_ref(&value),
+                Some("Bool"),
+                span,
+            )?
+            .ok_or_else(|| {
+                span.error(format!(
+                    "no matching coalesce test operation for '{}'",
+                    value.ty
+                ))
+            })?;
+        self.same("Bool", &self.functions[test].result, span)?;
+        let direct = self.guarded_enum_field(test, getter);
+        let condition = if let Some((variant, _)) = direct {
+            self.emit(
+                "Bool",
+                Rvalue::VariantTest {
+                    owner: value.clone(),
+                    index: variant,
+                },
+            )
+        } else {
+            self.call("__coalesce_test__", vec![value.clone()], Some("Bool"), span)?
+        };
         self.conditional(
             condition,
             Some(&element),
             |c, _| {
-                Ok(c.emit(
-                    &element,
-                    Rvalue::VariantField {
-                        owner: value,
-                        variant: 0,
-                        index: 0,
-                    },
-                ))
+                if let Some((variant, index)) = direct {
+                    Ok(c.emit(
+                        &element,
+                        Rvalue::VariantField {
+                            owner: value,
+                            variant,
+                            index,
+                        },
+                    ))
+                } else {
+                    c.call("__coalesce_value__", vec![value], Some(&element), span)
+                }
             },
             |c, ty| c.expr(right, ty),
             span,

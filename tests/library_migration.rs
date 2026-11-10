@@ -827,14 +827,24 @@ fn option_operations_and_constructors_are_independent_generic_declarations() {
     let mut declarations = source[source.find("extern fn Some").unwrap()..]
         .lines()
         .filter(|line| {
-            !["effects:", "lower:"]
+            !["effects:", "lower:", "operation:"]
                 .iter()
                 .any(|p| line.trim_start().starts_with(p))
         })
         .collect::<Vec<_>>()
         .join("\n");
     for name in [
-        "Some", "None", "Option", "is_some", "is_none", "__bool__", "__not__", "value", "try_read",
+        "Some",
+        "None",
+        "Option",
+        "is_some",
+        "is_none",
+        "__bool__",
+        "__not__",
+        "value",
+        "try_read",
+        "__coalesce_test__",
+        "__coalesce_value__",
     ] {
         declarations =
             declarations.replace(&format!("fn {name}<"), &format!("fn migrated_{name}<"));
@@ -2227,4 +2237,45 @@ fn lazy_copy_holds_the_source_state_when_captured_copy_releases_its_container() 
         );
         assert_eq!(out.stdout, b"0 8 9\n0 3 4\n");
     }
+}
+
+#[test]
+fn coalesce_and_unwrap_resolve_ordinary_operations_for_unrelated_types() {
+    let source = include_str!("../examples/beta08/coalesce_protocols.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"7 0\n3 1\n8 9 10 0\na ab!\n6\n");
+    }
+}
+
+#[test]
+fn coalesce_protocols_preserve_readonly_noescape_and_validate_unselected_paths() {
+    let accepted =
+        "fn local(readonly noescape x:Option<Int>)->Int{return (x??1)+0;}wt local(Some(3));";
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(accepted).run_with_options("", &options);
+        assert!(out.status.success());
+        assert_eq!(out.stdout, b"3\n");
+    }
+    for source in [
+        "fn bad(readonly x:Option<Int>){(x??1)=7;}bad(Some(3));",
+        "fn bad(noescape x:Option<Vec<Int>>)->Vec<Int>{return x??[];}bad(Some([1]));",
+        "fn __coalesce_test__(x:Int)->Int{return x;}fn __coalesce_value__(x:Int)->Int{return x;}wt 1??2;",
+        "wt Some(1)??false;",
+        "let x:Int;let o:=Some(1);o??(x:=2);wt x;",
+        "let value:=Some(1);wt value??missing;",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success(), "{source}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("main.rusk:"));
+    }
+    let out = Case::new("wt 1;__coalesce_value__(None::<Int>());").run("");
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.stdout, b"1\n");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("absent Option value"));
 }

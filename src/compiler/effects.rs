@@ -119,6 +119,10 @@ impl Compiler {
             {
                 true
             }
+            Some(descriptor) if descriptor.starts_with("enum_") => {
+                self.register_enum_operation(index, name, descriptor, params, result, properties)?;
+                false
+            }
             _ => return Err(name.span.error("invalid native operation descriptor")),
         };
         if scalar.is_some() || owned.is_some() {

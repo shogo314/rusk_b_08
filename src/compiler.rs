@@ -9,6 +9,7 @@ mod bindings;
 mod callables;
 mod cpp;
 mod effects;
+mod enum_operations;
 mod enums;
 mod expressions;
 mod externs;
@@ -120,6 +121,7 @@ pub struct Compiler {
     native_mapped_dependencies:
         BTreeMap<usize, Vec<crate::native_effects::composition::Dependency>>,
     native_lowerings: BTreeMap<usize, crate::native_lowering::Lowering>,
+    native_enum_operations: BTreeMap<usize, enum_operations::Operation>,
     native_references: BTreeSet<usize>,
     native_value_references: BTreeSet<usize>,
     native_owned_references: BTreeSet<usize>,
@@ -1314,9 +1316,6 @@ impl Compiler {
                 let value = self.expr(value, None)?;
                 if self.diverged {
                     return Ok(Value::never());
-                }
-                if self.option_element(&value.ty).is_none() {
-                    return Err(e.span.error("?! requires Option<T>"));
                 }
                 self.call("value", vec![value], None, &e.span)
             }

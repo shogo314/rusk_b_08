@@ -9,12 +9,24 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 pub(crate) struct Case(pub(crate) PathBuf);
 impl Case {
     pub(crate) fn new(source: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "rusk-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&dir).unwrap();
+        // Separate sandboxed commands can have identical namespace-local PIDs.
+        // Claim a fresh directory atomically; never reuse another test's files.
+        let dir = loop {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "rusk-test-{}-{stamp}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            match fs::create_dir(&path) {
+                Ok(()) => break path,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("cannot create test directory: {error}"),
+            }
+        };
         fs::write(dir.join("main.rusk"), source).unwrap();
         Self(dir)
     }

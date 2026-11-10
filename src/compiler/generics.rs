@@ -431,6 +431,86 @@ impl Compiler {
         Ok((results.len() == 1).then(|| results[0].clone()))
     }
 
+    // A contextual receiver type must also be compatible with the expression
+    // that constructs it. Inspect declared signatures without evaluating code.
+    pub(super) fn expression_accepts_hint(&self, expression: &Expr, expected: &str) -> bool {
+        let (name, count) = match &expression.kind {
+            ExprKind::Call(name, args) => (name.text.as_str(), args.len()),
+            ExprKind::Var(name) if self.local_variable(&name.text).is_none() => {
+                (name.text.as_str(), 0)
+            }
+            _ => return true,
+        };
+        if let Some((owner, variant)) = name.rsplit_once("::") {
+            let (base, args) = type_parts(owner).unwrap_or((owner, vec![]));
+            if let Some(definition) = self.enum_definitions.get(base)
+                && definition
+                    .variants
+                    .iter()
+                    .any(|(v, fields)| v.text == variant && fields.len() == count)
+            {
+                let pattern = if definition.parameters.is_empty() {
+                    base.to_string()
+                } else {
+                    format!(
+                        "{base}<{}>",
+                        definition
+                            .parameters
+                            .iter()
+                            .map(|p| p.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                };
+                let mut bindings = BTreeMap::new();
+                if !args.is_empty() {
+                    if args.len() != definition.parameters.len() {
+                        return false;
+                    }
+                    bindings.extend(
+                        definition
+                            .parameters
+                            .iter()
+                            .zip(args)
+                            .map(|(p, t)| (p.text.clone(), t.to_string())),
+                    );
+                }
+                return unify(&pattern, expected, &definition.parameters, &mut bindings);
+            }
+        }
+        let base = type_parts(name).map_or(name, |(base, _)| base);
+        let mut found = false;
+        for (id, function) in self.functions.iter().enumerate() {
+            if function.name.text == name
+                && function.params.len() == count
+                && !self.generic_calls.contains_key(&id)
+            {
+                found = true;
+                if function.result == expected {
+                    return true;
+                }
+            }
+        }
+        for function in &self.generic_functions {
+            if function.name.text != base || function.arguments.len() != count {
+                continue;
+            }
+            found = true;
+            let Some(mut bindings) = explicit_bindings(name, &function.parameters) else {
+                continue;
+            };
+            if unify(
+                function.result.as_ref().map_or("Unit", |r| r.text.as_str()),
+                expected,
+                &function.parameters,
+                &mut bindings,
+            ) {
+                return true;
+            }
+        }
+        !found
+    }
+
     pub(super) fn argument_hints(
         &self,
         name: &str,
@@ -612,13 +692,20 @@ impl Compiler {
             String::new()
         };
         if let Some(properties) = &definition.foreign
-            && let Some(effects) = self.declared_native_effects(
-                &definition.name,
-                &self.functions[index].params,
-                &self.functions[index].result,
-                properties,
-                definition.origin,
-            )?
+            && let Some(effects) = self
+                .declared_native_effects(
+                    &definition.name,
+                    &self.functions[index].params,
+                    &self.functions[index].result,
+                    properties,
+                    definition.origin,
+                )
+                .map_err(|error| {
+                    format!(
+                        "{error}\nwhile instantiating '{name}' at {}:{}:{}",
+                        span.file, span.line, span.column
+                    )
+                })?
         {
             self.native_contracts.insert(index, effects);
         }
@@ -644,7 +731,13 @@ impl Compiler {
                 &self.functions[index].result.clone(),
                 &properties,
                 definition.origin,
-            )?;
+            )
+            .map_err(|error| {
+                format!(
+                    "{error}\nwhile instantiating '{name}' at {}:{}:{}",
+                    span.file, span.line, span.column
+                )
+            })?;
         }
         self.functions[index].code = code;
         Ok(Some(index))

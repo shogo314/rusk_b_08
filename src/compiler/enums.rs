@@ -10,7 +10,6 @@ pub(super) struct Definition {
 #[derive(Clone)]
 pub(super) struct Enum {
     pub definition: String,
-    pub arguments: Vec<String>,
     pub variants: Vec<(Name, Vec<Name>)>,
 }
 impl Compiler {
@@ -105,7 +104,6 @@ impl Compiler {
             name.text.clone(),
             Enum {
                 definition: base.into(),
-                arguments: args.iter().map(|s| s.to_string()).collect(),
                 variants,
             },
         );
@@ -265,12 +263,6 @@ impl Compiler {
                 fields: values.to_vec(),
             },
         )))
-    }
-    pub(super) fn option_element(&self, ty: &str) -> Option<String> {
-        self.enums
-            .get(ty)
-            .filter(|e| e.definition == "Option")
-            .map(|e| e.arguments[0].clone())
     }
     pub(super) fn prepare_enum_copies(&mut self) -> Result<(), String> {
         let todo = self

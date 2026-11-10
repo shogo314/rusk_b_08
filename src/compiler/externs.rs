@@ -167,6 +167,13 @@ impl Compiler {
                 .map_err(|e| name.span.error(e))?;
         }
         self.validate_lowering_source(name, properties, origin)?;
+        if let Some(descriptor) = properties
+            .get("operation")
+            .filter(|s| s.starts_with("enum_"))
+        {
+            super::enum_operations::parse(descriptor).map_err(|e| name.span.error(e))?;
+        }
+
         property(name, properties, "code")?;
         let mut parts = Vec::new();
         for key in [

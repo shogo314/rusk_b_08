@@ -435,3 +435,16 @@ Vec・Dict/Setの反復子はowner、Mapped/Filteredはsource・callback・cache
 標準preludeは`lib/prelude.rusk`の通常のincludeで列挙し、C++断片は`lib/runtime.rusk`から同じプロパティで読み込む。埋込資源のカタログは実行ファイルの梱包にだけ使い、型・関数名による操作登録や信頼判定に使わない。標準・利用者の由来は引き続きSourceの属性で渡し、ファイル名や埋込資源風の表示を権限とはしない。埋込資源が不足した場合に実ファイルへ暗黙にフォールバックしない。
 
 [ファイル参照と依存の例](https://github.com/shogo314/rusk_b_08/blob/main/examples/beta08/runtime_resources/example.rusk)は、辞書順と逆の依存を持つ利用者シンボルと標準の遅延反復を組み合わせる。相対パス・重複include・依存ファイル一覧・リポジトリ外からの単独コンパイル・原文のマーカーの保持・宣言の信頼境界も検証する。
+
+
+## 短絡演算から通常のenum操作へ接続する
+
+`a ?? b`は、左辺を一度評価し、`__coalesce_test__(a)->Bool`と、存在する分岐内の`__coalesce_value__(a)`を通常の候補から解決する。もう一方の分岐でだけbを評価する。bの型は値取得の返却型と一致し、取得した値を暗黙にコピーしない。`a?!`も型名を検査せず、従来から呼んでいた`value(a)`を通常の候補から解決する。標準のOptionはこれらの操作を宣言する。利用者のenum・構造体・externにも通常の関数で対応できる。
+
+標準の検査と取得には`operation:"enum_test:V"`・`operation:"enum_field:V:F"`を付けられる。1引数のenum、variantとpayloadの範囲、Boolの検査結果とpayloadの論理型を検査する。検査は`read_fresh`、取得は対応する`checked_variant_field:V:F`が必要で、独自のaliasesとの併用を拒否する。Unitのpayload取得は実オブジェクトの返却ABIを必要とする。属性の記法は未使用でも検査し、型・範囲は具体化した宣言で検査する。利用者由来の属性指定を拒否する。
+
+通常の候補解決で選んだ両操作の意味情報が同じenumの同じvariantを指し、参照先の呼び出しを伴わない場合、コンパイラは既存のVariantTestと検査済み分岐内のVariantFieldを使う。Optionの名前やvariant 0を使う条件はない。この経路は従来の共有・寿命・効果・確保数を保つための共通の意味情報で、C++本体の字句解析ではない。参照した子の呼び出しを省いたり、未知の利用者操作を検査済みの取得へ置き換えたりしない。単独で値取得関数を呼ぶ場合も、通常の失敗可能な呼び出しとして検査を残す。
+
+期待される結果型から、値取得の通常の署名を通して左辺の型引数を補う。複数の候補がある場合は、左辺を作る関数・enumコンストラクタの宣言された結果型と整合する文脈だけを用いる。文脈を調べる間に左辺や右辺を実行しない。標準のNoneと別の空variant・空値構築関数が共存する場合も検証する。完全な双方向型推論を追加したものではなく、通常の宣言と型注釈の規則を使う。
+
+[利用者の操作の例](https://github.com/shogo314/rusk_b_08/blob/main/examples/beta08/coalesce_protocols.rusk)は、短絡・共有・期待型・文字参照・構造体のvalueを確認する。標準由来の別名のenumでは、variant 1のpayload 1を取得して両モードで実行し、nullableな配置やOptionの並び順への依存がないことを検証する。

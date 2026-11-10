@@ -135,3 +135,18 @@ extern fn try_read<T>()->Option<T> {
     effects:"io_read_fresh",
     code:"Obj<@{Option<T>}> @{fn}(Loc loc){while(ascii_space(rusk_peek()))rusk_get();if(rusk_peek()==std::char_traits<char>::eof())return rusk_enum_make<@{Option<T>},1>();auto value=@{boxed_call __read__()->T}(loc);return rusk_enum_make<@{Option<T>},0>(value);}",
 }
+
+// Short-circuit syntax uses ordinary operation resolution. The enum descriptors
+// preserve the guarded projection IR for the closed standard implementation.
+extern fn __coalesce_test__<T>(x:Option<T>)->Bool {
+    operation:"enum_test:0",
+    effects:"read_fresh",
+    lower:"rusk_enum_index<@{Option<T>}>($0->value)==0",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Option<T>}> x,Loc){return make_obj<@{Bool}>(rusk_enum_index<@{Option<T>}>(x->value)==0);}",
+}
+extern fn __coalesce_value__<T>(x:Option<T>)->T {
+    operation:"enum_field:0:0",
+    return_abi:"object",
+    effects:"checked_variant_field:0:0",
+    code:"Obj<@{T}> @{fn}(Obj<@{Option<T>}> x,Loc loc){if(rusk_enum_index<@{Option<T>}>(x->value)!=0)fail(loc,\"absent Option value\");return rusk_enum_payload<@{Option<T>},0>(x->value).field_0;}",
+}

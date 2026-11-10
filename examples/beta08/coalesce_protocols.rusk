@@ -1,0 +1,18 @@
+enum Choice<T>{Empty,Full(T)}
+fn __coalesce_test__<T>(x:Choice<T>)->Bool{return match x{Empty=>false,Full(value)=>true,};}
+fn __coalesce_value__<T>(x:Choice<T>)->T{return match x{Full(value)=>value,Empty=>{let impossible:Vec<T>:=[];impossible[0]},};}
+fn value<T>(x:Choice<T>)->T{return __coalesce_value__(x);}
+fn empty_choice<T>()->Choice<T>{return Choice::Empty;}
+let visits:=0;let chosen:=Choice::Full([1]);
+let held:=chosen??{visits+=1;[9]};held[0]=7;wt chosen?!,visits;
+let empty:Choice<Vec<Int>>:=Choice::Empty;
+wt empty??{visits+=1;[3]},visits;
+let contextual:Int:=empty_choice()??8;let direct:Int:=Choice::Empty??9;
+let standard:Int:=None??10;let nested:Vec<Int>:=Some([])??[11];
+wt contextual,direct,standard,nested.len();
+let text:="ab";let saved:Char;
+{let option:=Choice::Full(text[0]);let detached=option??'?';saved:=detached;}
+text.push_back('!');wt saved,text;
+struct Envelope<T>{item:T;}
+fn value<T>(x:Envelope<T>)->T{return x.item;}
+let wrapper:=Envelope::<Vec<Int>>{item:[4]};let shared:=wrapper?!;shared[0]=6;wt wrapper.item;

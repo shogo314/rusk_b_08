@@ -18,6 +18,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'coalesce_values': ('let present:=Some([1]);let absent:Option<Vec<Int>>:=None;let total:=0;'
+        'for round in 0..200000{let held:=present??[9];held[0]=round%7;total+=held[0];'
+        'total+=(absent??[3])[0];}wt total,present?!;'),
     'lazy_pipeline': ('let values:=[0;1000];for i in 0..1000{values[i]=i;}let total:=0;'
         'for round in 0..200{total+=values.filter((x:Int)=>x%2==0).map((x:Int)=>x*3).fold(0,(a:Int,b:Int)=>a+b);}wt total;'),
     'lazy_cached_copy': ('let values:=[0;1000];for i in 0..1000{values[i]=i;}let total:=0;'
