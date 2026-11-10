@@ -2118,6 +2118,7 @@ fn lazy_algorithms_and_types_work_under_unrelated_user_names() {
         .replace(" via (0.source) into return.source", "")
         .replace(" via (0.callback) into return.callback", "")
         .replace(" via (0.cached) into return.cached", "")
+        .replace(" via (1) into 0", "")
         .replace("Mapped", "Transform")
         .replace("Filtered", "Select")
         .replace("extern fn map<", "extern fn convert_values<")
@@ -2236,6 +2237,32 @@ fn lazy_copy_holds_the_source_state_when_captured_copy_releases_its_container() 
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(out.stdout, b"0 8 9\n0 3 4\n");
+    }
+}
+
+#[test]
+fn lazy_assignment_retains_shared_owners_but_not_independent_state_copies() {
+    let source = include_str!("../examples/beta08/lazy_assignment_retention.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 2 3 1 2 3\n1 3 1 3\n0 3 6 0 3 6\n");
+    }
+    for expression in ["[1].map((x:Int)=>x)", "[1].filter((x:Int)=>true)"] {
+        let source = format!(
+            "fn leak<T>(target:T,noescape source:T){{target=source;}}let source:={expression};let target=source;leak(target,source);"
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("main.rusk:") && error.contains("noescape"),
+            "{error}"
+        );
     }
 }
 

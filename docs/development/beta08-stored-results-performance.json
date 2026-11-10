@@ -1,0 +1,288 @@
+{
+  "utc": "2026-11-10T09:08:48.472643+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "c67f48b217251f74a35078e52d05ad75a0225972751897cd941824e7d31f0a5d"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "lazy_pipeline": {
+      "source": "let values:=[0;1000];for i in 0..1000{values[i]=i;}let total:=0;for round in 0..200{total+=values.filter((x:Int)=>x%2==0).map((x:Int)=>x*3).fold(0,(a:Int,b:Int)=>a+b);}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "b029b8b08c9ba28a5714e104a4cb1b19ef544eee859679e99dd006c413b3cbc1",
+          "runs_ms": [
+            11.561528,
+            11.61578,
+            12.12964,
+            11.067634,
+            12.14599,
+            11.251286,
+            11.009206,
+            11.120225,
+            12.266817,
+            11.820804,
+            12.037107,
+            11.638583,
+            11.189608,
+            11.67954,
+            11.237628
+          ],
+          "output": "149700000\n",
+          "allocations": 1104218,
+          "shared_ptr_copies": 1908609,
+          "median_ms": 11.61578
+        },
+        "current": {
+          "cpp_sha256": "73fd696d4fd3d6378242b7e86454fdcbe393d0e2153780c123c867567177b53e",
+          "runs_ms": [
+            11.028503,
+            12.199061,
+            12.660352,
+            11.281696,
+            11.863442,
+            11.908113,
+            11.347098,
+            11.037489,
+            11.814061,
+            11.776012,
+            13.665069,
+            11.652889,
+            10.951247,
+            12.103801,
+            11.279859
+          ],
+          "output": "149700000\n",
+          "allocations": 1104218,
+          "shared_ptr_copies": 1908609,
+          "median_ms": 11.776012
+        }
+      },
+      "speedup": 0.9863933562567703
+    },
+    "lazy_cached_copy": {
+      "source": "let values:=[0;1000];for i in 0..1000{values[i]=i;}let total:=0;for round in 0..200{let it:=values.filter((x:Int)=>x%2==0);__iter_has_next__(it);let duplicate=it;total+=it.fold(0,(a:Int,b:Int)=>a+b)+duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "c15a00dc24abec051126d47798cb458eb2621b90069d514c0b429e51156141a7",
+          "runs_ms": [
+            14.134415,
+            14.837182,
+            14.837922,
+            13.946145,
+            14.126056,
+            13.959754,
+            14.302532,
+            15.995263,
+            14.908714,
+            14.653264,
+            14.857349,
+            15.981785,
+            14.177207,
+            13.813757,
+            15.200118
+          ],
+          "output": "99800000\n",
+          "allocations": 1405218,
+          "shared_ptr_copies": 2810209,
+          "median_ms": 14.653264
+        },
+        "current": {
+          "cpp_sha256": "d30ebbf18f0f71d27fc4bea217ad458ff04f864794f56a06458e02b36fc2b02e",
+          "runs_ms": [
+            14.529656,
+            14.664672,
+            14.691077,
+            13.977072,
+            14.59262,
+            15.019098,
+            14.04,
+            14.621595,
+            14.758042,
+            14.604125,
+            15.261152,
+            13.857569,
+            14.105353,
+            15.326501,
+            14.927359
+          ],
+          "output": "99800000\n",
+          "allocations": 1405218,
+          "shared_ptr_copies": 2810009,
+          "median_ms": 14.621595
+        }
+      },
+      "speedup": 1.002165905976742
+    },
+    "lazy_state_assignment": {
+      "source": "fn even(x:Int)->Bool{return x%2==0;}let values:=[1,2,3,4];let it:=values.filter(even);__iter_has_next__(it);let saved=it;let total:=0;for round in 0..100000{it=saved;total+=__iter_next__(it);}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "5f08e7ea94471e331a7dafc7967a3a8cbce4d3a09209ec1c3323831bb3b766a6",
+          "runs_ms": [
+            5.956262,
+            5.271713,
+            5.300306,
+            5.295778,
+            6.0141,
+            5.221733,
+            6.751751,
+            5.357335,
+            5.640211,
+            5.622067,
+            5.680176,
+            5.091797,
+            5.732334,
+            5.656993,
+            5.283165
+          ],
+          "output": "200000\n",
+          "allocations": 500030,
+          "shared_ptr_copies": 1100042,
+          "median_ms": 5.622067
+        },
+        "current": {
+          "cpp_sha256": "ccfd6bd63b88b9d0e442404e61856e116ef5305630cdb89e52793762f417edc9",
+          "runs_ms": [
+            5.476276,
+            5.869774,
+            5.494439,
+            5.736421,
+            6.12164,
+            5.919734,
+            5.436373,
+            6.21727,
+            5.813508,
+            6.108686,
+            5.512433,
+            5.781355,
+            5.939641,
+            6.048978,
+            6.327185
+          ],
+          "output": "200000\n",
+          "allocations": 500030,
+          "shared_ptr_copies": 1100041,
+          "median_ms": 5.869774
+        }
+      },
+      "speedup": 0.9577995677516716
+    },
+    "set_iterator_copy": {
+      "source": "let s:=Set::<Int>();for i in 0..1000{s.insert(i);}let total:=0;for round in 0..200{let it:=s.filter((x:Int)=>x%2==0).map((x:Int)=>x+1);let duplicate=it;total+=it.fold(0,(a:Int,b:Int)=>a+b);total+=duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "e7bfa31291bb7d762e9405d8a6c2330d3b5c2f6ad0d63f4bfd3cdcf311bcf165",
+          "runs_ms": [
+            28.823641,
+            31.229206,
+            29.948503,
+            29.100095,
+            29.836384,
+            30.485797,
+            33.102715,
+            32.82417,
+            30.363275,
+            31.380366,
+            29.72296,
+            28.756025,
+            29.07471,
+            30.844037,
+            31.097233
+          ],
+          "output": "100000000\n",
+          "allocations": 3008422,
+          "shared_ptr_copies": 4214407,
+          "median_ms": 30.363275
+        },
+        "current": {
+          "cpp_sha256": "4a3059feb78cb90050bb82b0c315cf0a7beffa6e9c985c78dba54c149695fcae",
+          "runs_ms": [
+            31.117909,
+            31.391717,
+            32.189299,
+            32.35087,
+            31.646226,
+            32.888338,
+            30.4727,
+            30.31093,
+            31.780948,
+            32.186609,
+            32.844424,
+            31.375,
+            31.919808,
+            32.081095,
+            32.052541
+          ],
+          "output": "100000000\n",
+          "allocations": 3008422,
+          "shared_ptr_copies": 4214207,
+          "median_ms": 31.919808
+        }
+      },
+      "speedup": 0.9512361415206508
+    },
+    "dictionary_iteration": {
+      "source": "let d:=Dict::<Int,Int>();for i in 0..1000{d.set(i,i*3);}let total:=0;for round in 0..200{for entry in d{total+=entry[0]+entry[1];}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "50f3ac253501c936e47d336434ed0d83c5ede45c6d887a337162967e6e2d7a87",
+          "runs_ms": [
+            9.231432,
+            8.106435,
+            8.9284,
+            8.599538,
+            8.941511,
+            8.297808,
+            8.745221,
+            7.918449,
+            8.87118,
+            8.591768,
+            8.83912,
+            8.104487,
+            8.545662,
+            7.785586,
+            8.309772
+          ],
+          "output": "399600000\n",
+          "allocations": 804422,
+          "shared_ptr_copies": 2411007,
+          "median_ms": 8.591768
+        },
+        "current": {
+          "cpp_sha256": "415659505e0d460b37ffc4b20799cfefca69c3f11ce0482424b477a560615f5c",
+          "runs_ms": [
+            8.179669,
+            7.816106,
+            8.225576,
+            8.669698,
+            8.582233,
+            9.082813,
+            8.498878,
+            8.253717,
+            8.309481,
+            8.554227,
+            8.302121,
+            8.168903,
+            7.835674,
+            8.058784,
+            9.006156
+          ],
+          "output": "399600000\n",
+          "allocations": 804422,
+          "shared_ptr_copies": 2411007,
+          "median_ms": 8.302121
+        }
+      },
+      "speedup": 1.0348883134803746
+    }
+  }
+}

@@ -8,11 +8,18 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct Specification {
     arguments: Vec<(usize, Vec<String>)>,
-    result: Option<Vec<String>>,
+    result: Destination<Vec<String>>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum Destination<P> {
+    Discard,
+    Return(P),
+    Store { parameter: usize, path: P },
 }
 
 impl Specification {
-    /// `via (0.source,1) into return.cached`, or `into discard`.
+    /// `via (0.source,1) into return.cached`, `into 0.cached`, or `into discard`.
     pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let (arguments, result) = text
             .split_once(" into ")
@@ -38,9 +45,13 @@ impl Specification {
             return Err("native call mapping argument limit exceeded".into());
         }
         let result = if result == "discard" {
-            None
+            Destination::Discard
+        } else if result == "return" || result.starts_with("return.") {
+            Destination::Return(aliases::parse(&format!("{result}=0"), 1)?.remove(0).0)
         } else {
-            Some(aliases::parse(&format!("{result}=0"), 1)?.remove(0).0)
+            let (_, parameter, path) =
+                aliases::parse(&format!("return={result}"), usize::MAX)?.remove(0);
+            Destination::Store { parameter, path }
         };
         Ok(Self { arguments, result })
     }
@@ -48,6 +59,11 @@ impl Specification {
     pub(crate) fn validate_bounds(&self, count: usize) -> Result<(), String> {
         if self.arguments.iter().any(|(p, _)| *p >= count) {
             return Err("native call mapping argument out of range".into());
+        }
+        if let Destination::Store { parameter, .. } = self.result
+            && parameter >= count
+        {
+            return Err("native call mapping destination out of range".into());
         }
         Ok(())
     }
@@ -84,17 +100,21 @@ impl Specification {
                 Ok((*parameter, path))
             })
             .collect::<Result<Vec<_>, String>>()?;
-        let result_path = self
-            .result
-            .as_ref()
-            .map(|path| -> Result<Vec<Projection>, String> {
-                let path = aliases::resolve(outer_result, path, types)?;
-                if crate::effects::project_type(outer_result, &path, types)? != result {
-                    return Err("native call mapping result type mismatch".into());
-                }
-                Ok(path)
-            })
-            .transpose()?;
+        let project = |root: &str, path: &[String]| -> Result<Vec<Projection>, String> {
+            let path = aliases::resolve(root, path, types)?;
+            if crate::effects::project_type(root, &path, types)? != result {
+                return Err("native call mapping result type mismatch".into());
+            }
+            Ok(path)
+        };
+        let result_path = match &self.result {
+            Destination::Discard => Destination::Discard,
+            Destination::Return(path) => Destination::Return(project(outer_result, path)?),
+            Destination::Store { parameter, path } => Destination::Store {
+                parameter: *parameter,
+                path: project(&outer_parameters[*parameter], path)?,
+            },
+        };
         Ok(Dependency {
             function,
             arguments,
@@ -107,7 +127,7 @@ impl Specification {
 pub(crate) struct Dependency {
     pub function: usize,
     arguments: Vec<(usize, Vec<Projection>)>,
-    result: Option<Vec<Projection>>,
+    result: Destination<Vec<Projection>>,
 }
 
 /// Only resolved child effects can discharge a native dependency. Unknown
@@ -155,7 +175,7 @@ pub(crate) fn compose(
             parent.escape = parent.escape.max(passed.escape);
             parent.retained = parent.retained.max(passed.retained);
         }
-        if let Some(target) = &dependency.result {
+        if let Destination::Return(target) = &dependency.result {
             if child.returned.unknown {
                 result.returned.unknown = true;
                 for parameter in &mut result.parameters {
@@ -181,6 +201,29 @@ pub(crate) fn compose(
                 });
                 result.parameters[*parameter].escape =
                     result.parameters[*parameter].escape.max(Effect::May);
+            }
+        }
+        if let Destination::Store { parameter, .. } = &dependency.result {
+            // The body stores the returned object or its contents into an
+            // existing argument. Root destinations denote content assignment,
+            // never rebinding the caller's argument reference. Effects are
+            // whole-argument may sets until a native heap model is available.
+            let target = &mut result.parameters[*parameter];
+            target.read = target.read.max(Effect::May);
+            target.write = target.write.max(Effect::May);
+            target.structural = target.structural.max(Effect::May);
+            if child.returned.unknown {
+                for parameter in &mut result.parameters {
+                    parameter.escape = parameter.escape.max(Effect::May);
+                    parameter.retained = parameter.retained.max(Effect::May);
+                }
+            } else {
+                for alias in &child.returned.aliases {
+                    let parameter = dependency.arguments[alias.parameter].0;
+                    let effect = &mut result.parameters[parameter];
+                    effect.escape = effect.escape.max(Effect::May);
+                    effect.retained = effect.retained.max(Effect::May);
+                }
             }
         }
         if result.returned.aliases.len() > 64 {
@@ -338,6 +381,85 @@ mod tests {
         assert_eq!(result.parameters[1].retained, Effect::May);
         assert!(result.returned.unknown);
         assert_eq!(compose(&base, &[], &[]), Some(base));
+    }
+
+    #[test]
+    fn mapped_stored_results_retain_aliases_but_independent_copies_do_not() {
+        let types = types();
+        let parameters = vec!["Outer".into(), "Box".into()];
+        let base = contract("read_fresh", &parameters, "Unit", &types).unwrap();
+        let mut shared = contract("read_fresh", &["Box".into()], "Box", &types).unwrap();
+        aliases::apply(
+            &mut shared,
+            "return.value=0.value",
+            &["Box".into()],
+            "Box",
+            &types,
+        )
+        .unwrap();
+        let route = Specification::parse("(1) into 0.child")
+            .unwrap()
+            .resolve(0, &parameters, "Unit", &["Box".into()], "Box", &types)
+            .unwrap();
+        let result = compose(&base, std::slice::from_ref(&route), &[shared]).unwrap();
+        result
+            .validate_signature(&parameters, "Unit", &types, false)
+            .unwrap();
+        assert!(result.parameters.iter().all(|p| p.retained == Effect::May));
+        assert!(result.parameters.iter().all(|p| p.write == Effect::May));
+        assert!(result.returned.aliases.is_empty());
+
+        let independent = contract("read_fresh", &["Box".into()], "Box", &types).unwrap();
+        let result = compose(&base, std::slice::from_ref(&route), &[independent]).unwrap();
+        assert!(result.parameters.iter().all(|p| p.retained == Effect::No));
+        assert_eq!(result.parameters[0].structural, Effect::May);
+
+        let mut unknown = contract("read_fresh", &["Box".into()], "Box", &types).unwrap();
+        unknown.returned = crate::effects::ReturnOrigins {
+            unknown: true,
+            ..Default::default()
+        };
+        let result = compose(&base, std::slice::from_ref(&route), &[unknown]).unwrap();
+        assert!(result.parameters.iter().all(|p| p.retained == Effect::May));
+        assert!(compose(&base, &[route], &[Summary::opaque(1)]).is_none());
+    }
+
+    #[test]
+    fn mapped_storage_validates_root_contents_nested_fields_and_logical_types() {
+        let types = types();
+        let parameters = vec!["Outer".into(), "Box".into()];
+        Specification::parse("(1) into 1")
+            .unwrap()
+            .resolve(0, &parameters, "Unit", &["Box".into()], "Box", &types)
+            .unwrap();
+        Specification::parse("(1.value) into 0.child.value")
+            .unwrap()
+            .resolve(0, &parameters, "Unit", &["Int".into()], "Int", &types)
+            .unwrap();
+        for target in ["2.child", "0.missing", "0", "0.child.value"] {
+            assert!(
+                Specification::parse(&format!("(1) into {target}"))
+                    .unwrap()
+                    .resolve(0, &parameters, "Unit", &["Box".into()], "Box", &types)
+                    .is_err(),
+                "{target}"
+            );
+        }
+        assert!(
+            Specification::parse("(1.value) into 0.child.value")
+                .unwrap()
+                .resolve(0, &parameters, "Unit", &["Int".into()], "Other", &types)
+                .is_err()
+        );
+        for target in ["0.", "-1.child", "0..child"] {
+            assert!(Specification::parse(&format!("(1) into {target}")).is_err());
+        }
+        assert!(
+            Specification::parse("(0) into 1")
+                .unwrap()
+                .validate_bounds(1)
+                .is_err()
+        );
     }
 
     #[test]

@@ -1,0 +1,10 @@
+// Range state and scalar captures are copied independently. Assigning the
+// copied state to an existing iterator does not retain the source argument.
+fn assign_state<T>(target:T,noescape source:T){target=source;}
+let mapped:=(0..3).map((x:Int)=>x+1);let mapped_target=mapped;
+assign_state(mapped_target,mapped);wt mapped_target.to_vec(),mapped.to_vec();
+let filtered:=(0..5).filter((x:Int)=>x%2==1);
+__iter_has_next__(filtered);let filtered_target=filtered;
+assign_state(filtered_target,filtered);wt filtered_target.to_vec(),filtered.to_vec();
+let factor:=3;let captured:=(0..3).map((x:Int)=>x*factor);let captured_target=captured;
+assign_state(captured_target,captured);wt captured_target.to_vec(),captured.to_vec();

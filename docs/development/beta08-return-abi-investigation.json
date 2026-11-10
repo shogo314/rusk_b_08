@@ -1,0 +1,38 @@
+{
+  "case": "set_iterator_copy",
+  "source": "let s:=Set::<Int>();for i in 0..1000{s.insert(i);}let total:=0;for round in 0..200{let it:=s.filter((x:Int)=>x%2==0).map((x:Int)=>x+1);let duplicate=it;total+=it.fold(0,(a:Int,b:Int)=>a+b);total+=duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "c67f48b217251f74a35078e52d05ad75a0225972751897cd941824e7d31f0a5d"
+  },
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "flags": [
+    "-std=c++20",
+    "-O2",
+    "-S"
+  ],
+  "experiment": {
+    "before": "rusk_finish_return<std::int64_t,false>(std::move(accumulator))",
+    "after": "accumulator",
+    "replacements": 2,
+    "location": "two fold definitions in current generated C++ only"
+  },
+  "measurements": {
+    "baseline": {
+      "cpp_sha256": "672803087eb9885520bd31511d1acb245a2d0c7f29d8d8be7973623eb7b0259e",
+      "fold_assembly_sha256": "794a7a1cd2c03953ddff03751496865188d518ba04358c99ec42b836e194e08d",
+      "static_instruction_lines": 394
+    },
+    "current": {
+      "cpp_sha256": "d7c277b906e75d9f9d5dcba9ac53ffafdc6039c4ccf769eebae40f95655a493b",
+      "fold_assembly_sha256": "0b3d61cffd6dd67dc9490976cc3f632ba77026aed2b9486fbb64d97ad63426d2",
+      "static_instruction_lines": 444
+    },
+    "nrvo": {
+      "cpp_sha256": "a319b63431b6ee18ed69f448060c765c951b7f82584686187f431cc522af3825",
+      "fold_assembly_sha256": "7bb2a838b2156d72595390a6ab5954f4092ab0b090d947beed9cd7a32c4bb10d",
+      "static_instruction_lines": 394
+    }
+  },
+  "interpretation": "The return helper prevents named return value optimization. Replacing only that expression restores the baseline static instruction-line count in the selected fold assembly region. Static code size is not dynamic instruction count or runtime proof; isolated timing and Unit/cleanup verification are still required."
+}

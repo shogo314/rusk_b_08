@@ -36,7 +36,8 @@ extern fn copy<I,F,T,R>(it:Mapped<I,F,T,R>)->Mapped<I,F,T,R> {
 }
 
 extern fn __assign__<I,F,T,R>(target:Mapped<I,F,T,R>,source:Mapped<I,F,T,R>)->Unit {
-    code:"void @{fn}(Obj<@{Mapped<I,F,T,R>}> target,Obj<@{Mapped<I,F,T,R>}> source,Loc loc){auto snapshot=@{rooted_call copy(Mapped<I,F,T,R>)->Mapped<I,F,T,R>}(source,loc);*target=std::move(*snapshot);}",
+    effects:"checked_resize_first",
+    code:"void @{fn}(Obj<@{Mapped<I,F,T,R>}> target,Obj<@{Mapped<I,F,T,R>}> source,Loc loc){auto snapshot=@{rooted_call copy(Mapped<I,F,T,R>)->Mapped<I,F,T,R> via (1) into 0}(source,loc);*target=std::move(*snapshot);}",
 }
 
 extern type<I,F,T> Filtered {
@@ -72,5 +73,6 @@ extern fn copy<I,F,T>(it:Filtered<I,F,T>)->Filtered<I,F,T> {
 }
 
 extern fn __assign__<I,F,T>(target:Filtered<I,F,T>,source:Filtered<I,F,T>)->Unit {
-    code:"void @{fn}(Obj<@{Filtered<I,F,T>}> target,Obj<@{Filtered<I,F,T>}> source,Loc loc){auto snapshot=@{rooted_call copy(Filtered<I,F,T>)->Filtered<I,F,T>}(source,loc);*target=std::move(*snapshot);}",
+    effects:"checked_resize_first",
+    code:"void @{fn}(Obj<@{Filtered<I,F,T>}> target,Obj<@{Filtered<I,F,T>}> source,Loc loc){auto snapshot=@{rooted_call copy(Filtered<I,F,T>)->Filtered<I,F,T> via (1) into 0}(source,loc);*target=std::move(*snapshot);}",
 }
