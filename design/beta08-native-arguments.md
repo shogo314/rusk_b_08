@@ -21,7 +21,7 @@
 
 入力の各階層で、利用者が定義した元の個数の引数を持つreaderを先に選ぶ。Unitは格納用のオブジェクトABIを使う。通常のvoid返却を包み、`return_abi:"object"`では元のオブジェクトを保持する。一次元入力にも同じ格納用参照を適用した。
 
-`containers.rs::read_function`から多次元入力のC++本体生成と`$fn`置換を削除した。入力構文から導出操作を要求する処理と、既存の配列・Tupleの型判定は残っている。Tupleの比較・出力等を含むG6全体は未完了である。
+`containers.rs::read_function`から多次元入力のC++本体生成と`$fn`置換を削除した。入力構文から導出操作を要求する処理と、既存の配列・Tupleの型判定は残っている。Tupleの比較・出力とDict/Setのキー演算も通常の宣言へ移し、現在の導出とABIの境界は[移行境界の監査](../docs/development/beta08-boundaries.md)にまとめる。
 
 ## 検証
 

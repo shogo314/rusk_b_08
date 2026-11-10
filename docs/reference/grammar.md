@@ -235,12 +235,14 @@ literal       = integer_literal | string_literal | character_literal
 外部宣言はC++の実装を接続するための機能です。通常のプログラムでは標準ライブラリの宣言を書き直す必要はありません。
 
 ```ebnf
-extern_type     = "extern" "type" type "{" properties "}" ;
-extern_function = "extern" "fn" identifier "(" parameters ")"
+extern_type     = "extern" "type" [ type_parameters ] type "{" properties "}" ;
+extern_function = "extern" "fn" identifier [ type_parameters ] "(" parameters ")"
                   [ "->" type ] "{" properties "}" ;
 extern_symbol   = "extern" "symbol" identifier "{" properties "}" ;
 properties      = { identifier ":" string_literal "," } ;
 ```
+
+外部型の型仮引数は`extern type<T> Cell`、関数では`extern fn cell<T>(x:T)->Cell<T>`の位置に置きます。外部型には`extern type<T> Slot<Vec<T>>`のような、重ならない型パターンも宣言できます。型・関数の具体化と型付き参照、C++の本体型と共有ABIの区別は[externと型参照の規則](../development/beta08-extern-prototype.md)を参照してください。
 
 引数のないextern関数に`implicit_call:"true"`を付けると、変数のない位置のbare名を、その関数へのゼロ引数呼び出しとして扱います。通常の期待型・候補解決を使い、参照するたびに呼び出します。標準のbare `None`もこの宣言を使います。ローカル変数があれば変数を優先し、この指定のない通常の関数名は従来どおり関数値です。この指定は効果・保持の信頼契約を与えません。
 

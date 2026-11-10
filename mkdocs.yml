@@ -48,7 +48,9 @@ nav:
   - 開発ガイド:
       - β08の作業計画: development/beta08.md
       - β08の専用処理と移行依存関係: development/beta08-inventory.md
-      - β08のジェネリックextern試作: development/beta08-extern-prototype.md
+      - β08の移行境界と残す基盤: development/beta08-boundaries.md
+      - β08のジェネリックexternと型参照: development/beta08-extern-prototype.md
+      - β08とβ07の全体性能比較: development/beta08-performance.md
       - β07の実装・検証と次版候補: development/beta07.md
       - β07の共有先解析と最適化: development/beta07-performance.md
       - β06の実装と検証: development/beta06.md

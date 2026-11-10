@@ -2,9 +2,9 @@
 
 Ruskは、競技プログラミング向けに開発している言語です。ソースをC++20へ変換し、生成したC++をコンパイルして実行・提出します。このサイトはβ08開発版の実装済みの言語と標準ライブラリを説明します。
 
-β08はfixしたβ07を引き継いで開始します。externを含む通常のライブラリ定義を使い、コンパイラ内のライブラリ名ごとの専用処理を減らすことが中心です。[開始点と方針](development/beta08.md)に対象をまとめています。
+β08はfixしたβ07を引き継ぎます。externを含む通常のライブラリ定義を使い、コンパイラ内のライブラリ名ごとの専用処理を減らすことが中心です。[開始点と方針](development/beta08.md)に対象をまとめています。
 
-開始時点の機能はβ07と同じです。効果・共有・脱出の解析、readonly/mutable・fixed/rebindable・noescape/escapeの契約検査、推論結果に基づく値保持・借用を利用できます。現在は[ジェネリックexternの最小試作](development/beta08-extern-prototype.md)を追加しています。記法と共通基盤は開発中です。
+開始時点の機能はβ07と同じです。効果・共有・脱出の解析、readonly/mutable・fixed/rebindable・noescape/escapeの契約検査、推論結果に基づく値保持・借用を利用できます。[ジェネリックextern・型と関数の参照・捕捉付きコールバック](development/beta08-extern-prototype.md)を共通化し、標準の型・コンテナ・アルゴリズムを通常の宣言へ移しました。[移行境界と制限](development/beta08-boundaries.md)、[β07との全体性能比較](development/beta08-performance.md)に実装と検証の範囲をまとめています。
 
 ```rusk
 in n: Int;
