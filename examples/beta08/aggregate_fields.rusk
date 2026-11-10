@@ -1,0 +1,17 @@
+extern type Score {cpp_name:"std::int64_t",}
+extern fn score(x:Int)->Score {cpp_name:"score",code:"Obj<std::int64_t> score(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn number(x:Score)->Int {cpp_name:"number",code:"Obj<std::int64_t> number(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn copy(x:Score)->Score {cpp_name:"copy_score",code:"Obj<std::int64_t> copy_score(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x+100);}",}
+extern fn same_unit(a:Unit,b:Unit)->Bool {cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+extern fn clone_fields<T>(value:T)->T {
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> value,Loc loc){return make_obj<@{T}>(@{T}{@{fields T as F,I}@{owned_call copy(F)->F}(value->field_@{index I},loc),@{end}});}",
+}
+struct F {value:Int;}
+struct I {value:Int;}
+struct Pair {left:Int;right:Score;unit:Unit;}
+let a:=Pair{left:1,right:score(2),unit:{}};
+let b:=clone_fields(a);a.left=9;
+wt b.left,number(b.right),same_unit(a.unit,b.unit);
+let p:=clone_fields((3,"ok",{}));wt p[0],p[1];
+let text:="abc";let original:=(text[0],{});let held:=clone_fields(original);
+original:=(text[1],{});original:=('z',{});text+="!";wt text,held[0];

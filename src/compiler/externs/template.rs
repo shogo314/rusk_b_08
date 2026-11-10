@@ -16,7 +16,15 @@ pub(super) enum InvokeKind {
     Writes,
 }
 
+#[derive(Clone)]
 pub(super) enum Part {
+    Fields {
+        ty: String,
+        element: String,
+        index: String,
+        parts: Vec<Part>,
+    },
+    Index(String),
     Text(String),
     Type(String),
     ReturnType(String),
@@ -58,6 +66,12 @@ pub(super) fn valid_type(text: &str) -> bool {
 }
 
 fn reference(text: &str, body: bool) -> Result<Part, String> {
+    if body && let Some(index) = text.strip_prefix("index ") {
+        if !identifier(index) {
+            return Err("invalid native field index reference".into());
+        }
+        return Ok(Part::Index(index.into()));
+    }
     if body && text == "fn" {
         return Ok(Part::SelfName);
     }
@@ -159,32 +173,78 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
 }
 
 pub(super) fn parse(text: &str, body: bool) -> Result<Vec<Part>, String> {
+    parse_parts(&mut &text[..], body, 0, &mut 4096)
+}
+
+fn parse_parts(
+    rest: &mut &str,
+    body: bool,
+    depth: usize,
+    budget: &mut usize,
+) -> Result<Vec<Part>, String> {
+    if depth > 64 {
+        return Err("native field expansion nesting limit exceeded".into());
+    }
     let mut parts = vec![];
     let mut literal = String::new();
-    let mut rest = text;
     let marker = if body { "@" } else { "{" };
     while let Some(at) = rest.find(marker) {
         literal.push_str(&rest[..at]);
-        rest = &rest[at..];
+        *rest = &rest[at..];
         if body && rest.starts_with("@@") {
             literal.push('@');
-            rest = &rest[2..];
+            *rest = &rest[2..];
             continue;
         }
         let prefix = if body { "@{" } else { "{" };
         if !rest.starts_with(prefix) {
             literal.push('@');
-            rest = &rest[1..];
+            *rest = &rest[1..];
             continue;
         }
         let end = rest.find('}').ok_or("unterminated native type reference")?;
         if !literal.is_empty() {
             parts.push(Part::Text(std::mem::take(&mut literal)));
         }
-        parts.push(reference(&rest[prefix.len()..end], body)?);
-        rest = &rest[end + 1..];
+        let header = &rest[prefix.len()..end];
+        *rest = &rest[end + 1..];
+        if *budget == 0 {
+            return Err("native template reference limit exceeded".into());
+        }
+        *budget -= 1;
+        if body && header == "end" {
+            return if depth > 0 {
+                Ok(parts)
+            } else {
+                Err("native field expansion end without fields".into())
+            };
+        }
+        if body && let Some(header) = header.strip_prefix("fields ") {
+            let (ty, binders) = header
+                .split_once(" as ")
+                .ok_or("invalid native fields reference; expected fields Type as Element,Index")?;
+            let (element, index) = binders
+                .split_once(',')
+                .ok_or("invalid native fields bindings")?;
+            let (ty, element, index) = (ty.trim(), element.trim(), index.trim());
+            if !valid_type(ty) || !identifier(element) || !identifier(index) || element == index {
+                return Err("invalid native fields bindings or type".into());
+            }
+            parts.push(Part::Fields {
+                ty: ty.into(),
+                element: element.into(),
+                index: index.into(),
+                parts: parse_parts(rest, body, depth + 1, budget)?,
+            });
+        } else {
+            parts.push(reference(header, body)?);
+        }
+    }
+    if depth > 0 {
+        return Err("unterminated native field expansion".into());
     }
     literal.push_str(rest);
+    *rest = "";
     if !literal.is_empty() {
         parts.push(Part::Text(literal));
     }

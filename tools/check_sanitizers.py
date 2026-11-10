@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/aggregate_fields.rusk').read_text(),b'',b'1 102 No\n3 ok\nabc! a\n'),
     ((ROOT/'examples/beta08/native_reference_cleanup.rusk').read_text(),b'',b'No\nNo\n0\n0\n0\n'),
     ((ROOT/'examples/beta08/enum_copy_lifetime.rusk').read_text(),b'',b'ab!\na 3\nNo\n'),
     ((ROOT/'examples/beta08/option_operations.rusk').read_text(),b'3 hi',b'Zb Yes No\nZb!\n3 hi Yes\nYes 0\n1\n'),

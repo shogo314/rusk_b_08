@@ -138,6 +138,7 @@ impl Compiler {
                 "lower_borrowed",
                 "operation",
                 "return_abi",
+                "derive",
             ],
         )?;
         if properties.get("return_abi").is_some_and(|v| v != "object") {
@@ -198,7 +199,7 @@ impl Compiler {
                     .error("modifiers on extern parameters require a Rusk function body"));
             }
         }
-        self.register_generic_function(generics::GenericFunction {
+        let definition = generics::GenericFunction {
             name: name.clone(),
             parameters: parameters.to_vec(),
             arguments: arguments.to_vec(),
@@ -208,7 +209,38 @@ impl Compiler {
             origin,
             callbacks,
             calls,
-        })
+        };
+        if let Some(kind) = properties.get("derive") {
+            if origin != Origin::StandardLibrary {
+                return Err(name.span.error(
+                    "native derivation definitions are reserved for the embedded standard library",
+                ));
+            }
+            generics::parameters_valid(parameters)?;
+            if kind != "record_copy"
+                || parameters.len() != 1
+                || arguments.len() != 1
+                || arguments[0].1.text != parameters[0].text
+                || result.as_ref().is_none_or(|r| r.text != parameters[0].text)
+                || properties
+                    .keys()
+                    .any(|key| !matches!(key.as_str(), "code" | "derive"))
+            {
+                return Err(name.span.error(
+                    "invalid native record copy derivation; expected one type parameter and (T)->T",
+                ));
+            }
+            if self
+                .native_derivations
+                .insert(kind.clone(), definition)
+                .is_some()
+            {
+                return Err(name.span.error("duplicate native derivation definition"));
+            }
+            Ok(())
+        } else {
+            self.register_generic_function(definition)
+        }
     }
 
     pub(super) fn specialize_extern_type(&mut self, name: &Name) -> Result<bool, String> {
@@ -341,45 +373,95 @@ impl Compiler {
         Ok(())
     }
 
-    pub(super) fn validate_extern_declarations(&self) -> Result<(), String> {
-        let validate_parts =
-            |parts: Vec<Part>, parameters: &[Name], span: &Span| -> Result<(), String> {
-                for part in parts {
-                    match part {
-                        Part::Type(ty) | Part::ReturnType(ty) | Part::Finish(ty) => {
-                            self.validate_symbolic_type(&ty, parameters, span)?
-                        }
-                        Part::Invoke {
-                            name,
-                            arguments,
-                            result,
-                            ..
-                        } => {
-                            self.validate_symbolic_type(&name, parameters, span)?;
-                            for ty in arguments.iter().chain(std::iter::once(&result)) {
-                                self.validate_symbolic_type(ty, parameters, span)?;
-                            }
-                        }
-                        Part::Call {
-                            name,
-                            arguments,
-                            result,
-                            ..
-                        } => {
-                            if let Some((_, args)) = tuples::type_parts(&name) {
-                                for arg in args {
-                                    self.validate_symbolic_type(arg, parameters, span)?;
-                                }
-                            }
-                            for ty in arguments.iter().chain(std::iter::once(&result)) {
-                                self.validate_symbolic_type(ty, parameters, span)?;
-                            }
-                        }
-                        _ => {}
+    fn validate_scoped_native_type(
+        &self,
+        ty: &str,
+        parameters: &[Name],
+        indices: &BTreeSet<String>,
+        span: &Span,
+    ) -> Result<(), String> {
+        if ty
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|word| indices.contains(word))
+        {
+            return Err(span.error("native field index cannot be used as a type"));
+        }
+        self.validate_symbolic_type(ty, parameters, span)
+    }
+
+    fn validate_native_parts(
+        &self,
+        parts: Vec<Part>,
+        parameters: &[Name],
+        indices: &BTreeSet<String>,
+        span: &Span,
+    ) -> Result<(), String> {
+        for part in parts {
+            match part {
+                Part::Index(index) => {
+                    if !indices.contains(&index) {
+                        return Err(span.error(format!("unbound native field index '{index}'")));
                     }
                 }
-                Ok(())
-            };
+                Part::Fields {
+                    ty,
+                    element,
+                    index,
+                    parts,
+                } => {
+                    self.validate_scoped_native_type(&ty, parameters, indices, span)?;
+                    for name in [&element, &index] {
+                        if parameters.iter().any(|p| &p.text == name) || indices.contains(name) {
+                            return Err(span.error(format!(
+                                "native fields binding '{name}' shadows an existing binding"
+                            )));
+                        }
+                    }
+                    let mut parameters = parameters.to_vec();
+                    parameters.push(Name {
+                        text: element,
+                        span: span.clone(),
+                    });
+                    let mut indices = indices.clone();
+                    indices.insert(index);
+                    self.validate_native_parts(parts, &parameters, &indices, span)?;
+                }
+                Part::Type(ty) | Part::ReturnType(ty) | Part::Finish(ty) => {
+                    self.validate_scoped_native_type(&ty, parameters, indices, span)?
+                }
+                Part::Invoke {
+                    name,
+                    arguments,
+                    result,
+                    ..
+                } => {
+                    self.validate_scoped_native_type(&name, parameters, indices, span)?;
+                    for ty in arguments.iter().chain(std::iter::once(&result)) {
+                        self.validate_scoped_native_type(ty, parameters, indices, span)?;
+                    }
+                }
+                Part::Call {
+                    name,
+                    arguments,
+                    result,
+                    ..
+                } => {
+                    if let Some((_, args)) = tuples::type_parts(&name) {
+                        for arg in args {
+                            self.validate_scoped_native_type(arg, parameters, indices, span)?;
+                        }
+                    }
+                    for ty in arguments.iter().chain(std::iter::once(&result)) {
+                        self.validate_scoped_native_type(ty, parameters, indices, span)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_extern_declarations(&self) -> Result<(), String> {
         for definition in self.generic_extern_types.values() {
             self.validate_symbolic_type(
                 &definition.pattern,
@@ -391,13 +473,18 @@ impl Compiler {
                     self.validate_symbolic_type(child, &definition.parameters, &definition.span)?;
                 }
             }
-            validate_parts(
+            self.validate_native_parts(
                 template::parse(&definition.native, false).map_err(|e| definition.span.error(e))?,
                 &definition.parameters,
+                &BTreeSet::new(),
                 &definition.span,
             )?;
         }
-        for definition in &self.generic_functions {
+        for definition in self
+            .generic_functions
+            .iter()
+            .chain(self.native_derivations.values())
+        {
             let Some(properties) = &definition.foreign else {
                 continue;
             };
@@ -411,9 +498,10 @@ impl Compiler {
             }
             for key in ["code", "lower", "lower_owned", "lower_borrowed"] {
                 if let Some(text) = properties.get(key) {
-                    validate_parts(
+                    self.validate_native_parts(
                         template::parse(text, true).map_err(|e| definition.name.span.error(e))?,
                         &definition.parameters,
+                        &BTreeSet::new(),
                         &definition.name.span,
                     )?;
                 }
@@ -431,9 +519,90 @@ impl Compiler {
         body: bool,
         owner: Option<usize>,
     ) -> Result<String, String> {
+        let parts = template::parse(text, body).map_err(|e| span.error(e))?;
+        self.render_native_parts(parts, bindings, function, span, owner, &mut 4096)
+    }
+
+    fn render_native_parts(
+        &mut self,
+        parts: Vec<Part>,
+        bindings: &BTreeMap<String, String>,
+        function: Option<&str>,
+        span: &Span,
+        owner: Option<usize>,
+        budget: &mut usize,
+    ) -> Result<String, String> {
         let mut output = String::new();
-        for part in template::parse(text, body).map_err(|e| span.error(e))? {
+        for part in parts {
+            if *budget == 0 {
+                return Err(span.error("native field expansion work limit exceeded"));
+            }
+            *budget -= 1;
             match part {
+                Part::Index(index) => {
+                    let value = bindings
+                        .get(&index)
+                        .filter(|v| v.parse::<usize>().is_ok())
+                        .ok_or_else(|| {
+                            span.error(format!("unbound native field index '{index}'"))
+                        })?;
+                    output.push_str(value);
+                }
+                Part::Fields {
+                    ty,
+                    element,
+                    index,
+                    parts,
+                } => {
+                    let ty = generics::substitute(&ty, bindings);
+                    self.check_type(&Name {
+                        text: ty.clone(),
+                        span: span.clone(),
+                    })?;
+                    if self.callables.contains_key(&ty)
+                        && !owner
+                            .is_some_and(|id| self.functions[id].origin == Origin::StandardLibrary)
+                    {
+                        return Err(span.error("callable environment fields are private"));
+                    }
+                    let fields = self
+                        .records
+                        .get(&ty)
+                        .ok_or_else(|| {
+                            span.error(format!(
+                                "native fields reference requires a struct or Tuple; got '{ty}'"
+                            ))
+                        })?
+                        .fields
+                        .clone();
+                    // Each iteration has a lexical binding scope. Expansion
+                    // reuses ordinary typed references, including dependencies.
+                    for (i, (_, field)) in fields.into_iter().enumerate() {
+                        if *budget == 0 {
+                            return Err(span.error("native field expansion work limit exceeded"));
+                        }
+                        *budget -= 1;
+                        let mut scoped = bindings.clone();
+                        scoped.insert(element.clone(), field.text.clone());
+                        scoped.insert(index.clone(), i.to_string());
+                        let rendered = self
+                            .render_native_parts(
+                                parts.clone(),
+                                &scoped,
+                                function,
+                                span,
+                                owner,
+                                budget,
+                            )
+                            .map_err(|error| {
+                                format!(
+                                    "{error}\nwhile expanding field {i} of '{ty}' at {}:{}:{}",
+                                    field.span.file, field.span.line, field.span.column
+                                )
+                            })?;
+                        output.push_str(&rendered);
+                    }
+                }
                 Part::Text(text) => output.push_str(&text),
                 Part::SelfName => output.push_str(
                     function
@@ -595,5 +764,90 @@ impl Compiler {
             }
         }
         Ok(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TYPES: &str = r#"
+extern type Int {cpp_name:"std::int64_t",representation:"i64",}
+extern type Unit {cpp_name:"Unit",representation:"unit",}
+extern fn copy(x:Int)->Int {cpp_name:"field_copy",code:"Obj<std::int64_t> field_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",}
+"#;
+    const DERIVE: &str = r#"
+extern fn unrelated_template_name<Element>(value:Element)->Element {
+    derive:"record_copy",
+    code:"/* source_derivation */ Obj<@{Element}> @{fn}(const Obj<@{Element}>& value,Loc loc){return make_obj<@{Element}>(@{Element}{@{fields Element as Member,Position}@{boxed_call copy(Member)->Member}(value->field_@{index Position},loc),@{end}});}",
+}
+"#;
+
+    #[test]
+    fn record_copy_derivation_uses_the_declared_role_and_source_body() {
+        let standard = Source::standard(
+            crate::parse(&format!("{TYPES}{DERIVE}"), "arbitrary-standard-name.rusk").unwrap(),
+        );
+        let user = Source::user(
+            crate::parse(
+                "struct Row{a:Int;b:Int;}let a:=Row{a:1,b:2};let b=a;",
+                "caller.rusk",
+            )
+            .unwrap(),
+        );
+        let cpp = Compiler::default()
+            .compile(&[standard, user], crate::backend::Emit::Cpp)
+            .unwrap();
+        assert!(cpp.contains("/* source_derivation */ Obj<RuskRecord0> deep_copy"));
+        assert!(cpp.contains("field_copy(value->field_0,loc),field_copy(value->field_1,loc)"));
+        assert!(!cpp.contains("unrelated_template_name("));
+    }
+
+    #[test]
+    fn record_copy_derivations_validate_trust_shape_duplicates_and_unused_references() {
+        for (definition, standard, expected) in [
+            (
+                DERIVE.to_string(),
+                false,
+                "reserved for the embedded standard library",
+            ),
+            (
+                DERIVE.replace("record_copy", "unknown_role"),
+                true,
+                "invalid native record copy derivation",
+            ),
+            (
+                DERIVE.replace("->Element", "->Unit"),
+                true,
+                "invalid native record copy derivation",
+            ),
+            (
+                DERIVE.replace("<Element>", "<Element,Other>"),
+                true,
+                "invalid native record copy derivation",
+            ),
+            (
+                format!("{DERIVE}{DERIVE}"),
+                true,
+                "duplicate native derivation",
+            ),
+            (
+                DERIVE.replace("copy(Member)->Member", "copy(Missing)->Member"),
+                true,
+                "unknown type",
+            ),
+        ] {
+            let types = Source::standard(crate::parse(TYPES, "types.rusk").unwrap());
+            let statements = crate::parse(&definition, "<stdlib/collections.rusk>").unwrap();
+            let source = if standard {
+                Source::standard(statements)
+            } else {
+                Source::user(statements)
+            };
+            let error = Compiler::default()
+                .compile(&[types, source], crate::backend::Emit::Cpp)
+                .unwrap_err();
+            assert!(error.contains(expected), "{error}");
+        }
     }
 }

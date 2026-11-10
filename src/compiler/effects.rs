@@ -270,6 +270,13 @@ extern fn bridge<F>(f:F)->Int{{effects:"read_fresh",code:"Obj<@{{Int}}> @{{fn}}(
 extern fn touch(x:Int){{cpp_name:"touch",code:"unused",effects:"write_first",}}
 extern fn copy(x:Int)->Int{{cpp_name:"copy_int",code:"unused",effects:"read_fresh",}}
 "#),"standard.rusk").unwrap());
+        let derivations = Source::standard(
+            crate::parse(include_str!("../../lib/collections.rusk"), "standard-derivations.rusk")
+                .unwrap()
+                .into_iter()
+                .filter(|statement| matches!(statement, Stmt::GenericExternFunction(_,_,_,_,properties) if properties.contains_key("derive")))
+                .collect(),
+        );
         for (callback, expected) in [
             ("()=>7", "NativeContract"),
             ("()=>{touch(value);7}", "Opaque"),
@@ -279,7 +286,11 @@ extern fn copy(x:Int)->Int{{cpp_name:"copy_int",code:"unused",effects:"read_fres
             );
             let hir = Compiler::default()
                 .compile(
-                    &[Source::standard(standard.statements.clone()), user],
+                    &[
+                        Source::standard(standard.statements.clone()),
+                        Source::standard(derivations.statements.clone()),
+                        user,
+                    ],
                     crate::backend::Emit::Hir,
                 )
                 .unwrap();

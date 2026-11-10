@@ -150,52 +150,43 @@ impl Compiler {
             .cloned()
             .collect();
         for record in records {
-            let mut copies = vec![];
-            for (_, ty) in &record.fields {
-                let value = Value {
-                    id: ValueId::Probe,
-                    ty: ty.text.clone(),
-                };
-                let index = self
-                    .resolve("copy", &[value], None, &ty.span)?
-                    .ok_or_else(|| {
-                        ty.span
-                            .error(format!("field type '{}' has no copy function", ty.text))
-                    })?;
-                self.same(&ty.text, &self.functions[index].result, &ty.span)?;
-                self.used.insert(index);
-                self.abi_reference(index, true);
-                copies.push(index);
-            }
+            let definition = self
+                .native_derivations
+                .get("record_copy")
+                .cloned()
+                .ok_or_else(|| {
+                    record
+                        .name
+                        .span
+                        .error("missing standard record copy derivation")
+                })?;
             let copy_index = self.record_copy_functions[&record.name.text];
-            self.set_derived_copy_dependencies(
-                copy_index,
-                &record.name.text,
-                copies.iter().copied(),
+            self.functions[copy_index].origin = definition.origin;
+            let bindings = BTreeMap::from([(
+                definition.parameters[0].text.clone(),
+                record.name.text.clone(),
+            )]);
+            let code = self.render_native(
+                &definition.foreign.as_ref().unwrap()["code"],
+                &bindings,
+                Some("deep_copy"),
+                &definition.name.span,
+                true,
+                Some(copy_index),
             )?;
-            self.record_copies.insert(record.name.text, copies);
+            let dependencies = self
+                .native_contract_dependencies
+                .get(&copy_index)
+                .cloned()
+                .unwrap_or_default();
+            self.set_derived_copy_dependencies(copy_index, &record.name.text, dependencies)?;
+            self.record_copies.insert(record.name.text, code);
         }
         Ok(())
     }
 
     pub(super) fn record_copy_cpp(&self) -> String {
-        let mut code = String::new();
-        for name in self.records.keys() {
-            let native = &self.types[name];
-            let values = self.record_copies[name]
-                .iter()
-                .enumerate()
-                .map(|(i, &function)| {
-                    format!(
-                        "{}(value->field_{i},loc)",
-                        self.abi_reference_name(function, true)
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            code.push_str(&format!("Obj<{native}> deep_copy(const Obj<{native}>& value, Loc loc) {{ return make_obj<{native}>({native}{{{values}}}); }}\n"));
-        }
-        code
+        self.record_copies.values().cloned().collect()
     }
 
     pub(super) fn field(&self, ty: &str, name: &Name) -> Result<(usize, String), String> {

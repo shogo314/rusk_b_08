@@ -1003,3 +1003,140 @@ prepare();value_unit::<Token>();wt observed();
         assert_eq!(out.stdout, b"No\nNo\n0\n0\n0\n");
     }
 }
+
+#[test]
+fn native_fields_resolve_logical_operations_and_keep_stored_unit_objects() {
+    let case = Case::new(
+        r#"
+extern type Score {cpp_name:"std::int64_t",}
+extern fn score(x:Int)->Score {cpp_name:"score",code:"Obj<std::int64_t> score(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn number(x:Score)->Int {cpp_name:"number",code:"Obj<std::int64_t> number(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn copy(x:Score)->Score {cpp_name:"copy_score",code:"Obj<std::int64_t> copy_score(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x+100);}",}
+extern fn same_unit(a:Unit,b:Unit)->Bool {cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+extern fn clone_fields<T>(value:T)->T {
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> value,Loc loc){return make_obj<@{T}>(@{T}{@{fields T as F,I}@{owned_call copy(F)->F}(value->field_@{index I},loc),@{end}});}",
+}
+struct F {value:Int;}
+struct I {value:Int;}
+struct Pair {left:Int;right:Score;unit:Unit;}
+let a:=Pair{left:1,right:score(2),unit:{}};
+let b:=clone_fields(a);a.left=9;
+wt b.left,number(b.right),same_unit(a.unit,b.unit);
+let p:=clone_fields((3,"ok",{}));wt p[0],p[1];
+let text:="abc";let original:=(text[0],{});let held:=clone_fields(original);
+original:=(text[1],{});original:=('z',{});text+="!";wt text,held[0];
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 102 No\n3 ok\nabc! a\n");
+    }
+}
+
+#[test]
+fn native_field_scopes_nest_and_do_not_leak_between_expansions() {
+    let case = Case::new(
+        r#"
+extern fn total_fields<T>(value:T)->Int {
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}> value,Loc loc){std::int64_t total=0;@{fields T as F,I}{auto field=value->field_@{index I};@{fields F as G,J}total+=*@{owned_call copy(G)->G}(field->field_@{index J},loc);@{end}}@{end}@{fields T as F,I}total+=@{index I};@{end}return make_obj<@{Int}>(total);}",
+}
+wt total_fields(((1,2),(3,4,5)));
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"16\n");
+    }
+}
+
+#[test]
+fn invalid_native_fields_are_diagnosed_before_cpp_even_when_unused() {
+    for (code, expected) in [
+        ("@{fields T as F,I}@{Missing}@{end}", "unknown type"),
+        (
+            "@{fields Missing<T> as F,I}@{end}",
+            "unknown type constructor",
+        ),
+        (
+            "@{fields T as F,I}@{index J}@{end}",
+            "unbound native field index",
+        ),
+        ("@{fields T as F,I}@{end}@{F}", "unknown type"),
+        (
+            "@{fields T as F,I}@{end}@{index I}",
+            "unbound native field index",
+        ),
+        ("@{fields T as T,I}@{end}", "shadows"),
+        (
+            "@{fields T as F,I}@{fields F as G,I}@{end}@{end}",
+            "shadows",
+        ),
+        (
+            "@{fields T as F,I}@{I}@{end}",
+            "index cannot be used as a type",
+        ),
+        ("@{fields T as F,F}@{end}", "invalid native fields"),
+        ("@{fields T as F,I}", "unterminated native field expansion"),
+        ("@{end}", "end without fields"),
+    ] {
+        let case = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{code}\",}}"));
+        let out = case.compile();
+        assert!(!out.status.success(), "{code}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(expected),
+            "{code}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+    for (value, expected) in [
+        ("1", "requires a struct or Tuple"),
+        ("(x:Int)=>x", "callable environment fields are private"),
+    ] {
+        let case = Case::new(&format!(
+            r#"extern fn fields<T>(x:T){{code:"void @{{fn}}(Obj<@{{T}}> x,Loc){{@{{fields T as F,I}}@{{end}}}}",}}fields({value});"#
+        ));
+        let out = case.compile();
+        assert!(!out.status.success());
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(expected),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+}
+
+#[test]
+fn native_field_expansions_have_depth_and_work_limits() {
+    let mut nested = String::new();
+    for i in 0..65 {
+        nested += &format!("@{{fields T as F{i},I{i}}}");
+    }
+    nested += &"@{end}".repeat(65);
+    let out = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{nested}\",}} ")).compile();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("nesting limit exceeded"));
+    let fields = vec!["1"; 70].join(",");
+    let case = Case::new(&format!(
+        r#"extern fn wide<T>(x:T){{code:"void @{{fn}}(Obj<@{{T}}> x,Loc){{@{{fields T as F,I}}@{{fields T as G,J}}@{{index J}};@{{end}}@{{end}}}}",}} wide(({fields}));"#
+    ));
+    let out = case.compile();
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("work limit exceeded"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!case.0.join("main.cpp").exists());
+}
