@@ -471,16 +471,15 @@ impl Compiler {
             self.prepare_derived_functions()?;
             if index == self.functions.len()
                 && self.record_copy_functions.iter().all(|(ty, id)| {
-                    !self.aggregate_copy_needed(*id) || self.record_copies.contains_key(ty)
+                    !self.native_operation_needed(*id) || self.record_copies.contains_key(ty)
                 })
                 && self.container_copies.len() == self.containers.len()
                 && self.enum_copy_functions.iter().all(|(ty, id)| {
-                    !self.aggregate_copy_needed(*id) || self.enum_copies.contains_key(ty)
+                    !self.native_operation_needed(*id) || self.enum_copies.contains_key(ty)
                 })
-                && self
-                    .native_derivation_tasks
-                    .keys()
-                    .all(|id| !self.used.contains(id) || self.native_derived_functions.contains(id))
+                && self.native_derivation_tasks.keys().all(|id| {
+                    !self.native_operation_needed(*id) || self.native_derived_functions.contains(id)
+                })
             {
                 break;
             }

@@ -418,19 +418,10 @@ impl Compiler {
                 "Obj<{native}> $fn({params},Loc loc){{{validate}auto n=*d0;if(n<0)fail(loc,\"negative array length\");auto result=make_obj<{native}>({native}{{}});if(static_cast<__int128>(n)>result->max_size())fail(loc,\"array length out of range\");result->reserve(static_cast<std::size_t>(n));for(std::int64_t i=0;i<n;++i)result->push_back({read}({child_args}loc));return result;}}"
             )
         } else if ty.starts_with("Tuple<") && dimensions == 0 {
-            let fields = self.records[ty].fields.clone();
-            let mut body = String::new();
-            let mut values = vec![];
-            for (index, (_, field)) in fields.iter().enumerate() {
-                let read = self.read_function(&field.text, 0, span)?;
-                self.used.insert(read);
-                body += &format!("auto value{index}={}(loc);", self.abi_reference(read, true));
-                values.push(format!("value{index}"));
-            }
-            format!(
-                "Obj<{native}> $fn(Loc loc){{{body}return make_obj<{native}>({native}{{{}}});}}",
-                values.join(",")
-            )
+            let index = self.native_function("__read__", vec![], ty, |_| String::new(), span)?;
+            self.native_derivation_tasks
+                .insert(index, ("tuple_read".into(), ty.into()));
+            return Ok(index);
         } else {
             return Err(span.error(format!(
                 "no input reader for '{ty}' with {dimensions} dimensions"

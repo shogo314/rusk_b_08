@@ -1,0 +1,12 @@
+extern fn read_fields<T>()->T {
+    code:"Obj<@{T}> @{fn}(Loc loc){@{fields T as F,I}auto value_@{index I}=@{boxed_call __read__()->F}(loc);@{end}return make_obj<@{T}>(@{T}{@{fields T as F,I}value_@{index I},@{end}});}",
+}
+
+extern type Handle{cpp_name:"std::int64_t",}
+extern fn __read__()->Handle{cpp_name:"read_handle",code:"Obj<std::int64_t> read_handle(Loc loc){auto value=read_token(loc);return make_obj<std::int64_t>(std::stoll(value));}",}
+extern fn number(x:Handle)->Int{cpp_name:"handle_number",code:"Obj<std::int64_t> handle_number(Obj<std::int64_t> x,Loc){return x;}",}
+fn __read__()->Unit{in ignored:Int;}
+struct Row{id:Int;ignored:Unit;name:Str;}
+let row:=read_fields::<Row>();wt row.id,row.name;
+in pair:(Handle,(Int,Str));wt number(pair[0]),pair[1];
+in units:((Unit,Int),Str);wt units[0][1],units[1];

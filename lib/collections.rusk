@@ -25,6 +25,11 @@ extern fn sum_assign_body<T>(target:T,source:T)->Unit {
     code:"void @{fn}(Obj<@{T}> target,Obj<@{T}> source,Loc loc){auto snapshot=@{rooted_call copy(T)->T}(source,loc);target->value=std::move(snapshot->value);}",
 }
 
+extern fn product_read_body<T>()->T {
+    derive:"tuple_read",
+    code:"Obj<@{T}> @{fn}(Loc loc){@{fields T as F,I}auto value_@{index I}=@{boxed_call __read__()->F}(loc);@{end}return make_obj<@{T}>(@{T}{@{fields T as F,I}value_@{index I},@{end}});}",
+}
+
 // Standard Option operations use the ordinary enum and generic function paths.
 extern fn Some<T>(value:T)->Option<T> {
     effects:"variant_constructor:0",

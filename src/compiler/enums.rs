@@ -281,7 +281,7 @@ impl Compiler {
             .enums
             .iter()
             .filter(|(ty, _)| {
-                self.aggregate_copy_needed(self.enum_copy_functions[*ty])
+                self.native_operation_needed(self.enum_copy_functions[*ty])
                     && !self.enum_copies.contains_key(*ty)
             })
             .map(|(ty, _)| ty.clone())

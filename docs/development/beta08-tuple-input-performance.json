@@ -1,0 +1,128 @@
+{
+  "utc": "2026-11-10T02:09:34.685700+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "0497db301f3837cf3ca461f9c15bbbfcdc04d2bc5b3173199551362c85769ef2"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "vector_input": {
+      "source": "in values(300000):Vec<Int>,rows(100000):Vec<(Int,Int)>;wt values.len(),values[-1],rows.len(),rows[-1][1];",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "b79b9027d4170e8c0623868c8c9adada8b5ff77419ca2ca92c6793df7e98386e",
+          "runs_ms": [
+            20.011093,
+            20.123393,
+            19.087594,
+            19.679058,
+            19.755319,
+            19.386542,
+            19.680039,
+            19.495055,
+            19.842001,
+            19.301925,
+            19.852781,
+            19.389995,
+            19.349633,
+            19.60794,
+            19.960659
+          ],
+          "output": "300000 1 100000 1\n",
+          "allocations": 600012,
+          "shared_ptr_copies": 200011,
+          "median_ms": 19.679058
+        },
+        "current": {
+          "cpp_sha256": "31ae5420b9306d981b063f5403a14915a886258791d8d0a3e9a59b8c788bd602",
+          "runs_ms": [
+            19.408004,
+            19.917391,
+            19.399057,
+            20.364303,
+            20.016264,
+            19.426829,
+            19.328052,
+            19.483083,
+            19.837452,
+            19.156565,
+            19.839646,
+            19.458652,
+            18.827811,
+            19.190257,
+            20.423444
+          ],
+          "output": "300000 1 100000 1\n",
+          "allocations": 600012,
+          "shared_ptr_copies": 200011,
+          "median_ms": 19.458652
+        }
+      },
+      "input_bytes": 1000000,
+      "input_sha256": "9d3c8986edd01da50a625fa16e03cb3322fa9f95491078b0660a8cc93bbae42f",
+      "speedup": 1.0113268894474294
+    },
+    "record_vector_copy": {
+      "source": "struct Row{value:Int;text:Str;}let a:=[Row{value:1,text:\"ab\"};1000];let total:=0;for round in 0..100{let b=a;total+=b[0].value;}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "dc438bf010ac020623c555e85ca8495a62b9325ecd9c044bf3d66c2146c25183",
+          "runs_ms": [
+            7.19179,
+            6.931535,
+            7.010181,
+            7.118994,
+            6.929431,
+            6.786286,
+            6.866419,
+            6.978393,
+            7.179288,
+            7.251261,
+            7.167604,
+            6.493078,
+            7.053384,
+            6.465268,
+            7.229721
+          ],
+          "output": "100\n",
+          "allocations": 303216,
+          "shared_ptr_copies": 202608,
+          "median_ms": 7.010181
+        },
+        "current": {
+          "cpp_sha256": "65536641e26524f6b50f8b8d5ee85b7203e9cc7f7cf5356b83430a8b680eed7b",
+          "runs_ms": [
+            7.060114,
+            6.82668,
+            7.097694,
+            6.90123,
+            7.238768,
+            6.49982,
+            6.761174,
+            6.867025,
+            7.103896,
+            8.056809,
+            6.581893,
+            6.560534,
+            6.857015,
+            6.717695,
+            7.217517
+          ],
+          "output": "100\n",
+          "allocations": 303216,
+          "shared_ptr_copies": 202508,
+          "median_ms": 6.867025
+        }
+      },
+      "speedup": 1.020846873282098
+    }
+  }
+}

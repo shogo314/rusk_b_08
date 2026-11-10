@@ -1201,3 +1201,115 @@ let value:=Choice::Value(original);match value{Value(x)=>{wt number(x.inner.valu
         assert!(!case.0.join("main.cpp").exists());
     }
 }
+
+#[test]
+fn product_readers_use_field_operations_under_independent_names() {
+    let library = include_str!("../lib/collections.rusk");
+    let start = library.find("extern fn product_read_body<").unwrap();
+    let end = start
+        + library[start..]
+            .find("// Standard Option operations")
+            .unwrap();
+    let declaration = library[start..end]
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("derive:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("fn product_read_body<", "fn read_fields<");
+    let case = Case::new(&format!(
+        r#"{declaration}
+extern type Handle{{cpp_name:"std::int64_t",}}
+extern fn __read__()->Handle{{cpp_name:"read_handle",code:"Obj<std::int64_t> read_handle(Loc loc){{auto value=read_token(loc);return make_obj<std::int64_t>(std::stoll(value));}}",}}
+extern fn number(x:Handle)->Int{{cpp_name:"handle_number",code:"Obj<std::int64_t> handle_number(Obj<std::int64_t> x,Loc){{return x;}}",}}
+fn __read__()->Unit{{in ignored:Int;}}
+struct Row{{id:Int;ignored:Unit;name:Str;}}
+let row:=read_fields::<Row>();wt row.id,row.name;
+in pair:(Handle,(Int,Str));wt number(pair[0]),pair[1];
+in units:((Unit,Int),Str);wt units[0][1],units[1];
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("1 2 hello 3 4 world 5 6 end", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 hello\n3 4 world\n6 end\n");
+    }
+}
+
+#[test]
+fn tuple_readers_preserve_order_and_custom_reader_precedence() {
+    let case = Case::new(
+        r#"
+extern symbol read_order {code:"std::int64_t input_order=0;",}
+extern type Step{cpp_name:"std::int64_t",}
+extern fn number(x:Step)->Int{cpp_name:"step_number",code:"Obj<std::int64_t> step_number(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn step(x:Int)->Step{cpp_name:"step",code:"Obj<std::int64_t> step(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn __read__()->Step {
+    cpp_name:"ordered_integer",code:"Obj<std::int64_t> ordered_integer(Loc loc){auto value=read_token(loc);input_order=input_order*10+std::stoll(value);return make_obj<std::int64_t>(std::stoll(value));}",
+}
+extern fn order()->Int{cpp_name:"get_input_order",code:"Obj<std::int64_t> get_input_order(Loc){return make_obj<std::int64_t>(input_order);}",}
+fn __read__()->(Step,Step){in value:Step;return (value,step(9));}
+in nested:((Step,Step),Step,(Step,Step));wt number(nested[0][0]),number(nested[0][1]),number(nested[1]),number(nested[2][0]),number(nested[2][1]),order();
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("1 2 3", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 9 2 3 9 123\n");
+    }
+}
+
+#[test]
+fn tuple_reader_failures_keep_partial_output_and_user_locations() {
+    for input in ["1", "1 not-an-integer"] {
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = Case::new("wt \"before\";in value:(Int,(Int,Int));wt value;")
+                .run_with_options(input, &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            assert!(String::from_utf8_lossy(&out.stderr).contains("main.rusk:"));
+        }
+    }
+    let case = Case::new("extern type Handle{cpp_name:\"std::int64_t\",}in value:(Handle,Int);");
+    let out = case.compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("no input reader") && error.contains("main.rusk:"),
+        "{error}"
+    );
+    assert!(!case.0.join("main.cpp").exists());
+}
+
+#[test]
+fn tuple_reader_effect_queries_validate_fields_without_consuming_input() {
+    let query = r#"extern fn reader_writes<T>()->Bool{code:"Obj<@{Bool}> @{fn}(Loc){return make_obj<@{Bool}>(@{writes __read__()->T});}",}"#;
+    let case = Case::new(&format!("{query}wt reader_writes::<(Int,Str)>();"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes\n");
+    }
+    let case = Case::new(&format!(
+        "{query}extern type Handle{{cpp_name:\"std::int64_t\",}}wt reader_writes::<(Handle,Int)>();"
+    ));
+    let out = case.compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("no input reader") && error.contains("main.rusk:"),
+        "{error}"
+    );
+    assert!(!case.0.join("main.cpp").exists());
+}

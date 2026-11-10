@@ -1,7 +1,7 @@
 //! Source templates and metadata for automatically derived aggregate operations.
 use super::*;
 impl Compiler {
-    pub(super) fn aggregate_copy_needed(&self, index: usize) -> bool {
+    pub(super) fn native_operation_needed(&self, index: usize) -> bool {
         self.used.contains(&index)
             || self
                 .native_effect_references
@@ -32,7 +32,9 @@ impl Compiler {
         let tasks = self
             .native_derivation_tasks
             .iter()
-            .filter(|(id, _)| self.used.contains(id) && !self.native_derived_functions.contains(id))
+            .filter(|(id, _)| {
+                self.native_operation_needed(**id) && !self.native_derived_functions.contains(id)
+            })
             .map(|(&id, (kind, ty))| (id, kind.clone(), ty.clone()))
             .collect::<Vec<_>>();
         for (index, kind, ty) in tasks {

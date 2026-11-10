@@ -225,10 +225,19 @@ impl Compiler {
             }
             generics::parameters_valid(parameters)?;
             let assignment = matches!(kind.as_str(), "record_assign" | "enum_assign");
-            let valid_kind = assignment || matches!(kind.as_str(), "record_copy" | "enum_copy");
+            let input = kind == "tuple_read";
+            let valid_kind =
+                assignment || input || matches!(kind.as_str(), "record_copy" | "enum_copy");
             if !valid_kind
                 || parameters.len() != 1
-                || arguments.len() != if assignment { 2 } else { 1 }
+                || arguments.len()
+                    != if assignment {
+                        2
+                    } else if input {
+                        0
+                    } else {
+                        1
+                    }
                 || arguments
                     .iter()
                     .any(|(_, ty)| ty.text != parameters[0].text)
@@ -247,6 +256,8 @@ impl Compiler {
             {
                 return Err(name.span.error(if assignment {
                     "invalid native assignment derivation; expected one type parameter and (T,T)->Unit"
+                }else if input {
+                    "invalid native input derivation; expected one type parameter and ()->T"
                 }else{
                     "invalid native copy derivation; expected one type parameter and (T)->T"
                 }));
@@ -1089,5 +1100,90 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
                 .unwrap_err();
             assert!(error.contains(expected), "{error}");
         }
+    }
+    #[test]
+    fn tuple_input_derivations_validate_role_shape_and_source_trust() {
+        let definition =
+            r#"extern fn custom_product_reader<T>()->T{derive:"tuple_read",code:"unused",}"#;
+        for (source, standard, expected) in [
+            (
+                definition.to_string(),
+                false,
+                "reserved for the embedded standard library",
+            ),
+            (
+                definition.replace("()->T", "(x:T)->T"),
+                true,
+                "invalid native input derivation",
+            ),
+            (
+                definition.replace("()->T", "()->Unit"),
+                true,
+                "invalid native input derivation",
+            ),
+            (
+                format!("{definition}{definition}"),
+                true,
+                "duplicate native derivation",
+            ),
+        ] {
+            let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let declarations = if standard {
+                Source::standard(statements)
+            } else {
+                Source::user(statements)
+            };
+            let error = Compiler::default()
+                .compile(
+                    &[
+                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        declarations,
+                    ],
+                    crate::backend::Emit::Cpp,
+                )
+                .unwrap_err();
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+    #[test]
+    fn tuple_input_role_uses_the_standard_template_with_an_unrelated_name() {
+        let mut declarations = crate::parse(
+            include_str!("../../lib/collections.rusk"),
+            "renamed-library.rusk",
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive")))
+        .collect::<Vec<_>>();
+        for statement in &mut declarations {
+            if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement
+                && properties["derive"] == "tuple_read"
+            {
+                name.text = "renamed_product_reader".into();
+                properties
+                    .get_mut("code")
+                    .unwrap()
+                    .insert_str(0, "/* input_source */ ");
+            }
+        }
+        let types = format!(
+            r#"{TYPES}
+extern type Bool{{cpp_name:"bool",representation:"bool",}}
+extern fn __read__()->Int{{cpp_name:"input_field",code:"Obj<std::int64_t> input_field(Loc){{return make_obj<std::int64_t>(1);}}",}}
+"#
+        );
+        let cpp = Compiler::default()
+            .compile(
+                &[
+                    Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                    Source::standard(declarations),
+                    Source::user(crate::parse("in row:(Int,Int);", "caller.rusk").unwrap()),
+                ],
+                crate::backend::Emit::Cpp,
+            )
+            .unwrap();
+        assert!(cpp.contains("/* input_source */ Obj<RuskRecord0>"));
+        assert!(cpp.contains("auto value_0=input_field(loc);auto value_1=input_field(loc);"));
+        assert!(!cpp.contains("renamed_product_reader("));
     }
 }
