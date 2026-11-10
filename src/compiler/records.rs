@@ -127,6 +127,13 @@ impl Compiler {
         Ok(())
     }
 
+    pub(super) fn record_forwards(&self) -> String {
+        self.records
+            .keys()
+            .map(|name| format!("struct {};\n", self.types[name]))
+            .collect()
+    }
+
     pub(super) fn record_cpp(&self) -> String {
         let mut code = String::new();
         for name in self.records.keys() {

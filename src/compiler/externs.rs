@@ -81,7 +81,7 @@ impl Compiler {
             || (base == "Vec" && origin != Origin::StandardLibrary)
             || matches!(
                 tuples::type_parts(&name.text).map_or(name.text.as_str(), |(base, _)| base),
-                "Tuple" | "Option" | "Dict" | "Set"
+                "Tuple" | "Option"
             )
         {
             return Err(name
@@ -449,8 +449,7 @@ impl Compiler {
             Some(d.parameters.len())
         } else {
             match base {
-                "Iter" | "Set" => Some(1),
-                "Dict" => Some(2),
+                "Iter" => Some(1),
                 "Tuple" if args.len() >= 2 => Some(args.len()),
                 _ => None,
             }
@@ -579,6 +578,7 @@ impl Compiler {
                     element,
                     index,
                     parts,
+                    tuple_only: _,
                 } => {
                     self.validate_scoped_native_type(&ty, parameters, indices, span)?;
                     if let Some(variant) = variant
@@ -894,12 +894,18 @@ impl Compiler {
                     element,
                     index,
                     parts,
+                    tuple_only,
                 } => {
                     let ty = generics::substitute(&ty, bindings);
                     self.check_type(&Name {
                         text: ty.clone(),
                         span: span.clone(),
                     })?;
+                    if tuple_only && !ty.starts_with("Tuple<") {
+                        return Err(
+                            span.error(format!("native tuple fields require a Tuple; got '{ty}'"))
+                        );
+                    }
                     if self.callables.contains_key(&ty)
                         && !owner
                             .is_some_and(|id| self.functions[id].origin == Origin::StandardLibrary)

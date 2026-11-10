@@ -21,7 +21,8 @@
 | `lib/core.rusk` | 基本型・演算・入出力の定義 |
 | `lib/collections.rusk` | 配列・イテレータ・文字の共有を管理するC++ランタイム |
 | `lib/vec.rusk` | 配列の基本操作と配列反復型のジェネリックextern宣言 |
-| `lib/vec_compat.rusk` | 移行途中の、型ごとの選別が必要な配列操作 |
+| `lib/hash_collections.rusk` | Dict/Setの型・キー演算・反復・コピー・操作のジェネリックextern宣言 |
+| `lib/containers.hpp` | キー演算を受け取るC++コンテナの共通レイアウトとenumのABI補助 |
 | `lib/algorithms.rusk` | 探索・反復・集約・ソートのジェネリックextern宣言 |
 | `tests/e2e.rs` | Rusk → C++ → 実行結果までのテスト |
 | `tests/atcoder.rs` | AtCoderの解答例を公式サンプルと照合 |

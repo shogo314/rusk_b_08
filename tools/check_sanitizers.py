@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/hash_key_policies.rusk').read_text(),b'',b'3 4 5 6 0\n2 Yes Yes\n7 8\nYes 9\n1 0\n'),
     ((ROOT/'examples/beta08/native_type_function_references.rusk').read_text(),b'',b'8 11\n10 11 11\n109 14\n12\n'),
     ((ROOT/'examples/beta08/hash_copy_invalidation.rusk').read_text(),b'No',b'before\n',b'container changed during copy'),
     ((ROOT/'examples/beta08/hash_copy_invalidation.rusk').read_text(),b'Yes',b'before\n',b'container changed during copy'),

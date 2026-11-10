@@ -1,0 +1,73 @@
+{
+  "utc": "2026-11-10T05:36:27.624502+00:00",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "7221c0d25b25cf5468ff0ebe673431ec5005b864aac95bff3ac4a4691bb36b63"
+  },
+  "scope": "raw hash values before randomized seed mixing; signed 64-bit encoding; same GCC and inputs",
+  "rusk_flags": [
+    "--no-opt"
+  ],
+  "cpp_flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "inputs": [
+    [
+      "integer",
+      "Int",
+      [
+        "0",
+        "-1",
+        "-9223372036854775808",
+        "9223372036854775807"
+      ]
+    ],
+    [
+      "flag",
+      "Bool",
+      [
+        "false",
+        "true"
+      ]
+    ],
+    [
+      "letter",
+      "Char",
+      [
+        "'a'",
+        "'z'"
+      ]
+    ],
+    [
+      "text",
+      "Str",
+      [
+        "\"\"",
+        "\"abc\"",
+        "\"hash-key-value\""
+      ]
+    ],
+    [
+      "nested",
+      "Tuple<Int,Tuple<Str,Bool>,Char>",
+      [
+        "(1,(\"abc\",true),'z')",
+        "(-1,(\"\",false),'a')"
+      ]
+    ]
+  ],
+  "variants": {
+    "baseline": {
+      "source": "extern symbol fingerprints {code:\"template<class T> Obj<std::int64_t> fingerprint_raw(Obj<T> value,Loc){return make_obj<std::int64_t>(static_cast<std::int64_t>(rusk_hash_value(value)));}\",}\nextern fn fingerprint_integer(value:Int)->Int{cpp_name:\"fingerprint_raw\",code:\"\",}\nextern fn fingerprint_flag(value:Bool)->Int{cpp_name:\"fingerprint_raw\",code:\"\",}\nextern fn fingerprint_letter(value:Char)->Int{cpp_name:\"fingerprint_raw\",code:\"\",}\nextern fn fingerprint_text(value:Str)->Int{cpp_name:\"fingerprint_raw\",code:\"\",}\nextern fn fingerprint_nested(value:Tuple<Int,Tuple<Str,Bool>,Char>)->Int{cpp_name:\"fingerprint_raw\",code:\"\",}\nwt fingerprint_integer(0);\nwt fingerprint_integer(-1);\nwt fingerprint_integer(-9223372036854775808);\nwt fingerprint_integer(9223372036854775807);\nwt fingerprint_flag(false);\nwt fingerprint_flag(true);\nwt fingerprint_letter('a');\nwt fingerprint_letter('z');\nwt fingerprint_text(\"\");\nwt fingerprint_text(\"abc\");\nwt fingerprint_text(\"hash-key-value\");\nwt fingerprint_nested((1,(\"abc\",true),'z'));\nwt fingerprint_nested((-1,(\"\",false),'a'));",
+      "cpp_sha256": "e0542ac4c6b4c3fda200446299b64ef6aa5465a0d98d20d8da52a3222ae33fb4",
+      "output": "0\n-1\n-9223372036854775808\n9223372036854775807\n0\n1\n97\n122\n6142509188972423790\n3663726644998027833\n6476375886623179977\n-5595763775249519370\n5706953330454479747\n"
+    },
+    "current": {
+      "source": "fn fingerprint_integer(value:Int)->Int{return __hash_key__::<Int>(value);}\nfn fingerprint_flag(value:Bool)->Int{return __hash_key__::<Bool>(value);}\nfn fingerprint_letter(value:Char)->Int{return __hash_key__::<Char>(value);}\nfn fingerprint_text(value:Str)->Int{return __hash_key__::<Str>(value);}\nfn fingerprint_nested(value:Tuple<Int,Tuple<Str,Bool>,Char>)->Int{return __hash_key__::<Tuple<Int,Tuple<Str,Bool>,Char>>(value);}\nwt fingerprint_integer(0);\nwt fingerprint_integer(-1);\nwt fingerprint_integer(-9223372036854775808);\nwt fingerprint_integer(9223372036854775807);\nwt fingerprint_flag(false);\nwt fingerprint_flag(true);\nwt fingerprint_letter('a');\nwt fingerprint_letter('z');\nwt fingerprint_text(\"\");\nwt fingerprint_text(\"abc\");\nwt fingerprint_text(\"hash-key-value\");\nwt fingerprint_nested((1,(\"abc\",true),'z'));\nwt fingerprint_nested((-1,(\"\",false),'a'));",
+      "cpp_sha256": "dfacfa2ccec26e0dc6b45503b17df4a1ab16740b48eebad86dbb870fb399f217",
+      "output": "0\n-1\n-9223372036854775808\n9223372036854775807\n0\n1\n97\n122\n6142509188972423790\n3663726644998027833\n6476375886623179977\n-5595763775249519370\n5706953330454479747\n"
+    }
+  },
+  "identical": true
+}

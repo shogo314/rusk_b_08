@@ -1710,15 +1710,18 @@ fn hash_collection_operations_work_with_unrelated_user_type_and_constructor_name
             !line.starts_with("effects:")
                 && !line.starts_with("representation:")
                 && !line.starts_with("lower_")
+                && !line.starts_with("lower:")
         })
         .collect::<Vec<_>>()
         .join("\n")
         .replace("Dict", "Store")
-        .replace("Set", "Members");
+        .replace("Set", "Members")
+        .replace("RuskStore", "RuskDict")
+        .replace("RuskMembers", "RuskSet")
+        .replace("__hash_key__", "store_key_hash")
+        .replace("__equal_key__", "store_key_equal");
     let case = Case::new(&format!(
         r#"
-extern type<K,V> Store{{cpp_name:"RuskDict<{{K}},{{V}}>",}}
-extern type<K> Members{{cpp_name:"RuskSet<{{K}}>",}}
 {declarations}
 let store:Store<Str,Option<Int>>:=Store();store["empty"]:=None;store.set("some",Some(3));
 wt store.get("empty")?!.is_none(),store["some"]?!,store.len();
@@ -1731,6 +1734,7 @@ wt members.erase("hello"),!members;
 let saved=store;store["some"]:=Some(9);wt saved["some"]?!,store["some"]?!;
 let alias:=members;let replacement:=Members::<Str>();replacement.insert("new");
 members=replacement;replacement.clear();wt alias.contains("new"),replacement.contains("new");
+let tuples:=Store::<(Int,(Str,Bool)),Int>();tuples.set((1,("x",true)),8);wt tuples.get((1,("x",true)))?!;
 "#
     ));
     for options in [vec![], vec!["--no-opt"]] {
@@ -1742,7 +1746,7 @@ members=replacement;replacement.clear();wt alias.contains("new"),replacement.con
         );
         assert_eq!(
             out.stdout,
-            b"Yes 3 2\nempty some\n8\nYes hello\n3\n5\nYes Yes\n3 9\nYes No\n"
+            b"Yes 3 2\nempty some\n8\nYes hello\n3\n5\nYes Yes\n3 9\nYes No\n8\n"
         );
     }
 }
@@ -1996,5 +2000,64 @@ fn hash_assignment_publishes_snapshot_before_cleanup_and_checks_reentry() {
                 assert_eq!(out.stdout, b"before\n2 2 2\n");
             }
         }
+    }
+}
+
+#[test]
+fn hash_policies_use_logical_keys_and_preserve_basic_and_nested_key_behavior() {
+    let case = Case::new(include_str!("../examples/beta08/hash_key_policies.rusk"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3 4 5 6 0\n2 Yes Yes\n7 8\nYes 9\n1 0\n");
+    }
+}
+
+#[test]
+fn hash_key_eligibility_uses_rusk_types_even_when_native_hashes_exist() {
+    for key in ["Opaque", "Tuple<Int,Opaque>", "Row", "Vec<Int>", "Unit"] {
+        let source = format!(
+            r#"
+extern type Opaque{{cpp_name:"std::int64_t",}}
+extern fn __hash_key__(value:Opaque)->Int{{cpp_name:"opaque_hash",code:"Obj<std::int64_t> opaque_hash(Obj<std::int64_t> value,Loc){{return value;}}",}}
+extern fn __equal_key__(a:Opaque,b:Opaque)->Bool{{cpp_name:"opaque_equal",code:"Obj<bool> opaque_equal(Obj<std::int64_t> a,Obj<std::int64_t> b,Loc){{return make_obj<bool>(*a==*b);}}",}}
+struct Row{{value:Int;}}
+let unused:Dict<{key},Int>;
+"#
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success(), "{key}");
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("native tuple fields require a Tuple") && error.contains("main.rusk:"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn hash_constructor_functions_allow_ordinary_user_overloads() {
+    let source = "fn Dict(value:Int)->Int{return value+1;}fn Set(value:Int)->Int{return value+2;}let dictionary:=Dict::<Int,Int>();let members:=Set::<Int>();wt Dict(4),Set(4),dictionary.len(),members.len();";
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"5 6 0 0\n");
+    }
+    for source in [
+        "struct Dict{value:Int;}",
+        "enum Set{Empty}",
+        "extern type<K,V> Dict{cpp_name:\"std::int64_t\",}",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("duplicate type"));
     }
 }

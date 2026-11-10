@@ -1,0 +1,13 @@
+// Concrete functions with these spellings do not replace the library policy.
+extern symbol policy_calls{code:"std::int64_t policy_calls=0;",}
+extern fn __hash_key__(key:Int)->Int{cpp_name:"user_hash_key",code:"Obj<std::int64_t> user_hash_key(Obj<std::int64_t> key,Loc){++policy_calls;return key;}",}
+extern fn __equal_key__(a:Int,b:Int)->Bool{cpp_name:"user_equal_key",code:"Obj<bool> user_equal_key(Obj<std::int64_t>,Obj<std::int64_t>,Loc){++policy_calls;return make_obj<bool>(false);}",}
+extern fn calls()->Int{cpp_name:"get_policy_calls",code:"Obj<std::int64_t> get_policy_calls(Loc){return make_obj<std::int64_t>(policy_calls);}",}
+let integers:=Dict::<Int,Int>();integers.set(-1,3);integers.set(0,4);
+integers.set(-9223372036854775808,5);integers.set(9223372036854775807,6);
+wt integers.get(-1)?!,integers.get(0)?!,integers.get(-9223372036854775808)?!,integers.get(9223372036854775807)?!,calls();
+let flags:=Set::<Bool>();flags.insert(true);flags.insert(false);wt flags.len(),flags.contains(true),flags.contains(false);
+let chars:=Dict::<Char,Int>();chars.set('a',7);chars.set('z',8);wt chars.get('a')?!,chars.get('z')?!;
+let records:=Dict::<(Int,(Str,Bool),Char),Vec<Int>>();let key:=(4,("name",true),'x');
+records.set(key,[9]);key[1][0][0]='X';wt records.contains((4,("name",true),'x')),records.get((4,("name",true),'x'))?!;
+let copied=records;records.clear();wt copied.len(),records.len();

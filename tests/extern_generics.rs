@@ -1650,3 +1650,38 @@ fn native_type_function_reference_dependencies_are_bounded_and_located() {
         "{error}"
     );
 }
+
+#[test]
+fn native_tuple_field_expansion_is_a_structural_requirement() {
+    let definitions = r#"
+extern fn positions<T>(value:T)->Vec<Int>{
+code:"Obj<@{Vec<Int>}> @{fn}(Obj<@{T}> value,Loc){auto result=make_obj<@{Vec<Int>}>(@{Vec<Int>}{ });@{fields T tuple as F,I}result->push_back(make_obj<@{Int}>(@{index I}));@{end}return result;}",
+}
+struct Row{value:Int;}
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(&format!(
+            "{definitions}wt positions((3,Row{{value:4}},true));"
+        ))
+        .run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"0 1 2\n");
+    }
+    for value in ["Row{value:3}", "3"] {
+        let out = Case::new(&format!("{definitions}let positions:=positions({value});")).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("native tuple fields require a Tuple"),
+            "{error}"
+        );
+    }
+    let source = r#"extern fn invalid<T>(value:T){code:"void @{fn}(Obj<@{T}> value,Loc){@{fields T variant 0 tuple as F,I}int i@{index I};@{end}}",}"#;
+    let out = Case::new(source).compile();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tuple fields cannot select a variant"));
+}

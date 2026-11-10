@@ -27,11 +27,7 @@ impl Compiler {
         {
             return Err(name.span.error("duplicate type"));
         }
-        if name.text.starts_with("__Rusk")
-            || matches!(
-                name.text.as_str(),
-                "Vec" | "Tuple" | "Iter" | "Dict" | "Set"
-            )
+        if name.text.starts_with("__Rusk") || matches!(name.text.as_str(), "Vec" | "Tuple" | "Iter")
         {
             return Err(name.span.error("reserved built-in type constructor"));
         }

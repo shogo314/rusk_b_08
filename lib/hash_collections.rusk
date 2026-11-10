@@ -1,3 +1,25 @@
+// Types and hash policies use ordinary generic native type references.
+extern type<K,V> Dict {
+    cpp_name:"RuskDict<{K},{V},@{value_call __hash_key__<K>(K)->Int},@{value_call __equal_key__<K>(K,K)->Bool}>",
+    representation:"dict<K,V>",
+}
+extern type<K> Set {
+    cpp_name:"RuskSet<{K},@{value_call __hash_key__<K>(K)->Int},@{value_call __equal_key__<K>(K,K)->Bool}>",
+    representation:"set<K>",
+}
+
+extern fn __hash_key__<T>(x:T)->Int {
+    effects:"read_fresh",
+    lower:"([&](){@{if_type T matches Int}return static_cast<@{Int}>(std::hash<@{T}>{}(*$0));@{else}@{if_type T matches Bool}return static_cast<@{Int}>(std::hash<@{T}>{}(*$0));@{else}@{if_type T matches Char}return static_cast<@{Int}>(std::hash<@{T}>{}(*$0));@{else}@{if_type T matches Str}return static_cast<@{Int}>(std::hash<@{T}>{}(*$0));@{else}std::size_t hash=0;@{fields T tuple as F,I}rusk_hash_combine(hash,static_cast<std::size_t>(@{value_call __hash_key__<F>(F)->Int}($0->field_@{index I},$loc)));@{end}return static_cast<@{Int}>(hash);@{end}@{end}@{end}@{end}}())",
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}> x,[[maybe_unused]] Loc loc){return make_obj<@{Int}>(([&](){@{if_type T matches Int}return static_cast<@{Int}>(std::hash<@{T}>{}(*x));@{else}@{if_type T matches Bool}return static_cast<@{Int}>(std::hash<@{T}>{}(*x));@{else}@{if_type T matches Char}return static_cast<@{Int}>(std::hash<@{T}>{}(*x));@{else}@{if_type T matches Str}return static_cast<@{Int}>(std::hash<@{T}>{}(*x));@{else}std::size_t hash=0;@{fields T tuple as F,I}rusk_hash_combine(hash,static_cast<std::size_t>(@{value_call __hash_key__<F>(F)->Int}(x->field_@{index I},loc)));@{end}return static_cast<@{Int}>(hash);@{end}@{end}@{end}@{end}}()));}",
+}
+
+extern fn __equal_key__<T>(x:T,y:T)->Bool {
+    effects:"read_fresh",
+    lower:"([&](){@{if_type T matches Int}return (*$0==*$1);@{else}@{if_type T matches Bool}return (*$0==*$1);@{else}@{if_type T matches Char}return (*$0==*$1);@{else}@{if_type T matches Str}return (*$0==*$1);@{else}@{fields T tuple as F,I}if(!@{value_call __equal_key__<F>(F,F)->Bool}($0->field_@{index I},$1->field_@{index I},$loc))return false;@{end}return true;@{end}@{end}@{end}@{end}}())",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{T}> x,Obj<@{T}> y,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(([&](){@{if_type T matches Int}return (*x==*y);@{else}@{if_type T matches Bool}return (*x==*y);@{else}@{if_type T matches Char}return (*x==*y);@{else}@{if_type T matches Str}return (*x==*y);@{else}@{fields T tuple as F,I}if(!@{value_call __equal_key__<F>(F,F)->Bool}(x->field_@{index I},y->field_@{index I},loc))return false;@{end}return true;@{end}@{end}@{end}@{end}}()));}",
+}
+
 // Hash collection operations use ordinary generic extern resolution.
 
 extern fn Dict<K,V>()->Dict<K,V> {

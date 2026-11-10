@@ -7,7 +7,6 @@ use std::collections::{BTreeMap, BTreeSet};
 mod aggregate_operations;
 mod bindings;
 mod callables;
-mod containers;
 mod cpp;
 mod effects;
 mod enums;
@@ -16,6 +15,7 @@ mod externs;
 mod flow;
 mod generics;
 mod higher_order;
+mod input;
 mod ir_types;
 mod patterns;
 mod records;
@@ -90,7 +90,6 @@ pub struct Compiler {
     enum_copies: BTreeMap<String, String>,
     enum_copy_functions: BTreeMap<String, usize>,
     preparing_enums: Vec<String>,
-    containers: BTreeMap<String, containers::Container>,
     callables: BTreeMap<String, callables::Callable>,
     function_types: BTreeMap<usize, String>,
     lambda_types: BTreeMap<String, String>,
@@ -205,10 +204,7 @@ impl Compiler {
                 }
                 if let Stmt::Struct(name, parameters, fields) = s {
                     if name.text.starts_with("__Rusk")
-                        || matches!(
-                            name.text.as_str(),
-                            "Vec" | "Tuple" | "Iter" | "Option" | "Dict" | "Set"
-                        )
+                        || matches!(name.text.as_str(), "Vec" | "Tuple" | "Iter" | "Option")
                     {
                         return Err(name.span.error("reserved built-in type constructor"));
                     }
@@ -294,10 +290,7 @@ impl Compiler {
         for source in sources {
             for s in source {
                 if let Stmt::UserFunction(name, ..) = s
-                    && matches!(
-                        name.text.as_str(),
-                        "Some" | "None" | "Option" | "Dict" | "Set" | "try_read"
-                    )
+                    && matches!(name.text.as_str(), "Some" | "None" | "Option" | "try_read")
                 {
                     return Err(name.span.error("reserved built-in constructor name"));
                 }
@@ -639,7 +632,6 @@ impl Compiler {
         if self.types.contains_key(&n.text)
             || self.specialize_extern_type(n)?
             || self.specialize_enum(n)?
-            || self.specialize_container(n)?
         {
             Ok(())
         } else if n.text.starts_with("Tuple<") {

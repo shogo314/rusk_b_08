@@ -22,24 +22,16 @@ impl Compiler {
             prelude += "\n";
         }
         prelude += &self.enum_forwards();
+        prelude += &self.record_forwards();
         if !self.native_type_prelude.is_empty() {
-            for ty in self.records.keys() {
-                prelude += &format!("struct {};\n", self.types[ty]);
-            }
-            for c in self.containers.values() {
-                prelude += &format!("struct {};\n", c.native);
-            }
             for it in self.iterator_types.values() {
                 prelude += &format!("struct {};\n", it.native);
             }
             prelude += &self.native_type_prelude;
         }
-        prelude += &self.container_cpp();
         prelude += &self.enum_cpp();
         prelude += &self.lazy_cpp();
         prelude += &self.record_cpp();
-        prelude += &self.key_equal_cpp();
-        prelude += &self.key_hash_cpp();
         prelude += &self.lazy_copy_declarations();
         prelude += &self.scalar_representation_checks();
         let (concrete_foreign_definitions, foreign_definitions): (Vec<_>, Vec<_>) = self

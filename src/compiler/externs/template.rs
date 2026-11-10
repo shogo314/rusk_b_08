@@ -42,6 +42,7 @@ pub(super) enum Part {
     Fields {
         ty: String,
         variant: Option<String>,
+        tuple_only: bool,
         element: String,
         index: String,
         parts: Vec<Part>,
@@ -453,7 +454,12 @@ fn parse_parts(
                 .split_once(',')
                 .ok_or("invalid native fields bindings")?;
             let (ty, element, index) = (ty.trim(), element.trim(), index.trim());
+            let tuple_only = ty.ends_with(" tuple");
+            let ty = ty.strip_suffix(" tuple").unwrap_or(ty).trim();
             let (ty, variant) = if let Some((ty, variant)) = ty.split_once(" variant ") {
+                if tuple_only {
+                    return Err("native tuple fields cannot select a variant".into());
+                }
                 let variant = variant.trim();
                 if !identifier(variant) && variant.parse::<usize>().is_err() {
                     return Err("invalid native variant index".into());
@@ -468,6 +474,7 @@ fn parse_parts(
             parts.push(Part::Fields {
                 ty: ty.into(),
                 variant,
+                tuple_only,
                 element: element.into(),
                 index: index.into(),
                 parts: parse_parts(rest, body, depth + 1, budget, false)?,

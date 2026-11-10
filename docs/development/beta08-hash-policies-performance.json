@@ -1,0 +1,396 @@
+{
+  "utc": "2026-11-10T05:34:21.688801+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "7221c0d25b25cf5468ff0ebe673431ec5005b864aac95bff3ac4a4691bb36b63"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "dictionary_operations": {
+      "source": "let d:=Dict::<Int,Int>();let total:=0;for round in 0..100000{let key:=round%1000;d.set(key,round);total+=d[key];if d.contains(key){total+=1;}total+=d.get(key)?!;if round%3==0{d.erase(key);}}wt total,d.len();",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "826689565343de1f0196b52258126de061caa55ee500c1095f8f4e240039ba3c",
+          "runs_ms": [
+            12.319635,
+            10.188346,
+            10.593658,
+            10.67456,
+            10.747592,
+            10.606813,
+            11.179544,
+            10.314721,
+            11.958084,
+            10.357191,
+            10.644934,
+            10.28244,
+            10.580053,
+            10.622432,
+            10.428453
+          ],
+          "output": "10000000000 666\n",
+          "allocations": 501353,
+          "shared_ptr_copies": 3001342,
+          "median_ms": 10.606813
+        },
+        "current": {
+          "cpp_sha256": "c9e61fb4573b414c1dcb1f596264bb10079810b29a971798689fa06a953bde54",
+          "runs_ms": [
+            10.841457,
+            10.5244,
+            10.509693,
+            11.110859,
+            10.645317,
+            10.996155,
+            10.925806,
+            10.669259,
+            10.933026,
+            10.667746,
+            11.054204,
+            10.674759,
+            10.933419,
+            11.071706,
+            11.886248
+          ],
+          "output": "10000000000 666\n",
+          "allocations": 501353,
+          "shared_ptr_copies": 3001342,
+          "median_ms": 10.925806
+        }
+      },
+      "speedup": 0.9708037100420784
+    },
+    "set_operations": {
+      "source": "let s:=Set::<Int>();let total:=0;for round in 0..100000{let key:=round%1000;if s.insert(key){total+=1;}if s.contains(key){total+=1;}total+=s.get(key)??0;if round%3==0{s.erase(key);}}wt total,s.len();",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "1b2d45e73151f6f0f11ad6dd04d743c7263473c7d0a13bbbdb6ba05f15ca0540",
+          "runs_ms": [
+            9.042509,
+            9.402927,
+            9.351381,
+            9.147732,
+            9.216249,
+            9.418707,
+            9.085659,
+            8.861042,
+            9.417898,
+            9.078476,
+            10.489372,
+            9.47299,
+            9.451307,
+            9.669607,
+            9.717762
+          ],
+          "output": "50084000 666\n",
+          "allocations": 601353,
+          "shared_ptr_copies": 1901342,
+          "median_ms": 9.402927
+        },
+        "current": {
+          "cpp_sha256": "5e360528b6604a58603ff858215ba7100c6ff2be5694ac6f840ad69c307cee2d",
+          "runs_ms": [
+            8.951249,
+            8.917855,
+            9.053189,
+            8.933828,
+            9.853127,
+            9.249323,
+            9.164722,
+            9.120082,
+            9.207834,
+            9.148606,
+            9.994489,
+            9.006821,
+            9.310376,
+            9.094736,
+            10.194097
+          ],
+          "output": "50084000 666\n",
+          "allocations": 601353,
+          "shared_ptr_copies": 1901342,
+          "median_ms": 9.148606
+        }
+      },
+      "speedup": 1.02779887996051
+    },
+    "dictionary_defaults_exports": {
+      "source": "let d:=Dict::<Int,Vec<Int>>();for i in 0..1000{d[i].push_back(i);}let total:=0;for round in 0..100{let keys:=d.keys();let values:=d.values();total+=keys.len()+values.len();for value in values{total+=value[0];}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "152b8a166da849e9a482b4f65de0d398d5ad678ee78c760dbd453ac3d354b371",
+          "runs_ms": [
+            3.927713,
+            3.884504,
+            3.870445,
+            3.871869,
+            3.994677,
+            3.998634,
+            4.089456,
+            3.91523,
+            4.356799,
+            5.780002,
+            4.154111,
+            3.911703,
+            4.426188,
+            4.026686,
+            5.160078
+          ],
+          "output": "50150000\n",
+          "allocations": 105522,
+          "shared_ptr_copies": 614107,
+          "median_ms": 3.998634
+        },
+        "current": {
+          "cpp_sha256": "061d6e8b233b4f02be7e0e5f1e729ee22896712c900a1176f5db69f84dcb29c2",
+          "runs_ms": [
+            4.055612,
+            4.35164,
+            3.932705,
+            4.093059,
+            3.857542,
+            4.258796,
+            3.86806,
+            4.15796,
+            4.813366,
+            4.283894,
+            4.091684,
+            3.980421,
+            4.148712,
+            4.148382,
+            3.881938
+          ],
+          "output": "50150000\n",
+          "allocations": 105522,
+          "shared_ptr_copies": 614107,
+          "median_ms": 4.093059
+        }
+      },
+      "speedup": 0.9769304571470873
+    },
+    "dictionary_copy_assignment": {
+      "source": "let d:=Dict::<Int,Vec<Int>>();for i in 0..500{d.set(i,[i,i+1]);}let target:=Dict::<Int,Vec<Int>>();let total:=0;for round in 0..100{let duplicate=d;target=duplicate;total+=target.get(round%500)?![0];}wt total,target.len();",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "e24167dc8c7ea1b5f0db748dd6957020ff45c7e14f8a7e153a6063dacc44f572",
+          "runs_ms": [
+            12.507472,
+            13.180562,
+            13.23574,
+            12.43139,
+            12.205681,
+            13.200991,
+            12.080831,
+            12.434267,
+            12.212925,
+            12.897748,
+            12.258191,
+            12.588251,
+            12.087673,
+            12.558626,
+            11.816689
+          ],
+          "output": "4950 500\n",
+          "allocations": 605123,
+          "shared_ptr_copies": 410010,
+          "median_ms": 12.434267
+        },
+        "current": {
+          "cpp_sha256": "6fba9bb409893da50ea583724f082eac8c108c7b02dc96cdbc2a5bf581844bfd",
+          "runs_ms": [
+            12.465682,
+            12.664562,
+            13.179439,
+            12.631923,
+            12.846902,
+            13.392007,
+            12.094324,
+            12.612015,
+            12.197085,
+            12.973573,
+            12.277707,
+            12.243372,
+            12.270093,
+            12.444064,
+            11.994169
+          ],
+          "output": "4950 500\n",
+          "allocations": 605123,
+          "shared_ptr_copies": 409910,
+          "median_ms": 12.465682
+        }
+      },
+      "speedup": 0.9974798811649456
+    },
+    "set_copy_assignment": {
+      "source": "let s:=Set::<(Int,Int)>();for i in 0..1000{s.insert((i,i+1));}let target:=Set::<(Int,Int)>();let total:=0;for round in 0..100{let duplicate=s;target=duplicate;if target.contains((round,round+1)){total+=1;}}wt total,target.len();",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "f0172838ee485439f346f741723b2444112cadbe1b14f694653f30db80201109",
+          "runs_ms": [
+            19.340087,
+            19.651096,
+            19.106123,
+            19.723168,
+            20.002196,
+            20.464662,
+            19.399137,
+            20.111777,
+            19.461483,
+            19.723022,
+            19.825069,
+            19.781682,
+            20.281343,
+            19.505324,
+            19.398666
+          ],
+          "output": "100 1000\n",
+          "allocations": 810024,
+          "shared_ptr_copies": 613510,
+          "median_ms": 19.723022
+        },
+        "current": {
+          "cpp_sha256": "9de7b0092641aeae15182af50c2cfc0bb5223de0bc8049dd01e374535afbe4e7",
+          "runs_ms": [
+            18.287265,
+            18.173271,
+            18.523972,
+            18.700662,
+            19.106183,
+            18.904532,
+            18.286694,
+            18.587331,
+            18.329986,
+            18.142041,
+            19.828815,
+            18.522996,
+            18.609591,
+            18.14555,
+            18.059983
+          ],
+          "output": "100 1000\n",
+          "allocations": 810024,
+          "shared_ptr_copies": 613410,
+          "median_ms": 18.522996
+        }
+      },
+      "speedup": 1.0647857398446774
+    },
+    "dictionary_iteration": {
+      "source": "let d:=Dict::<Int,Int>();for i in 0..1000{d.set(i,i*3);}let total:=0;for round in 0..200{for entry in d{total+=entry[0]+entry[1];}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "83c3fbac2c13e276bdbebeaf1db931e472e0bcf84f28c147fd3fc5d841bc3398",
+          "runs_ms": [
+            8.501182,
+            9.337777,
+            8.015993,
+            8.28348,
+            8.337687,
+            8.348527,
+            9.397415,
+            8.059092,
+            8.219909,
+            8.624032,
+            9.497101,
+            8.108014,
+            8.037833,
+            8.07954,
+            8.61998
+          ],
+          "output": "399600000\n",
+          "allocations": 804422,
+          "shared_ptr_copies": 2411007,
+          "median_ms": 8.337687
+        },
+        "current": {
+          "cpp_sha256": "7b8555c2dc708a70cf1033b49b991022347cefe251f96ff9915bff4bde4bc592",
+          "runs_ms": [
+            8.109065,
+            8.765143,
+            8.084289,
+            8.163977,
+            8.533457,
+            8.519969,
+            8.156292,
+            8.530707,
+            7.927478,
+            9.184117,
+            8.001314,
+            8.506393,
+            8.727181,
+            8.161203,
+            8.174762
+          ],
+          "output": "399600000\n",
+          "allocations": 804422,
+          "shared_ptr_copies": 2411007,
+          "median_ms": 8.174762
+        }
+      },
+      "speedup": 1.0199302438407383
+    },
+    "set_iterator_copy": {
+      "source": "let s:=Set::<Int>();for i in 0..1000{s.insert(i);}let total:=0;for round in 0..200{let it:=s.filter((x:Int)=>x%2==0).map((x:Int)=>x+1);let duplicate=it;total+=it.fold(0,(a:Int,b:Int)=>a+b);total+=duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "86fd91c19aa96424796a7863b84571dd2a2533ed1a5002b647f44b424e6931ec",
+          "runs_ms": [
+            29.836898,
+            29.124043,
+            29.3211,
+            31.742943,
+            30.95084,
+            30.65265,
+            30.255725,
+            29.425294,
+            29.237503,
+            30.365929,
+            29.244237,
+            30.917041,
+            29.308487,
+            29.429117,
+            30.567623
+          ],
+          "output": "100000000\n",
+          "allocations": 3008422,
+          "shared_ptr_copies": 4214407,
+          "median_ms": 29.836898
+        },
+        "current": {
+          "cpp_sha256": "0482f73c30ebef277b97a61276a4b30c62e854662a32ac564d6070299ba2d61b",
+          "runs_ms": [
+            30.015636,
+            29.768189,
+            30.72267,
+            30.085289,
+            30.91974,
+            30.226439,
+            29.68265,
+            29.7592,
+            30.631641,
+            29.950068,
+            31.041387,
+            30.321543,
+            30.0017,
+            29.579039,
+            30.944402
+          ],
+          "output": "100000000\n",
+          "allocations": 3008422,
+          "shared_ptr_copies": 4214807,
+          "median_ms": 30.085289
+        }
+      },
+      "speedup": 0.9917437721804834
+    }
+  }
+}

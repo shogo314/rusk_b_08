@@ -32,14 +32,6 @@ impl Compiler {
                     Type::Record(fields())
                 } else if let Some(meta) = self.native_types.get(name) {
                     meta.kind.clone()
-                } else if let Some(c) = self.containers.get(name) {
-                    match &c.shape {
-                        containers::Shape::Dict => Type::Dict {
-                            key: c.arguments[0].clone(),
-                            value: c.arguments[1].clone(),
-                        },
-                        containers::Shape::Set => Type::Set(c.arguments[0].clone()),
-                    }
                 } else if let Some(it) = self.iterator_types.get(name) {
                     Type::Iterator {
                         element: it.element.clone(),
