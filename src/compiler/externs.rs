@@ -479,12 +479,10 @@ impl Compiler {
             Some(d.parameters.len())
         } else if let Some(d) = self.enum_definitions.get(base) {
             Some(d.parameters.len())
+        } else if base == "Tuple" && args.len() >= 2 {
+            Some(args.len())
         } else {
-            match base {
-                "Iter" => Some(1),
-                "Tuple" if args.len() >= 2 => Some(args.len()),
-                _ => None,
-            }
+            None
         }
         .or_else(|| {
             self.types.keys().find_map(|t| {
@@ -1216,6 +1214,36 @@ impl Compiler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn symbolic_iterator_references_require_an_actual_type_declaration() {
+        for name in ["Iter", "Stream"] {
+            for declaration in [
+                format!("extern fn unused<T>(x:{name}<T>)->T{{code:\"unused\",}}"),
+                format!("extern fn unused<T>()->{name}<T>{{code:\"unused\",}}"),
+                format!("extern type<T> Shell{{cpp_name:\"std::shared_ptr<@{{{name}<T>}}>\",}}"),
+            ] {
+                let compile = |prefix: &str| {
+                    let source =
+                        format!("extern type Unit{{cpp_name:\"Unit\",}}{prefix}{declaration}");
+                    Compiler::default().compile(
+                        &[Source::user(
+                            crate::parse(&source, "iterator-signature.rusk").unwrap(),
+                        )],
+                        crate::backend::Emit::Hir,
+                    )
+                };
+                let error = compile("").unwrap_err();
+                assert!(
+                    error.contains("iterator-signature.rusk:")
+                        && error.contains(&format!("unknown type constructor '{name}'")),
+                    "{error}"
+                );
+                compile(&format!("extern type<T> {name}{{cpp_name:\"{{T}}\",}}"))
+                    .unwrap_or_else(|error| panic!("{declaration}\n{error}"));
+            }
+        }
+    }
 
     const TYPES: &str = r#"
 extern type Int {cpp_name:"std::int64_t",representation:"i64",}
