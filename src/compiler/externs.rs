@@ -233,10 +233,13 @@ impl Compiler {
             }
             generics::parameters_valid(parameters)?;
             let assignment = matches!(kind.as_str(), "record_assign" | "enum_assign");
+            let output = kind == "tuple_write";
             let vector_input = kind == "vector_read";
             let input = kind == "tuple_read" || vector_input;
-            let valid_kind =
-                assignment || input || matches!(kind.as_str(), "record_copy" | "enum_copy");
+            let valid_kind = assignment
+                || input
+                || output
+                || matches!(kind.as_str(), "record_copy" | "enum_copy");
             if !valid_kind
                 || parameters.len() != 1
                 || arguments.len()
@@ -257,20 +260,31 @@ impl Compiler {
                             || !bindings.contains_key(&parameters[0].text)
                     } else {
                         r.text
-                            != if assignment {
+                            != if assignment || output {
                                 "Unit"
                             } else {
                                 &parameters[0].text
                             }
                     }
                 })
-                || (assignment && parameters[0].text == "Unit")
-                || properties
-                    .keys()
-                    .any(|key| !matches!(key.as_str(), "code" | "derive"))
+                || ((assignment || output) && parameters[0].text == "Unit")
+                || properties.keys().any(|key| {
+                    !matches!(key.as_str(), "code" | "derive")
+                        && !(output
+                            && matches!(
+                                key.as_str(),
+                                "effects"
+                                    | "lower"
+                                    | "lower_owned"
+                                    | "lower_borrowed"
+                                    | "lower_rooted"
+                            ))
+                })
             {
                 return Err(name.span.error(if assignment {
                     "invalid native assignment derivation; expected one type parameter and (T,T)->Unit"
+                }else if output {
+                    "invalid native output derivation; expected one type parameter and (T)->Unit"
                 }else if vector_input {
                     "invalid native input derivation; expected one type parameter bound by the result pattern and no declared arguments"
                 }else if input {
@@ -1397,5 +1411,105 @@ extern fn __read__()->Int{{cpp_name:"field_input",code:"Obj<std::int64_t> field_
         assert!(cpp.contains("Obj<std::int64_t> d0,Obj<std::int64_t> d1,Loc loc"));
         assert!(cpp.contains("field_input(loc)"));
         assert!(!cpp.contains("unrelated_dimensions_name("));
+    }
+    #[test]
+    fn tuple_output_roles_validate_shape_trust_and_duplicate_definitions() {
+        let definition =
+            r#"extern fn arbitrary_output<T>(value:T)->Unit{derive:"tuple_write",code:"unused",}"#;
+        for (source, standard, expected) in [
+            (
+                definition.to_string(),
+                false,
+                "reserved for the embedded standard library",
+            ),
+            (
+                definition.replace("(value:T)", "()"),
+                true,
+                "invalid native output derivation",
+            ),
+            (
+                definition.replace("->Unit", "->T"),
+                true,
+                "invalid native output derivation",
+            ),
+            (
+                definition.replace("<T>", "<T,R>"),
+                true,
+                "invalid native output derivation",
+            ),
+            (
+                definition.replace("<T>(value:T)", "<Unit>(value:Unit)"),
+                true,
+                "invalid native output derivation",
+            ),
+            (
+                format!("{definition}{definition}"),
+                true,
+                "duplicate native derivation",
+            ),
+        ] {
+            let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let source = if standard {
+                Source::standard(statements)
+            } else {
+                Source::user(statements)
+            };
+            let error = Compiler::default()
+                .compile(
+                    &[
+                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        source,
+                    ],
+                    crate::backend::Emit::Cpp,
+                )
+                .unwrap_err();
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn tuple_output_uses_named_source_templates_for_body_lowering_and_effects() {
+        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"renamed-output-library.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_write"))).collect::<Vec<_>>();
+        for statement in &mut declarations {
+            if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
+                name.text = "unrelated_output_name".into();
+                properties
+                    .get_mut("code")
+                    .unwrap()
+                    .insert_str(0, "/* output_source */ ");
+                properties
+                    .get_mut("lower")
+                    .unwrap()
+                    .insert_str(0, "/* output_lower */ ");
+            }
+        }
+        let types = format!(
+            r#"{TYPES}
+extern type Bool{{cpp_name:"bool",representation:"bool",}}
+extern fn __write__(value:Int){{cpp_name:"field_output",effects:"io_write",code:"void field_output(Obj<std::int64_t>,Loc){{}}",}}
+"#
+        );
+        let sources = [
+            Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+            Source::standard(declarations),
+            Source::user(crate::parse("__write__((1,2));", "caller.rusk").unwrap()),
+        ];
+        let cpp = Compiler::default()
+            .compile(&sources, crate::backend::Emit::Cpp)
+            .unwrap();
+        assert!(cpp.contains("/* output_source */ void rusk_algorithm_"));
+        assert!(cpp.contains("/* output_lower */"));
+        assert!(!cpp.contains("unrelated_output_name("));
+        let hir = Compiler::default()
+            .compile(&sources, crate::backend::Emit::Hir)
+            .unwrap();
+        let output = hir
+            .split("name: \"__write__\"")
+            .nth(2)
+            .unwrap()
+            .split("name:")
+            .next()
+            .unwrap();
+        assert!(output.contains("source: NativeContract"), "{hir}");
     }
 }

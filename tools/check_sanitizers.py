@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/tuple_output_lifetime.rusk').read_text(),b'',b'a b\nab!\n1:1 8:2\n3:0 4:0\n2\n'),
     ((ROOT/'examples/beta08/dimensions_input.rusk').read_text(),b'1 2 3 4 5 6 7 8 a b c d',b'0 1 2 3 1 4\n5 6 7 8\n0\n4\n'),
     ((ROOT/'examples/beta08/product_input.rusk').read_text(),b'1 2 hello 3 4 world 5 6 end',b'1 hello\n3 4 world\n6 end\n'),
     ((ROOT/'examples/beta08/rooted_copy_lifetime.rusk').read_text(),b'',b'0 1 0 7\n'),

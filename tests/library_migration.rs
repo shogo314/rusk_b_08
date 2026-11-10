@@ -1438,3 +1438,123 @@ fn dimensions_template_works_as_an_unrelated_fixed_arity_user_extern() {
         assert_eq!(out.stdout, b"1 2 3 4\n");
     }
 }
+
+#[test]
+fn tuple_output_resolves_logical_writers_and_preserves_unknown_cleanup_order() {
+    let case = Case::new(include_str!(
+        "../examples/beta08/tuple_output_lifetime.rusk"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"a b\nab!\n1:1 8:2\n3:0 4:0\n2\n");
+    }
+}
+
+#[test]
+fn tuple_output_keeps_user_tuple_writers_and_checks_effects_and_missing_fields() {
+    let source = r#"
+struct Row{value:Int;}
+fn __write__(pair:(Row,Row)){__write__(pair[0].value+pair[1].value);}
+wt (Row{value:2},Row{value:3});
+struct Other{value:Int;}
+fn __write__<T>(pair:(T,Other)){__write__(pair[1].value);}
+wt (Row{value:4},Other{value:5});
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"5\n5\n");
+    }
+    for restriction in ["readonly", "noescape"] {
+        let source = format!(
+            r#"
+struct Row{{value:Int;}}
+extern fn __write__(row:Row){{cpp_name:"opaque_tuple_field",code:"void opaque_tuple_field(Obj<RuskRecord0>,Loc){{}}",}}
+fn show({restriction} value:(Row,Row)){{wt value;}}
+show((Row{{value:1}},Row{{value:2}}));
+"#
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains(restriction));
+    }
+    let case = Case::new("struct NoWriter{value:Int;}wt (1,NoWriter{value:2});");
+    let out = case.compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("main.rusk:") && error.contains("__write__"),
+        "{error}"
+    );
+    assert!(!case.0.join("main.cpp").exists());
+}
+
+#[test]
+fn tuple_output_supports_nested_logical_types_and_readonly_vectors() {
+    let source = r#"
+extern type Score{cpp_name:"std::int64_t",}
+extern fn score(x:Int)->Score{cpp_name:"tuple_score",code:"Obj<std::int64_t> tuple_score(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn __write__(x:Score){cpp_name:"write_tuple_score",code:"void write_tuple_score(Obj<std::int64_t> x,Loc){rusk_write(*x+100);}",}
+wt ((1,score(2)),3);
+struct Row{ch:Char;}
+fn __write__(row:Row){__write__(row.ch);}
+fn show(readonly noescape values:Vec<(Row,Row)>){wt values;}
+let text:="ab";{let rows:=[(Row{ch:text[0]},Row{ch:text[1]})];show(rows);}
+text.push_back('!');wt text;
+"#;
+    let case = Case::new(source);
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 102 3\na b\nab!\n");
+    }
+}
+
+#[test]
+fn tuple_output_template_works_as_an_unrelated_user_extern() {
+    let source = include_str!("../lib/collections.rusk");
+    let start = source.find("extern fn product_write_body<").unwrap();
+    let end = source[start..]
+        .find("// Preserve the fixed argument ABI")
+        .unwrap()
+        + start;
+    let declaration = source[start..end]
+        .lines()
+        .filter(|line| {
+            !line.trim_start().starts_with("derive:")
+                && !line.trim_start().starts_with("effects:")
+                && !line.trim_start().starts_with("lower:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("product_write_body", "unrelated_output");
+    let case = Case::new(&format!(
+        r#"{declaration}
+struct Row{{value:Int;}}
+fn __write__(value:Row){{__write__(value.value+1);}}
+unrelated_output((Row{{value:2}},[3,4]));wt "";
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3 3 4\n");
+    }
+}

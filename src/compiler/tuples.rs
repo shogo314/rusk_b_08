@@ -148,6 +148,9 @@ impl Compiler {
         if !ty.starts_with("Tuple<") || !self.automatic_value(ty) {
             return Ok(());
         }
+        // Preserve the existing concrete-operation priority for these tuples.
+        // Other tuple writers are derived after ordinary overload resolution.
+        self.tuple_write_function(ty, &record.name.span)?;
         // Only these automatically ordered tuples recursively contain standard
         // values. Their generated deep copy cannot dispatch to user operations.
         let effects = crate::native_effects::contract(
@@ -186,43 +189,20 @@ impl Compiler {
             self.native_contracts.insert(self.functions.len(), effects);
             self.functions.push(Function { name: Name { text:name.into(), span:record.name.span.clone() }, params:vec![ty.clone();2], result:"Bool".into(), cpp:cpp.clone(), code:format!("Obj<bool> {cpp}(Obj<{native}> a, Obj<{native}> b, Loc) {{ return make_obj<bool>({expression}); }}"), body:None, origin:Origin::Generated,checked:None });
         }
-        let cpp = format!("write_{native}");
-        // This writer is generated only for recursively standard values and
-        // calls the same read-only helper as its body. Expose that expression
-        // through the common Unit reference ABI without copying each Tuple.
-        self.native_lowerings.insert(
-            self.functions.len(),
-            crate::native_lowering::Lowering {
-                scalar: Some(
-                    crate::native_lowering::Template::parse("write_value($0)", 1)
-                        .expect("generated tuple output expression"),
-                ),
-                ..Default::default()
-            },
-        );
-        self.native_contracts.insert(
-            self.functions.len(),
-            crate::native_effects::contract(
-                "io_write",
-                std::slice::from_ref(ty),
-                "Unit",
-                &self.ir_types(),
-            )?,
-        );
-        self.functions.push(Function {
-            name: Name {
-                text: "__write__".into(),
-                span: record.name.span.clone(),
-            },
-            params: vec![ty.clone()],
-            result: "Unit".into(),
-            cpp: cpp.clone(),
-            code: format!("void {cpp}(Obj<{native}> value, Loc) {{ write_value(value); }}"),
-            body: None,
-            origin: Origin::Generated,
-            checked: None,
-        });
         Ok(())
+    }
+
+    pub(super) fn tuple_write_function(&mut self, ty: &str, span: &Span) -> Result<usize, String> {
+        let index = self.native_function(
+            "__write__",
+            vec![ty.into()],
+            "Unit",
+            |_| String::new(),
+            span,
+        )?;
+        self.native_derivation_tasks
+            .insert(index, ("tuple_write".into(), ty.into()));
+        Ok(index)
     }
 
     pub(super) fn tuple_cpp(&self) -> String {
@@ -234,7 +214,7 @@ impl Compiler {
         let mut code = String::new();
         for (ty, _) in &tuples {
             let native = &self.types[*ty];
-            code.push_str(&format!("bool operator==(const {native}& a, const {native}& b);\nbool operator<(const {native}& a, const {native}& b);\nvoid write_value(const Obj<{native}>& value);\n"));
+            code.push_str(&format!("bool operator==(const {native}& a, const {native}& b);\nbool operator<(const {native}& a, const {native}& b);\n"));
         }
         for (ty, record) in tuples {
             let native = &self.types[ty];
@@ -252,16 +232,6 @@ impl Compiler {
                 code.push_str(&format!("if(value_less(a.field_{i},b.field_{i})) return true; if(value_less(b.field_{i},a.field_{i})) return false;\n"));
             }
             code.push_str("return false; }\n");
-            code.push_str(&format!(
-                "void write_value(const Obj<{native}>& value) {{\n"
-            ));
-            for i in 0..record.fields.len() {
-                if i > 0 {
-                    code.push_str("rusk_write(' ');\n");
-                }
-                code.push_str(&format!("write_value(value->field_{i});\n"));
-            }
-            code.push_str("}\n");
         }
         code
     }

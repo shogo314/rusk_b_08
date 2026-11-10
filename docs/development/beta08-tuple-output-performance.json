@@ -1,0 +1,130 @@
+{
+  "utc": "2026-11-10T03:06:46.299641+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "5cc58a3317cc63fbe6765c8b4a5390fb31a070d4058f0439ad5d9b5c7f725b16"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "tuple_output": {
+      "source": "let row:=((1,2),[3,4],true,\"ok\");for round in 0..100000{wt row;}",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "ed2818d66bcdf27b2fad8278f8d1cc8b363a0bba5afb5b6c738a69f35653067c",
+          "runs_ms": [
+            5.228391,
+            3.625508,
+            3.237395,
+            4.294521,
+            3.420521,
+            3.602676,
+            3.656819,
+            3.697433,
+            3.259034,
+            3.720278,
+            3.233036,
+            3.699787,
+            3.593076,
+            3.841068,
+            3.377947
+          ],
+          "output_bytes": 1500000,
+          "output_sha256": "aff9e30c525c83a8e133eada0ec1e164e6a7228c5526e90909a373ebef9de4bc",
+          "allocations": 21,
+          "shared_ptr_copies": 200016,
+          "median_ms": 3.625508
+        },
+        "current": {
+          "cpp_sha256": "46b6a82c159ba31ad380d04ef4e0acab9b2ba73044896f8391dbb6f985e08472",
+          "runs_ms": [
+            3.374451,
+            4.864862,
+            3.139972,
+            4.23,
+            3.459557,
+            5.05591,
+            3.183433,
+            4.31159,
+            3.090851,
+            4.427564,
+            3.194864,
+            4.422664,
+            3.296024,
+            4.112142,
+            3.302937
+          ],
+          "output_bytes": 1500000,
+          "output_sha256": "aff9e30c525c83a8e133eada0ec1e164e6a7228c5526e90909a373ebef9de4bc",
+          "allocations": 21,
+          "shared_ptr_copies": 100016,
+          "median_ms": 3.459557
+        }
+      },
+      "speedup": 1.047968858440546
+    },
+    "vector_output": {
+      "source": "let values:=[123;1000];let matrix:=[values,values];let rows:=[(1,2);1000];for round in 0..500{wt matrix,rows;}",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "36e3416073cc4c8fa8df95b500e04e00efcff6afa3181dc23f9be378f84e55bd",
+          "runs_ms": [
+            15.45262,
+            15.622888,
+            16.687596,
+            15.799235,
+            16.441516,
+            15.299866,
+            16.044825,
+            16.253325,
+            15.892082,
+            16.435946,
+            16.46271,
+            15.407295,
+            15.674665,
+            15.019511,
+            15.951972
+          ],
+          "output_bytes": 6000000,
+          "output_sha256": "2533202b9cdb6aa1127237d1df9ae5111ddbbccb36bb4d1692bb0e9a11732e22",
+          "allocations": 4023,
+          "shared_ptr_copies": 4020,
+          "median_ms": 15.892082
+        },
+        "current": {
+          "cpp_sha256": "9e0991368e3c889113253201e7c54db9e707539de3c305a5980bac982211e0a2",
+          "runs_ms": [
+            14.42429,
+            13.532848,
+            14.82191,
+            14.104816,
+            15.215438,
+            13.223198,
+            15.632455,
+            13.524409,
+            14.906843,
+            14.452854,
+            14.916569,
+            13.790663,
+            14.799245,
+            13.368153,
+            14.181236
+          ],
+          "output_bytes": 6000000,
+          "output_sha256": "2533202b9cdb6aa1127237d1df9ae5111ddbbccb36bb4d1692bb0e9a11732e22",
+          "allocations": 4023,
+          "shared_ptr_copies": 3020,
+          "median_ms": 14.42429
+        }
+      },
+      "speedup": 1.1017583534440865
+    }
+  }
+}

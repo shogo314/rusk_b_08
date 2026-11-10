@@ -1,0 +1,31 @@
+struct Row{ch:Char;}
+fn __write__(row:Row){__write__(row.ch);}
+fn show(readonly noescape value:(Row,Row)){wt value;}
+let text:="ab";{let pair:=(Row{ch:text[0]},Row{ch:text[1]});show(pair);}
+text.push_back('!');wt text;
+
+extern type Token {cpp_name:"std::int64_t",}
+extern symbol tuple_output_state {
+    code:"std::function<void()> rewrite_tuple;std::int64_t released_tokens=0;",
+}
+extern fn token(x:Int)->Token {
+    cpp_name:"output_token",code:"Obj<std::int64_t> output_token(Obj<std::int64_t> x,Loc){return Obj<std::int64_t>(new std::int64_t(*x),[](auto* p){++released_tokens;delete p;});}",
+}
+extern fn watch<T>(value:T) {
+    code:"void @{fn}(Obj<@{T}> value,Loc){rewrite_tuple=[value](){value->field_0=make_obj<std::int64_t>(9);value->field_1=make_obj<std::int64_t>(8);};}",
+}
+extern fn __write__(value:Token)->Unit {
+    return_abi:"object",cpp_name:"write_output_token",
+    code:"Obj<Unit> write_output_token(Obj<std::int64_t> value,Loc){rusk_write(*value);rewrite_tuple();return Obj<Unit>(new Unit{},[](auto* p){rusk_write(':');rusk_write(released_tokens);delete p;});}",
+}
+extern fn stop_watching() {
+    cpp_name:"stop_tuple_watch",code:"void stop_tuple_watch(Loc){rewrite_tuple={};}",
+}
+let pair:=(token(1),token(2));watch(pair);wt pair;stop_watching();
+extern fn watch_owner<T>(owner:Vec<T>) {
+    code:"void @{fn}(Obj<@{Vec<T>}> owner,Loc){released_tokens=0;rewrite_tuple=[owner](){owner->clear();++owner->version;};}",
+}
+extern fn released()->Int {
+    cpp_name:"released_output_tokens",code:"Obj<std::int64_t> released_output_tokens(Loc){return make_obj<std::int64_t>(released_tokens);}",
+}
+let rows:=[(token(3),token(4))];watch_owner(rows);wt rows[0];stop_watching();wt released();

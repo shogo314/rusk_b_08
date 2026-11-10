@@ -65,7 +65,7 @@ impl Compiler {
             .ok_or_else(|| span.error(format!("missing standard {kind} derivation")))?;
         self.functions[index].origin = definition.origin;
         self.native_derived_functions.insert(index);
-        let pattern = if matches!(kind, "record_assign" | "enum_assign") {
+        let pattern = if matches!(kind, "record_assign" | "enum_assign" | "tuple_write") {
             &definition.arguments[0].1.text
         } else {
             &definition.result.as_ref().unwrap().text
@@ -93,6 +93,33 @@ impl Compiler {
                     definition.name.span.column,
                 )
             })?;
+        let mut properties = definition.foreign.as_ref().unwrap().clone();
+        let params = self.functions[index].params.clone();
+        let result = self.functions[index].result.clone();
+        if let Some(contract) = self.declared_native_effects(
+            &definition.name,
+            &params,
+            &result,
+            &properties,
+            definition.origin,
+        )? {
+            self.native_contracts.insert(index, contract);
+        }
+        for key in ["lower", "lower_owned", "lower_borrowed", "lower_rooted"] {
+            if let Some(expression) = properties.get(key).cloned() {
+                let expression =
+                    self.render_native(&expression, &bindings, Some(cpp), span, true, Some(index))?;
+                properties.insert(key.into(), expression);
+            }
+        }
+        self.register_native_lowering(
+            index,
+            &definition.name,
+            &params,
+            &result,
+            &properties,
+            definition.origin,
+        )?;
         Ok(code)
     }
 
