@@ -1,5 +1,6 @@
 //! Initial generic extern prototype: opaque native types and static native bodies.
 use super::*;
+pub(super) mod native_types;
 mod template;
 pub(super) mod type_patterns;
 use template::Part;
@@ -352,14 +353,41 @@ impl Compiler {
                     span: name.span.clone(),
                 })?;
             }
-            let native = self.render_native(
-                &template.native,
-                &bindings,
-                None,
-                &template.span,
-                false,
-                None,
-            )?;
+            let parts =
+                template::parse_type(&template.native).map_err(|e| template.span.error(e))?;
+            let native = if parts.iter().any(|part| matches!(part, Part::Call { .. })) {
+                if self.native_type_bindings.len() >= 512 {
+                    return Err(name
+                        .span
+                        .error("native type reference specialization limit exceeded"));
+                }
+                let alias = format!("RuskNativeType{}", self.native_type_bindings.len());
+                self.native_type_bindings.insert(
+                    name.text.clone(),
+                    native_types::Binding {
+                        alias: alias.clone(),
+                        template: template.native.clone(),
+                        bindings: bindings.clone(),
+                        span: template.span.clone(),
+                        request: name.span.clone(),
+                        native: None,
+                        references: BTreeSet::new(),
+                    },
+                );
+                alias
+            } else {
+                self.rendering_native_types.push(name.text.clone());
+                let native = self.render_native(
+                    &template.native,
+                    &bindings,
+                    None,
+                    &template.span,
+                    false,
+                    None,
+                );
+                self.rendering_native_types.pop();
+                native?
+            };
             self.types.insert(name.text.clone(), native);
             if let Some(kind) = template.representation {
                 let kind = type_metadata::substitute(&kind, &bindings);
@@ -629,7 +657,7 @@ impl Compiler {
                 }
             }
             self.validate_native_parts(
-                template::parse(&definition.native, false).map_err(|e| definition.span.error(e))?,
+                template::parse_type(&definition.native).map_err(|e| definition.span.error(e))?,
                 &definition.parameters,
                 &BTreeSet::new(),
                 &definition.span,
@@ -689,7 +717,12 @@ impl Compiler {
         body: bool,
         owner: Option<usize>,
     ) -> Result<String, String> {
-        let parts = template::parse(text, body).map_err(|e| span.error(e))?;
+        let parts = if body {
+            template::parse(text, true)
+        } else {
+            template::parse_type(text)
+        }
+        .map_err(|e| span.error(e))?;
         self.render_native_parts(parts, bindings, function, span, owner, &mut 4096)
     }
 
@@ -943,6 +976,15 @@ impl Compiler {
                         text: ty.clone(),
                         span: span.clone(),
                     })?;
+                    if owner.is_none()
+                        && function.is_none()
+                        && let Some(current) = self.rendering_native_types.last()
+                    {
+                        self.native_type_dependencies
+                            .entry(current.clone())
+                            .or_default()
+                            .insert(ty.clone());
+                    }
                     output.push_str(&self.types[&ty]);
                 }
                 Part::ReturnType(ty) => {
@@ -1047,6 +1089,13 @@ impl Compiler {
                             }
                         })?;
                     self.same(&result, &self.functions[index].result, span)?;
+                    if owner.is_none()
+                        && function.is_none()
+                        && let Some(current) = self.rendering_native_types.last()
+                        && let Some(binding) = self.native_type_bindings.get_mut(current)
+                    {
+                        binding.references.insert(index);
+                    }
                     if let template::CallKind::Effect(query) = kind {
                         // A semantic query does not call or take the address of
                         // a native definition, so it needs no target prototype.

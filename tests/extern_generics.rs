@@ -1561,3 +1561,92 @@ fn invalid_native_type_conditions_are_checked_even_in_unused_branches() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("nesting limit exceeded"));
 }
+
+#[test]
+fn native_type_function_references_use_logical_signatures_and_forward_declarations() {
+    let source = include_str!("../examples/beta08/native_type_function_references.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"8 11\n10 11 11\n109 14\n12\n");
+    }
+}
+
+#[test]
+fn native_type_function_references_reject_declaration_cycles_and_invalid_body_forms() {
+    let source = r#"
+extern type<T> Cycle{cpp_name:"SomeNative<{T},@{value_call cycle(Cycle<T>)->Int}>",}
+extern fn cycle<T>(value:Cycle<T>)->Int{code:"Obj<@{Int}> @{fn}(Obj<@{Cycle<T>}> value,Loc){return make_obj<@{Int}>(0);}",}
+let value:Cycle<Int>;
+"#;
+    let out = Case::new(source).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("cyclic native type declaration dependency"),
+        "{error}"
+    );
+    for expression in [
+        "@{fn}",
+        "@{invoke T(Int)->Int}",
+        "@{value_call missing(...arguments 0)->Int}",
+        "@{fields T as F,I}int@{end}",
+    ] {
+        let source = format!("extern type<T> Invalid{{cpp_name:\"{expression}\",}}");
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success(), "{expression}");
+    }
+}
+
+#[test]
+fn native_type_function_reference_dependencies_are_bounded_and_located() {
+    let mut source = String::new();
+    for index in 0..70 {
+        let next = if index == 69 {
+            "Int".into()
+        } else {
+            format!("Chain{}<T>", index + 1)
+        };
+        source += &format!(
+            "extern type<T> Chain{index}{{cpp_name:\"SomeNative<{{T}},@{{value_call edge{index}<T>({next})->Int}}>\",}}\n"
+        );
+        source += &format!(
+            "extern fn edge{index}<T>(x:{next})->Int{{code:\"Obj<@{{Int}}> @{{fn}}(Obj<@{{{next}}}> x,Loc){{return make_obj<@{{Int}}>(0);}}\",}}\n"
+        );
+    }
+    source += "let unused:Chain0<Int>;";
+    let out = Case::new(&source).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("native type declaration dependency depth limit exceeded"),
+        "{error}"
+    );
+    let mut many = String::from(
+        "extern type<T> Limit{cpp_name:\"Native<{T},@{value_call marker<T>(T)->Int}>\",}\nextern fn marker<T>(x:T)->Int{code:\"Obj<@{Int}> @{fn}(Obj<@{T}> x,Loc){return make_obj<@{Int}>(0);}\",}\n",
+    );
+    for index in 0..513 {
+        many += &format!(
+            "extern type Tag{index}{{cpp_name:\"std::int64_t\",}}let value{index}:Limit<Tag{index}>;\n"
+        );
+    }
+    let out = Case::new(&many).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("native type reference specialization limit exceeded"),
+        "{error}"
+    );
+    let source = "extern type<T> Missing{cpp_name:\"MissingNative<{T},@{value_call missing(T)->Int}>\",}\nlet value:Missing<Int>;";
+    let out = Case::new(source).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("missing") && error.contains("main.rusk:2:"),
+        "{error}"
+    );
+}

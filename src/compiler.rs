@@ -107,6 +107,10 @@ pub struct Compiler {
     record_copy_functions: BTreeMap<String, usize>,
     generic_extern_types: BTreeMap<String, externs::ExternalType>,
     preparing_extern_types: BTreeSet<String>,
+    native_type_bindings: BTreeMap<String, externs::native_types::Binding>,
+    native_type_dependencies: BTreeMap<String, BTreeSet<String>>,
+    rendering_native_types: Vec<String>,
+    native_type_prelude: String,
     generic_records: BTreeMap<String, generics::GenericRecord>,
     generic_functions: Vec<generics::GenericFunction>,
     generic_instances: BTreeMap<(usize, Vec<String>), usize>,
@@ -421,6 +425,7 @@ impl Compiler {
                 }
             }
         }
+        self.prepare_native_types()?;
         // Check every body, including unused functions, in an isolated variable scope.
         for i in 0..self.functions.len() {
             if self.functions[i].body.is_some() {
@@ -466,7 +471,12 @@ impl Compiler {
             self.prepare_record_copies()?;
             self.prepare_enum_copies()?;
             self.prepare_derived_functions()?;
+            self.prepare_native_types()?;
             if index == self.functions.len()
+                && self
+                    .native_type_bindings
+                    .values()
+                    .all(|binding| binding.native.is_some())
                 && self.record_copy_functions.iter().all(|(ty, id)| {
                     !self.native_operation_needed(*id) || self.record_copies.contains_key(ty)
                 })

@@ -22,6 +22,18 @@ impl Compiler {
             prelude += "\n";
         }
         prelude += &self.enum_forwards();
+        if !self.native_type_prelude.is_empty() {
+            for ty in self.records.keys() {
+                prelude += &format!("struct {};\n", self.types[ty]);
+            }
+            for c in self.containers.values() {
+                prelude += &format!("struct {};\n", c.native);
+            }
+            for it in self.iterator_types.values() {
+                prelude += &format!("struct {};\n", it.native);
+            }
+            prelude += &self.native_type_prelude;
+        }
         prelude += &self.container_cpp();
         prelude += &self.enum_cpp();
         prelude += &self.lazy_cpp();

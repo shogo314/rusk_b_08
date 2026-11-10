@@ -1,0 +1,22 @@
+extern symbol policies{code:"template<class T,auto Evaluate> struct NativePolicy {Obj<T> value;std::int64_t run(Loc loc)const{return Evaluate(value,loc);}};template<class T,auto Consume> struct NativeConsumer{Obj<T> value;void run(Loc loc)const{Consume(value,loc);}};",}
+extern type<T> Policy{cpp_name:"NativePolicy<{T},@{value_call evaluate(T)->Int}>",}
+extern fn policy<T>(value:T)->Policy<T>{code:"Obj<@{Policy<T>}> @{fn}(Obj<@{T}> value,Loc){return make_obj<@{Policy<T>}>(@{Policy<T>}{value});}",}
+extern fn run<T>(value:Policy<T>)->Int{code:"Obj<@{Int}> @{fn}(Obj<@{Policy<T>}> value,Loc loc){return make_obj<@{Int}>(value->run(loc));}",}
+struct Row{value:Int;}
+fn build(value:Row)->Policy<Row>{return policy(value);}
+fn evaluate(value:Row)->Int{value.value+=1;return value.value;}
+fn evaluate(value:Int)->Int{return value*2;}
+fn evaluate(value:Policy<Int>)->Int{return run(value)+3;}
+fn evaluate(value:Vec<Policy<Int>>)->Int{return run(value[0])+4;}
+extern type Token{cpp_name:"std::int64_t",}
+extern fn token()->Token{cpp_name:"policy_token",code:"Obj<std::int64_t> policy_token(Loc){return make_obj<std::int64_t>(9);}",}
+extern fn evaluate(value:Token)->Int{cpp_name:"policy_detail::evaluate",code:"namespace policy_detail{Obj<std::int64_t> evaluate(Obj<std::int64_t> value,Loc){return make_obj<std::int64_t>(*value+100);}}",}
+wt run(build(Row{value:7})),run(policy(policy(4)));
+let row:=Row{value:10};let stored:=build(row);wt row.value,run(stored),row.value;
+wt run(policy(token())),run(policy([policy(5)]));
+extern type<T> Consumer{cpp_name:"NativeConsumer<{T},@{value_call consume(T)->Unit}>",}
+extern fn consumer<T>(value:T)->Consumer<T>{code:"Obj<@{Consumer<T>}> @{fn}(Obj<@{T}> value,Loc){return make_obj<@{Consumer<T>}>(@{Consumer<T>}{value});}",}
+extern fn run<T>(value:Consumer<T>){code:"void @{fn}(Obj<@{Consumer<T>}> value,Loc loc){value->run(loc);}",}
+extern fn consume<T>(value:T)->Unit{return_abi:"object",code:"Obj<@{Unit}> @{fn}(Obj<@{T}> value,Loc){return Obj<@{Unit}>(new @{Unit}{},[value](auto* p){delete p;++*value->field_0;});}",}
+let sink:=consumer(row);run(sink);wt row.value;
+

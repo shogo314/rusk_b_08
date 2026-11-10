@@ -265,6 +265,46 @@ pub(super) fn parse(text: &str, body: bool) -> Result<Vec<Part>, String> {
     parse_parts(&mut &text[..], body, 0, &mut 4096, false)
 }
 
+// Type expressions can name a scalar ABI adapter without admitting function
+// body constructs or implicit argument lists into a C++ type expression.
+pub(super) fn parse_type(mut text: &str) -> Result<Vec<Part>, String> {
+    let mut parts = vec![];
+    while let Some(start) = text.find('{') {
+        if parts.len() >= 4096 {
+            return Err("native template reference limit exceeded".into());
+        }
+        let explicit = text[..start].ends_with('@');
+        let literal = &text[..start - usize::from(explicit)];
+        if !literal.is_empty() {
+            parts.push(Part::Text(literal.into()));
+        }
+        let end = text[start..]
+            .find('}')
+            .ok_or("unterminated native type reference")?
+            + start;
+        let part = reference(&text[start + 1..end], explicit)?;
+        match &part {
+            Part::Type(_) => {}
+            Part::Call {
+                kind: CallKind::Value,
+                arguments,
+                ..
+            } if arguments.iter().all(|a| argument_offset(a).is_none()) => {}
+            _ => {
+                return Err(
+                    "native type expressions allow types and explicit value_call references".into(),
+                );
+            }
+        }
+        parts.push(part);
+        text = &text[end + 1..];
+    }
+    if !text.is_empty() {
+        parts.push(Part::Text(text.into()));
+    }
+    Ok(parts)
+}
+
 fn parse_parts(
     rest: &mut &str,
     body: bool,
