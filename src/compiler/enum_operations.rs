@@ -37,7 +37,7 @@ impl Compiler {
             return Err(invalid());
         }
         let types = self.ir_types();
-        let Some(crate::hir::Type::Enum(variants)) = types.get(&params[0]) else {
+        let Some(crate::ir::hir::Type::Enum(variants)) = types.get(&params[0]) else {
             return Err(invalid());
         };
         if properties.contains_key("aliases") {
@@ -120,8 +120,10 @@ extern fn __coalesce_value__<T>(x:Selection<T>)->T{
         Compiler::with_optimization(optimize).compile(
             &[
                 crate::stdlib::load()?,
-                Source::standard(crate::parse(standard, "unrelated-enum-operations.rusk").unwrap()),
-                Source::user(crate::parse(user, "enum-operation-use.rusk").unwrap()),
+                Source::standard(
+                    crate::frontend::parse(standard, "unrelated-enum-operations.rusk").unwrap(),
+                ),
+                Source::user(crate::frontend::parse(user, "enum-operation-use.rusk").unwrap()),
             ],
             emit,
         )

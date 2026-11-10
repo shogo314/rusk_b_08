@@ -1,8 +1,8 @@
 //! Keep values local to a C++ basic-block scope when their entire observable
 //! lifetime (including explicit releases) is contained in that block.
 use crate::{
-    hir::{Place, Rvalue, ValueId},
-    lir::{Function, Operation, Terminator},
+    ir::hir::{Place, Rvalue, ValueId},
+    ir::lir::{Function, Operation, Terminator},
 };
 use std::collections::{BTreeMap, BTreeSet};
 pub(super) fn persistent(function: &Function) -> BTreeSet<ValueId> {

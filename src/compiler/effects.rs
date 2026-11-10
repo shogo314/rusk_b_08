@@ -5,7 +5,7 @@ impl Compiler {
         &mut self,
         owner: usize,
         dependency: usize,
-        route: Option<&crate::native_effects::composition::Specification>,
+        route: Option<&crate::native::effects::composition::Specification>,
         span: &Span,
     ) -> Result<(), String> {
         self.native_contract_dependencies.entry(owner).or_default();
@@ -80,7 +80,7 @@ impl Compiler {
             properties
                 .get(key)
                 .map(|s| {
-                    crate::native_lowering::Template::parse(s, params.len())
+                    crate::native::lowering::Template::parse(s, params.len())
                         .map_err(|e| name.span.error(e))
                 })
                 .transpose()
@@ -93,7 +93,7 @@ impl Compiler {
             && !self
                 .ir_types()
                 .get(result)
-                .is_some_and(crate::hir::Type::leaf)
+                .is_some_and(crate::ir::hir::Type::leaf)
         {
             return Err(name
                 .span
@@ -128,7 +128,7 @@ impl Compiler {
         if scalar.is_some() || owned.is_some() {
             self.native_lowerings.insert(
                 index,
-                crate::native_lowering::Lowering {
+                crate::native::lowering::Lowering {
                     scalar,
                     owned,
                     borrowed,
@@ -147,7 +147,7 @@ impl Compiler {
         result: &str,
         properties: &BTreeMap<String, String>,
         origin: Origin,
-    ) -> Result<Option<crate::effects::Summary>, String> {
+    ) -> Result<Option<crate::analysis::effects::Summary>, String> {
         if properties.contains_key("aliases") && origin != Origin::StandardLibrary {
             return Err(name
                 .span
@@ -166,10 +166,10 @@ impl Compiler {
         }
         let types = self.ir_types();
         let mut summary =
-            crate::native_effects::contract(specification, parameters, result, &types)
+            crate::native::effects::contract(specification, parameters, result, &types)
                 .map_err(|error| name.span.error(error))?;
         if let Some(aliases) = properties.get("aliases") {
-            crate::native_effects::aliases::apply(
+            crate::native::effects::aliases::apply(
                 &mut summary,
                 aliases,
                 parameters,
@@ -204,13 +204,14 @@ extern type Str {cpp_name:"std::string",}
 
     #[test]
     fn lowered_value_references_can_call_both_unit_abi_bridges() {
-        let core = crate::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk").unwrap();
-        let collections = crate::parse(
+        let core = crate::frontend::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk")
+            .unwrap();
+        let collections = crate::frontend::parse(
             include_str!("../../lib/collections.rusk"),
             "renamed-collections.rusk",
         )
         .unwrap();
-        let definitions=crate::parse(r#"
+        let definitions=crate::frontend::parse(r#"
 extern fn touch(x:Unit){cpp_name:"lower_touch",code:"void lower_touch(Obj<Unit>,Loc){}",}
 extern fn flag<T>(x:T)->Bool{
     code:"Obj<@{Bool}> @{fn}(Obj<@{T}> x,Loc loc){@{call copy(T)->T}(x,loc);@{boxed_call touch(T)->T}(x,loc);return make_obj<@{Bool}>(true);}",
@@ -235,14 +236,14 @@ extern fn via<T>(x:T)->Bool{
                 Source::standard(core.clone()),
                 Source::standard(collections.clone()),
                 Source::standard(
-                    crate::parse(
+                    crate::frontend::parse(
                         include_str!("../../lib/vec.rusk"),
                         "vector-declarations.rusk",
                     )
                     .unwrap(),
                 ),
                 Source::standard(definitions.clone()),
-                Source::user(crate::parse("wt via({});", "unit-call.rusk").unwrap()),
+                Source::user(crate::frontend::parse("wt via({});", "unit-call.rusk").unwrap()),
             ];
             let cpp = Compiler::with_optimization(optimize)
                 .compile(&sources, crate::backend::Emit::Cpp)
@@ -275,7 +276,7 @@ extern fn via<T>(x:T)->Bool{
 
     #[test]
     fn native_contracts_wait_for_referenced_operations_without_assuming_call_cycles_are_pure() {
-        let standard = Source::standard(crate::parse(&format!(r#"{TYPES}
+        let standard = Source::standard(crate::frontend::parse(&format!(r#"{TYPES}
 extern fn outer<T>(x:T)->T {{effects:"read_fresh",code:"Obj<@{{T}}> @{{fn}}(Obj<@{{T}}> x,Loc loc){{return @{{call middle(T)->T}}(x,loc);}}",}}
 extern fn middle<T>(x:T)->T {{effects:"read_fresh",code:"Obj<@{{T}}> @{{fn}}(Obj<@{{T}}> x,Loc loc){{return @{{call child(T)->T}}(x,loc);}}",}}
 extern fn lower_only<T,R>(x:T)->R {{effects:"read_fresh",code:"unused",lower:"@{{value_call child(T)->R}}($0,$loc)",}}
@@ -296,7 +297,7 @@ extern fn checked(x:Int)->Int {{cpp_name:"checked",code:"unused",effects:"checke
             ("fn child(x:Int)->Int{return outer(x);}", "Opaque"),
         ] {
             let user = Source::user(
-                crate::parse(
+                crate::frontend::parse(
                     &format!("{definition} outer(1);lower_only(1);"),
                     "user.rusk",
                 )
@@ -326,13 +327,13 @@ extern fn checked(x:Int)->Int {{cpp_name:"checked",code:"unused",effects:"checke
 
     #[test]
     fn native_contracts_also_check_captured_callback_dependencies() {
-        let standard=Source::standard(crate::parse(&format!(r#"{TYPES}
+        let standard=Source::standard(crate::frontend::parse(&format!(r#"{TYPES}
 extern fn bridge<F>(f:F)->Int{{effects:"read_fresh",code:"Obj<@{{Int}}> @{{fn}}(Obj<@{{F}}> f,Loc loc){{return @{{invoke F()->Int}}(f,loc);}}",}}
 extern fn touch(x:Int){{cpp_name:"touch",code:"unused",effects:"write_first",}}
 extern fn copy(x:Int)->Int{{cpp_name:"copy_int",code:"unused",effects:"read_fresh",}}
 "#),"standard.rusk").unwrap());
         let derivations = Source::standard(
-            crate::parse(include_str!("../../lib/collections.rusk"), "standard-derivations.rusk")
+            crate::frontend::parse(include_str!("../../lib/collections.rusk"), "standard-derivations.rusk")
                 .unwrap()
                 .into_iter()
                 .filter(|statement| matches!(statement, Stmt::GenericExternFunction(_,_,_,_,properties) if properties.get("derive").is_some_and(|kind| kind == "record_copy")))
@@ -343,7 +344,8 @@ extern fn copy(x:Int)->Int{{cpp_name:"copy_int",code:"unused",effects:"read_fres
             ("()=>{touch(value);7}", "Opaque"),
         ] {
             let user = Source::user(
-                crate::parse(&format!("let value:=1;bridge({callback});"), "user.rusk").unwrap(),
+                crate::frontend::parse(&format!("let value:=1;bridge({callback});"), "user.rusk")
+                    .unwrap(),
             );
             let hir = Compiler::default()
                 .compile(
@@ -378,7 +380,7 @@ extern fn store(a:Int,b:Int) {
 let x:=unrelated(1,2);store(x,4);
 "#;
         let source = Source::standard(
-            crate::parse(&format!("{TYPES}\n{definitions}"), "renamed.rusk").unwrap(),
+            crate::frontend::parse(&format!("{TYPES}\n{definitions}"), "renamed.rusk").unwrap(),
         );
         let cpp = Compiler::default()
             .compile(&[source], crate::backend::Emit::Cpp)
@@ -397,7 +399,8 @@ let x:=unrelated(1,2);store(x,4);
             let text = format!(
                 "{TYPES} extern fn unused<T>(x:T)->Int{{code:\"unused\",{key}:\"@{{Missing}}\",}}"
             );
-            let source = Source::standard(crate::parse(&text, "descriptor.rusk").unwrap());
+            let source =
+                Source::standard(crate::frontend::parse(&text, "descriptor.rusk").unwrap());
             let error = Compiler::default()
                 .compile(&[source], crate::backend::Emit::Cpp)
                 .unwrap_err();
@@ -423,7 +426,8 @@ let x:=unrelated(1,2);store(x,4);
             let text = format!(
                 "{TYPES}\nextern fn f(x:Int)->{result}{{cpp_name:\"f\",code:\"unused\",{properties}}}"
             );
-            let source = Source::standard(crate::parse(&text, "descriptor.rusk").unwrap());
+            let source =
+                Source::standard(crate::frontend::parse(&text, "descriptor.rusk").unwrap());
             let error = Compiler::default()
                 .compile(&[source], crate::backend::Emit::Cpp)
                 .unwrap_err();
@@ -435,7 +439,7 @@ let x:=unrelated(1,2);store(x,4);
         let text = text
             .replace("representation:\"i64\",", "")
             .replace("representation:\"unit\",", "");
-        let source = Source::user(crate::parse(&text, "<stdlib/core.rusk>").unwrap());
+        let source = Source::user(crate::frontend::parse(&text, "<stdlib/core.rusk>").unwrap());
         let error = Compiler::default()
             .compile(&[source], crate::backend::Emit::Cpp)
             .unwrap_err();
@@ -447,8 +451,9 @@ let x:=unrelated(1,2);store(x,4);
 
     #[test]
     fn standard_generic_contracts_follow_origin_when_the_display_name_changes() {
-        let source =
-            Source::standard(crate::parse(DECLARATIONS, "renamed-standard-library.rusk").unwrap());
+        let source = Source::standard(
+            crate::frontend::parse(DECLARATIONS, "renamed-standard-library.rusk").unwrap(),
+        );
         let hir = Compiler::default()
             .compile(&[source], crate::backend::Emit::Hir)
             .unwrap();
@@ -458,7 +463,8 @@ let x:=unrelated(1,2);store(x,4);
 
     #[test]
     fn embedded_display_name_cannot_grant_a_user_contract() {
-        let source = Source::user(crate::parse(DECLARATIONS, "<stdlib/core.rusk>").unwrap());
+        let source =
+            Source::user(crate::frontend::parse(DECLARATIONS, "<stdlib/core.rusk>").unwrap());
         let error = Compiler::default()
             .compile(&[source], crate::backend::Emit::Hir)
             .unwrap_err();
@@ -505,7 +511,7 @@ let x:=unrelated(1,2);store(x,4);
             (Origin::User, "<stdlib/core.rusk>", false),
         ] {
             let declarations = Source::standard(
-                crate::parse(
+                crate::frontend::parse(
                     r#"
 extern type Int {cpp_name:"std::int64_t",}
 extern type Unit {cpp_name:"Unit",}
@@ -517,7 +523,7 @@ extern fn checked(x:Int)->Int {cpp_name:"checked",code:"unused",effects:"checked
             );
             let wrapper = Source {
                 origin,
-                statements: crate::parse(
+                statements: crate::frontend::parse(
                     "fn wrapper(x:Int)->Int{return checked(x);}wrapper(1);",
                     display,
                 )

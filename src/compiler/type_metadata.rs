@@ -1,6 +1,6 @@
 //! Trusted physical and sharing information, independent of display/type names.
 use super::*;
-use crate::hir::{Scalar, Type};
+use crate::ir::hir::{Scalar, Type};
 
 #[derive(Clone)]
 pub(super) struct Metadata {
@@ -185,7 +185,7 @@ extern type Char {cpp_name:"char",representation:"char",}
 extern type Number {cpp_name:"std::int64_t",representation:"i64",}
 "#;
     fn compile(text: &str, origin: Origin, emit: crate::backend::Emit) -> Result<String, String> {
-        let statements = crate::parse(text, "renamed-types.rusk").unwrap();
+        let statements = crate::frontend::parse(text, "renamed-types.rusk").unwrap();
         Compiler::default().compile(&[Source { statements, origin }], emit)
     }
     #[test]
@@ -197,8 +197,9 @@ extern fn __assign__(x:Number,y:Number) {cpp_name:"store_number",code:"void stor
 extern fn __write__(x:Number) {cpp_name:"print_number",code:"void print_number(Obj<std::int64_t> x,Loc){rusk_write(*x);}",lower:"rusk_write(*$0)",effects:"io_write",}
 let x:=number(3);let alias:=x;alias=number(9);wt x;
 "#;
-        let core = crate::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk").unwrap();
-        let collections = crate::parse(
+        let core = crate::frontend::parse(include_str!("../../lib/core.rusk"), "renamed-core.rusk")
+            .unwrap();
+        let collections = crate::frontend::parse(
             include_str!("../../lib/collections.rusk"),
             "renamed-collections.rusk",
         )
@@ -218,13 +219,15 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
                 Source::standard(core.clone()),
                 Source::standard(collections.clone()),
                 Source::standard(
-                    crate::parse(
+                    crate::frontend::parse(
                         include_str!("../../lib/vec.rusk"),
                         "vector-declarations.rusk",
                     )
                     .unwrap(),
                 ),
-                Source::standard(crate::parse(definitions, "renamed-types.rusk").unwrap()),
+                Source::standard(
+                    crate::frontend::parse(definitions, "renamed-types.rusk").unwrap(),
+                ),
             ];
             let cpp = Compiler::with_optimization(optimize)
                 .compile(&sources, crate::backend::Emit::Cpp)
@@ -263,7 +266,7 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
             assert_eq!(run.stdout, b"9\n");
         }
         let invalid = Source::standard(
-            crate::parse(
+            crate::frontend::parse(
                 "extern type Misdeclared {cpp_name:\"std::string\",representation:\"i64\",}",
                 "renamed-types.rusk",
             )
@@ -276,7 +279,7 @@ let x:=number(3);let alias:=x;alias=number(9);wt x;
                     Source::standard(core),
                     Source::standard(collections),
                     Source::standard(
-                        crate::parse(
+                        crate::frontend::parse(
                             include_str!("../../lib/vec.rusk"),
                             "vector-declarations.rusk",
                         )
@@ -401,10 +404,13 @@ extern type Unit {cpp_name:"Unit",representation:"unit",}
         Compiler::default().compile(
             &[
                 Source::standard(
-                    crate::parse(&format!("{TYPES}{definitions}"), "shared-definitions.rusk")
-                        .unwrap(),
+                    crate::frontend::parse(
+                        &format!("{TYPES}{definitions}"),
+                        "shared-definitions.rusk",
+                    )
+                    .unwrap(),
                 ),
-                Source::user(crate::parse(user, "shared-use.rusk").unwrap()),
+                Source::user(crate::frontend::parse(user, "shared-use.rusk").unwrap()),
             ],
             crate::backend::Emit::Lir,
         )

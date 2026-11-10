@@ -227,7 +227,7 @@ impl Compiler {
     pub(in crate::compiler) fn match_expression(
         &mut self,
         source: &Expr,
-        arms: &[crate::ast::MatchArm],
+        arms: &[crate::frontend::ast::MatchArm],
         expected: Option<&str>,
         span: &Span,
     ) -> Result<Value, String> {
@@ -267,7 +267,7 @@ impl Compiler {
     }
     fn pattern_arms(
         &mut self,
-        arms: &[crate::ast::MatchArm],
+        arms: &[crate::frontend::ast::MatchArm],
         probes: &[Probe],
         expected: Option<&str>,
         span: &Span,

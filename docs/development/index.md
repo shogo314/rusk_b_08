@@ -6,19 +6,23 @@
 
 ## 構成
 
+`src/main.rs`はコマンドラインの入口です。`frontend/`に構文解析とソース読込、`compiler/`に型検査と具体化、`ir/`にHIR・LIR、`analysis/`に共有・効果・制約の検査、`native/`にextern共通情報、`backend/`にC++生成、`stdlib/`に標準資源のカタログをまとめています。HIRの制御フロー処理と検証は`ir/hir/`、LIRの解放整理は`ir/lir/`に置きます。過去の版の作業記録にあるファイル名は、記録当時の配置を示します。
+
 | ファイル | 役割 |
 |---|---|
 | `rusk.par` | Parol の文法 |
 | `build.rs` | パーサーを `OUT_DIR` に生成 |
-| `src/rusk_grammar.rs` | 生成パーサーから構文木を受け取る |
-| `src/ast.rs` | ソース位置を持つ AST への変換 |
-| `src/compiler.rs` と `src/compiler/` | 名前・型・初期化・具体化の検査、HIR生成とネイティブ実装の登録 |
-| `src/hir.rs` と `src/hir_validate.rs` | 型・参照先が解決済みのHIRと整合性検査 |
-| `src/lir.rs` | 基本ブロック・分岐・ジャンプ・解放を持つLIRと検査 |
+| `src/frontend/rusk_grammar.rs` | 生成パーサーから構文木を受け取る |
+| `src/frontend/ast.rs` | ソース位置を持つ AST への変換 |
+| `src/compiler/mod.rs` と `src/compiler/` | 名前・型・初期化・具体化の検査、HIR生成とネイティブ実装の登録 |
+| `src/ir/hir/mod.rs` と `src/ir/hir/validate.rs` | 型・参照先が解決済みのHIRと整合性検査 |
+| `src/ir/lir/mod.rs` | 基本ブロック・分岐・ジャンプ・解放を持つLIRと検査 |
+| `src/analysis/` | 束縛・効果・readonly/noescapeと診断経路の解析 |
+| `src/native/` | externの共有ABI・信頼契約・直接生成の記述 |
 | `src/backend/` | LIRからのC++出力、標準演算と値の表現の最適化 |
 | `lib/io.hpp` と `lib/scalar.hpp` | 生成C++に埋め込むバッファ入出力と一時値のランタイム |
-| `src/source.rs` | ファイル・埋込資源に共通のincludeとC++資源読込・依存ファイル一覧 |
-| `src/stdlib.rs`・`lib/prelude.rusk` | 埋込資源のカタログと通常のincludeによる標準prelude |
+| `src/frontend/source.rs` | ファイル・埋込資源に共通のincludeとC++資源読込・依存ファイル一覧 |
+| `src/stdlib/mod.rs`・`lib/prelude.rusk` | 埋込資源のカタログと通常のincludeによる標準prelude |
 | `lib/runtime.rusk`・`src/compiler/symbols.rs` | C++資源の宣言とシンボル依存順序の検査 |
 | `lib/core.rusk` | 基本型・演算・入出力の定義 |
 | `lib/collections.rusk` | Option・構造展開による導出・共通操作の宣言 |

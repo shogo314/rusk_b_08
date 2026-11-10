@@ -3,8 +3,8 @@
 mod flow;
 use super::{FunctionInfo, intrinsics, scalar_aliases, storage};
 use crate::{
-    hir::{Rvalue, ValueId},
-    lir::{Function, Operation, ProgramFunction, Terminator},
+    ir::hir::{Rvalue, ValueId},
+    ir::lir::{Function, Operation, ProgramFunction, Terminator},
 };
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
@@ -17,7 +17,7 @@ pub(super) struct Plan {
 }
 pub(super) fn plan(
     body: &Function,
-    kinds: &BTreeMap<String, crate::hir::Type>,
+    kinds: &BTreeMap<String, crate::ir::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
     inline_aliases: &BTreeMap<ValueId, ValueId>,

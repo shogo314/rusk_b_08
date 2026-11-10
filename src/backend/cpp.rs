@@ -1,18 +1,18 @@
 use super::{FunctionInfo, intrinsics};
 use crate::{
-    hir::{Literal, Place, Rvalue, ValueId},
-    lir::{Function, Operation as Instruction, Terminator},
+    ir::hir::{Literal, Place, Rvalue, ValueId},
+    ir::lir::{Function, Operation as Instruction, Terminator},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn emit(
     function: &Function,
     types: &BTreeMap<String, String>,
-    kinds: &BTreeMap<String, crate::hir::Type>,
+    kinds: &BTreeMap<String, crate::ir::hir::Type>,
     functions: &[FunctionInfo],
-    summaries: &[crate::lir::ProgramFunction],
+    summaries: &[crate::ir::lir::ProgramFunction],
     optimize: bool,
-    current: Option<&crate::lir::ProgramFunction>,
+    current: Option<&crate::ir::lir::ProgramFunction>,
 ) -> String {
     let mut scalar = BTreeSet::new();
     if optimize {
@@ -20,7 +20,9 @@ pub(crate) fn emit(
             for instruction in &block.instructions {
                 match instruction {
                     Instruction::Literal { result, .. }
-                        if kinds.get(&result.ty).is_some_and(crate::hir::Type::leaf) =>
+                        if kinds
+                            .get(&result.ty)
+                            .is_some_and(crate::ir::hir::Type::leaf) =>
                     {
                         scalar.insert(result.id.clone());
                     }
@@ -76,7 +78,7 @@ pub(crate) fn emit(
     let mut persistent = super::storage::persistent(function);
     persistent.extend(scalar_aliases.values().cloned());
     persistent.extend(owned.across_blocks.iter().cloned());
-    let declaration = |value: &crate::hir::Value| {
+    let declaration = |value: &crate::ir::hir::Value| {
         if persistent.contains(&value.id) {
             String::new()
         } else {
@@ -396,11 +398,11 @@ pub(super) fn quoted(s: &str) -> String {
     out.push('"');
     out
 }
-pub(super) fn location(s: &crate::ast::Span) -> String {
+pub(super) fn location(s: &crate::frontend::ast::Span) -> String {
     format!("Loc{{{}, {}, {}}}", quoted(&s.file), s.line, s.column)
 }
 
-pub(super) fn call_location(call: &crate::hir::Call) -> String {
+pub(super) fn call_location(call: &crate::ir::hir::Call) -> String {
     if call.inherit_location {
         "rusk_call_loc".into()
     } else {

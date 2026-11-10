@@ -6,9 +6,9 @@
 //! parameters can also back local aliases across blocks for the whole call.
 use super::{FunctionInfo, intrinsics};
 use crate::{
-    effects::Effect,
-    hir::{Place, Rvalue, ValueId},
-    lir::{Function, Operation, ProgramFunction, Terminator},
+    analysis::effects::Effect,
+    ir::hir::{Place, Rvalue, ValueId},
+    ir::lir::{Function, Operation, ProgramFunction, Terminator},
 };
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy)]
@@ -29,7 +29,7 @@ fn root(parents: &BTreeMap<ValueId, ValueId>, id: &ValueId) -> ValueId {
 }
 pub(super) fn plan(
     body: &Function,
-    kinds: &BTreeMap<String, crate::hir::Type>,
+    kinds: &BTreeMap<String, crate::ir::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
 ) -> BTreeMap<ValueId, ValueId> {
@@ -37,7 +37,7 @@ pub(super) fn plan(
 }
 pub(super) fn owned_plan(
     body: &Function,
-    kinds: &BTreeMap<String, crate::hir::Type>,
+    kinds: &BTreeMap<String, crate::ir::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
 ) -> BTreeMap<ValueId, ValueId> {
@@ -45,7 +45,7 @@ pub(super) fn owned_plan(
 }
 pub(super) fn parameter_plan(
     body: &Function,
-    kinds: &BTreeMap<String, crate::hir::Type>,
+    kinds: &BTreeMap<String, crate::ir::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
     current: &ProgramFunction,
@@ -55,7 +55,9 @@ pub(super) fn parameter_plan(
         .iter()
         .enumerate()
         .filter(|(index, ty)| {
-            kinds.get(*ty).is_some_and(crate::hir::Type::scalar_value)
+            kinds
+                .get(*ty)
+                .is_some_and(crate::ir::hir::Type::scalar_value)
                 && super::borrows_parameter(current, *index)
         })
         .map(|(index, _)| ValueId::Parameter(index))
@@ -73,7 +75,7 @@ pub(super) fn parameter_plan(
 }
 fn groups(
     body: &Function,
-    kinds: &BTreeMap<String, crate::hir::Type>,
+    kinds: &BTreeMap<String, crate::ir::hir::Type>,
     functions: &[FunctionInfo],
     summaries: &[ProgramFunction],
     source: Source<'_>,
@@ -92,7 +94,7 @@ fn groups(
     for slot in &body.slots {
         if kinds
             .get(&slot.ty)
-            .is_some_and(crate::hir::Type::scalar_value)
+            .is_some_and(crate::ir::hir::Type::scalar_value)
         {
             parents.insert(slot.id.clone(), slot.id.clone());
         }
@@ -105,7 +107,7 @@ fn groups(
                     initial: Some(value),
                 } if kinds
                     .get(&result.ty)
-                    .is_some_and(crate::hir::Type::scalar_value) =>
+                    .is_some_and(crate::ir::hir::Type::scalar_value) =>
                 {
                     Some((result, value))
                 }
@@ -114,7 +116,7 @@ fn groups(
                     expression: Rvalue::Share(value),
                 } if kinds
                     .get(&result.ty)
-                    .is_some_and(crate::hir::Type::scalar_value) =>
+                    .is_some_and(crate::ir::hir::Type::scalar_value) =>
                 {
                     Some((result, value))
                 }
@@ -139,14 +141,14 @@ fn groups(
                 } if !readonly
                     && kinds
                         .get(&result.ty)
-                        .is_some_and(crate::hir::Type::scalar_value) =>
+                        .is_some_and(crate::ir::hir::Type::scalar_value) =>
                 {
                     origins.insert(result.id.clone());
                 }
                 Operation::Call(call)
                     if kinds
                         .get(&call.result.ty)
-                        .is_some_and(crate::hir::Type::scalar_value)
+                        .is_some_and(crate::ir::hir::Type::scalar_value)
                         && (match source {
                             Source::Element => {
                                 intrinsics::lower_owned(call, &functions[call.function]).is_some()

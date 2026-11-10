@@ -7,7 +7,7 @@ fn main() {
         .parser_output_file("rusk_parser.rs")
         .actions_output_file("rusk_grammar_trait.rs")
         .user_type_name("RuskGrammar")
-        .user_trait_module_name("rusk_grammar")
+        .user_trait_module_name("frontend::rusk_grammar")
         .trim_parse_tree()
         .generate_parser()
         .expect("Rusk grammar generation failed");

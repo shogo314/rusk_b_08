@@ -17,7 +17,7 @@ impl Compiler {
         span: &Span,
     ) -> Result<String, String> {
         self.native_effect_references
-            .insert((index, crate::effects::Query::Writes));
+            .insert((index, crate::analysis::effects::Query::Writes));
         let code = self.render_native_derivation(kind, ty, index, "deep_copy", span)?;
         let dependencies = self
             .native_contract_dependencies
@@ -124,9 +124,9 @@ impl Compiler {
     }
 
     pub(super) fn register_derived_copy(&mut self, index: usize) {
-        self.native_lowerings.insert(index,crate::native_lowering::Lowering {
-            rooted: Some(crate::native_lowering::Template::parse("deep_copy($0,$loc)",1).expect("rooted aggregate copy expression")),
-            owned: Some(crate::native_lowering::Template::parse(&format!("([&](){{if constexpr(rusk_writes_{index}){{auto owner=$0;return deep_copy(owner,$loc);}}else return deep_copy($0,$loc);}}())"),1).expect("derived aggregate copy expression")),
+        self.native_lowerings.insert(index,crate::native::lowering::Lowering {
+            rooted: Some(crate::native::lowering::Template::parse("deep_copy($0,$loc)",1).expect("rooted aggregate copy expression")),
+            owned: Some(crate::native::lowering::Template::parse(&format!("([&](){{if constexpr(rusk_writes_{index}){{auto owner=$0;return deep_copy(owner,$loc);}}else return deep_copy($0,$loc);}}())"),1).expect("derived aggregate copy expression")),
             ..Default::default()
         });
     }
@@ -138,7 +138,7 @@ impl Compiler {
     ) -> Result<(), String> {
         self.native_contracts.insert(
             index,
-            crate::native_effects::contract(
+            crate::native::effects::contract(
                 "checked_read_fresh",
                 &[ty.into()],
                 ty,

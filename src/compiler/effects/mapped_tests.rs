@@ -8,9 +8,10 @@ fn compile(standard: &str, user: &str) -> Result<String, String> {
     Compiler::default().compile(
         &[
             Source::standard(
-                crate::parse(&format!("{TYPES}{standard}"), "mapped-standard.rusk").unwrap(),
+                crate::frontend::parse(&format!("{TYPES}{standard}"), "mapped-standard.rusk")
+                    .unwrap(),
             ),
-            Source::user(crate::parse(user, "mapped-user.rusk").unwrap()),
+            Source::user(crate::frontend::parse(user, "mapped-user.rusk").unwrap()),
         ],
         crate::backend::Emit::Hir,
     )
@@ -241,9 +242,10 @@ destination.value[0]=7;source:=[];wt destination.value,source.len();
                 &[
                     crate::stdlib::load().unwrap(),
                     Source::standard(
-                        crate::parse(STORE_RESULTS, "mapped-store-standard.rusk").unwrap(),
+                        crate::frontend::parse(STORE_RESULTS, "mapped-store-standard.rusk")
+                            .unwrap(),
                     ),
-                    Source::user(crate::parse(user, "mapped-store-use.rusk").unwrap()),
+                    Source::user(crate::frontend::parse(user, "mapped-store-use.rusk").unwrap()),
                 ],
                 crate::backend::Emit::Cpp,
             )

@@ -944,7 +944,7 @@ mod namespace_tests {
                 Compiler::default()
                     .compile(
                         &[Source::user(
-                            crate::parse(&source, "type-namespace.rusk").unwrap(),
+                            crate::frontend::parse(&source, "type-namespace.rusk").unwrap(),
                         )],
                         crate::backend::Emit::Hir,
                     )
@@ -966,7 +966,7 @@ mod namespace_tests {
                     let error = Compiler::default()
                         .compile(
                             &[Source::user(
-                                crate::parse(&source, "type-namespace.rusk").unwrap(),
+                                crate::frontend::parse(&source, "type-namespace.rusk").unwrap(),
                             )],
                             crate::backend::Emit::Hir,
                         )
@@ -998,7 +998,7 @@ mod namespace_tests {
                 let error = Compiler::default()
                     .compile(
                         &[Source::user(
-                            crate::parse(&source, "type-namespace.rusk").unwrap(),
+                            crate::frontend::parse(&source, "type-namespace.rusk").unwrap(),
                         )],
                         crate::backend::Emit::Hir,
                     )

@@ -1,11 +1,13 @@
 //! Declaration-driven native expression lowering.
 use super::FunctionInfo;
-use crate::hir::Call;
+use crate::ir::hir::Call;
 
 fn render(
     call: &Call,
     info: &FunctionInfo,
-    select: impl FnOnce(&crate::native_lowering::Lowering) -> Option<&crate::native_lowering::Template>,
+    select: impl FnOnce(
+        &crate::native::lowering::Lowering,
+    ) -> Option<&crate::native::lowering::Template>,
 ) -> Option<String> {
     if !info.trusted {
         return None;

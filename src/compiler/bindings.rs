@@ -18,7 +18,7 @@ impl Compiler {
             };
             self.body.push(Instruction::AnnotateEscape {
                 parameter: *parameter,
-                info: crate::hir::EscapeInfo {
+                info: crate::ir::hir::EscapeInfo {
                     name: name.text.clone(),
                     declaration: name.span.clone(),
                     annotation: annotation.clone(),
@@ -27,7 +27,7 @@ impl Compiler {
         }
         self.declare(&name.name, ty, value)?;
         if let Some(annotation) = &name.binding {
-            let info = crate::hir::BindingInfo {
+            let info = crate::ir::hir::BindingInfo {
                 name: name.text.clone(),
                 declaration: name.span.clone(),
                 annotation: annotation.clone(),
@@ -43,7 +43,7 @@ impl Compiler {
             });
         }
         if let Some(annotation) = &name.access {
-            let info = crate::hir::AccessInfo {
+            let info = crate::ir::hir::AccessInfo {
                 name: name.text.clone(),
                 declaration: name.span.clone(),
                 annotation: annotation.clone(),
@@ -69,7 +69,7 @@ impl Compiler {
             && let Some(info) = &variable.binding
             && info.annotation.mode == BindingMode::Fixed
         {
-            return Err(crate::bindings::rebinding_error(info, span));
+            return Err(crate::analysis::bindings::rebinding_error(info, span));
         }
         Ok(())
     }

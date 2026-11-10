@@ -1,7 +1,7 @@
 use super::*;
 impl Compiler {
-    pub(super) fn ir_types(&self) -> BTreeMap<String, crate::hir::Type> {
-        use crate::hir::Type;
+    pub(super) fn ir_types(&self) -> BTreeMap<String, crate::ir::hir::Type> {
+        use crate::ir::hir::Type;
         self.types
             .keys()
             .map(|name| {

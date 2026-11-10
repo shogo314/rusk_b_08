@@ -11,7 +11,7 @@ pub(super) struct ExternalType {
     parameters: Vec<Name>,
     native: String,
     span: Span,
-    representation: Option<crate::hir::Type>,
+    representation: Option<crate::ir::hir::Type>,
 }
 
 impl Compiler {
@@ -58,9 +58,9 @@ impl Compiler {
             self.functions[index].cpp.clone()
         } else {
             (if object {
-                crate::native_abi::UnitBridge::Box
+                crate::native::abi::UnitBridge::Box
             } else {
-                crate::native_abi::UnitBridge::Discard
+                crate::native::abi::UnitBridge::Discard
             })
             .name(index)
         }
@@ -72,9 +72,9 @@ impl Compiler {
             self.native_unit_bridges.insert((
                 index,
                 if object {
-                    crate::native_abi::UnitBridge::Box
+                    crate::native::abi::UnitBridge::Box
                 } else {
-                    crate::native_abi::UnitBridge::Discard
+                    crate::native::abi::UnitBridge::Discard
                 },
             ));
             if self.functions[index].body.is_none()
@@ -170,7 +170,7 @@ impl Compiler {
             if !properties.contains_key("effects") {
                 return Err(name.span.error("native alias contract requires effects"));
             }
-            crate::native_effects::aliases::parse(aliases, arguments.len())
+            crate::native::effects::aliases::parse(aliases, arguments.len())
                 .map_err(|e| name.span.error(e))?;
         }
         self.validate_lowering_source(name, properties, origin)?;
@@ -1087,7 +1087,7 @@ impl Compiler {
                     self.used.insert(callback.function);
                     if matches!(kind, template::InvokeKind::Writes) {
                         self.native_effect_references
-                            .insert((callback.function, crate::effects::Query::Writes));
+                            .insert((callback.function, crate::analysis::effects::Query::Writes));
                         output.push_str(&format!("rusk_writes_{}", callback.function));
                     } else {
                         if let Some(owner) = owner {
@@ -1164,7 +1164,7 @@ impl Compiler {
                         && !self
                             .ir_types()
                             .get(&result)
-                            .is_some_and(crate::hir::Type::scalar_value)
+                            .is_some_and(crate::ir::hir::Type::scalar_value)
                     {
                         return Err(span.error(
                             "native value references require Unit or a declared scalar result",
@@ -1228,7 +1228,7 @@ mod tests {
                         format!("extern type Unit{{cpp_name:\"Unit\",}}{prefix}{declaration}");
                     Compiler::default().compile(
                         &[Source::user(
-                            crate::parse(&source, "iterator-signature.rusk").unwrap(),
+                            crate::frontend::parse(&source, "iterator-signature.rusk").unwrap(),
                         )],
                         crate::backend::Emit::Hir,
                     )
@@ -1260,10 +1260,11 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
     #[test]
     fn record_copy_derivation_uses_the_declared_role_and_source_body() {
         let standard = Source::standard(
-            crate::parse(&format!("{TYPES}{DERIVE}"), "arbitrary-standard-name.rusk").unwrap(),
+            crate::frontend::parse(&format!("{TYPES}{DERIVE}"), "arbitrary-standard-name.rusk")
+                .unwrap(),
         );
         let user = Source::user(
-            crate::parse(
+            crate::frontend::parse(
                 "struct Row{a:Int;b:Int;}let a:=Row{a:1,b:2};let b=a;",
                 "caller.rusk",
             )
@@ -1311,8 +1312,9 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
                 "unknown type",
             ),
         ] {
-            let types = Source::standard(crate::parse(TYPES, "types.rusk").unwrap());
-            let statements = crate::parse(&definition, "<stdlib/collections.rusk>").unwrap();
+            let types = Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap());
+            let statements =
+                crate::frontend::parse(&definition, "<stdlib/collections.rusk>").unwrap();
             let source = if standard {
                 Source::standard(statements)
             } else {
@@ -1326,7 +1328,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
     }
     #[test]
     fn enum_copy_derivation_uses_source_provenance_and_a_name_independent_role() {
-        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"other-library.rusk").unwrap().into_iter()
+        let mut declarations=crate::frontend::parse(include_str!("../../lib/collections.rusk"),"other-library.rusk").unwrap().into_iter()
             .filter(|s|matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|kind|kind == "enum_copy"))).collect::<Vec<_>>();
         for statement in &mut declarations {
             if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
@@ -1338,13 +1340,13 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             }
         }
         let user = Source::user(
-            crate::parse(
+            crate::frontend::parse(
                 "enum Event{Empty,Present(Int),}let a:=Event::Present(1);let b=a;",
                 "caller.rusk",
             )
             .unwrap(),
         );
-        let types = Source::standard(crate::parse(TYPES, "types.rusk").unwrap());
+        let types = Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap());
         let cpp = Compiler::default()
             .compile(
                 &[types, Source::standard(declarations), user],
@@ -1367,7 +1369,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
                 "enum E{Empty,Value(Int),}let x:=E::Empty;let y:=E::Value(3);x=y;",
             ),
         ] {
-            let mut declarations = crate::parse(
+            let mut declarations = crate::frontend::parse(
                 include_str!("../../lib/collections.rusk"),
                 "other-library.rusk",
             )
@@ -1391,9 +1393,9 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             let cpp = Compiler::default()
                 .compile(
                     &[
-                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap()),
                         Source::standard(declarations),
-                        Source::user(crate::parse(source, "caller.rusk").unwrap()),
+                        Source::user(crate::frontend::parse(source, "caller.rusk").unwrap()),
                     ],
                     crate::backend::Emit::Cpp,
                 )
@@ -1441,7 +1443,8 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
                 "duplicate native derivation",
             ),
         ] {
-            let declarations = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let declarations =
+                crate::frontend::parse(&source, "<stdlib/collections.rusk>").unwrap();
             let source = if standard {
                 Source::standard(declarations)
             } else {
@@ -1450,7 +1453,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             let error = Compiler::default()
                 .compile(
                     &[
-                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap()),
                         source,
                     ],
                     crate::backend::Emit::Cpp,
@@ -1485,7 +1488,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
                 "duplicate native derivation",
             ),
         ] {
-            let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let statements = crate::frontend::parse(&source, "<stdlib/collections.rusk>").unwrap();
             let declarations = if standard {
                 Source::standard(statements)
             } else {
@@ -1494,7 +1497,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             let error = Compiler::default()
                 .compile(
                     &[
-                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap()),
                         declarations,
                     ],
                     crate::backend::Emit::Cpp,
@@ -1505,7 +1508,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
     }
     #[test]
     fn tuple_input_role_uses_the_standard_template_with_an_unrelated_name() {
-        let mut declarations = crate::parse(
+        let mut declarations = crate::frontend::parse(
             include_str!("../../lib/collections.rusk"),
             "renamed-library.rusk",
         )
@@ -1533,9 +1536,11 @@ extern fn __read__()->Int{{cpp_name:"input_field",code:"Obj<std::int64_t> input_
         let cpp = Compiler::default()
             .compile(
                 &[
-                    Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                    Source::standard(crate::frontend::parse(&types, "types.rusk").unwrap()),
                     Source::standard(declarations),
-                    Source::user(crate::parse("in row:(Int,Int);", "caller.rusk").unwrap()),
+                    Source::user(
+                        crate::frontend::parse("in row:(Int,Int);", "caller.rusk").unwrap(),
+                    ),
                 ],
                 crate::backend::Emit::Cpp,
             )
@@ -1586,7 +1591,7 @@ extern fn __read__()->Int{{cpp_name:"input_field",code:"Obj<std::int64_t> input_
                 Some("unknown type constructor"),
             ),
         ] {
-            let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let statements = crate::frontend::parse(&source, "<stdlib/collections.rusk>").unwrap();
             let declarations = if standard {
                 Source::standard(statements)
             } else {
@@ -1594,7 +1599,7 @@ extern fn __read__()->Int{{cpp_name:"input_field",code:"Obj<std::int64_t> input_
             };
             let result = Compiler::default().compile(
                 &[
-                    Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                    Source::standard(crate::frontend::parse(&types, "types.rusk").unwrap()),
                     declarations,
                 ],
                 crate::backend::Emit::Cpp,
@@ -1610,7 +1615,7 @@ extern fn __read__()->Int{{cpp_name:"input_field",code:"Obj<std::int64_t> input_
 
     #[test]
     fn dimensions_input_role_uses_the_source_body_under_an_unrelated_name() {
-        let mut declarations = crate::parse(include_str!("../../lib/collections.rusk"), "other-standard.rusk")
+        let mut declarations = crate::frontend::parse(include_str!("../../lib/collections.rusk"), "other-standard.rusk")
             .unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v| v == "vector_read"))).collect::<Vec<_>>();
         for statement in &mut declarations {
             if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
@@ -1630,10 +1635,11 @@ extern fn __read__()->Int{{cpp_name:"field_input",code:"Obj<std::int64_t> field_
         let cpp = Compiler::default()
             .compile(
                 &[
-                    Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                    Source::standard(crate::frontend::parse(&types, "types.rusk").unwrap()),
                     Source::standard(declarations),
                     Source::user(
-                        crate::parse("in rows(2,3):Vec<Vec<Int>>;", "caller.rusk").unwrap(),
+                        crate::frontend::parse("in rows(2,3):Vec<Vec<Int>>;", "caller.rusk")
+                            .unwrap(),
                     ),
                 ],
                 crate::backend::Emit::Cpp,
@@ -1683,7 +1689,7 @@ extern fn __read__()->Int{{cpp_name:"field_input",code:"Obj<std::int64_t> field_
                 "duplicate native derivation",
             ),
         ] {
-            let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let statements = crate::frontend::parse(&source, "<stdlib/collections.rusk>").unwrap();
             let source = if standard {
                 Source::standard(statements)
             } else {
@@ -1692,7 +1698,7 @@ extern fn __read__()->Int{{cpp_name:"field_input",code:"Obj<std::int64_t> field_
             let error = Compiler::default()
                 .compile(
                     &[
-                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap()),
                         source,
                     ],
                     crate::backend::Emit::Cpp,
@@ -1704,7 +1710,7 @@ extern fn __read__()->Int{{cpp_name:"field_input",code:"Obj<std::int64_t> field_
 
     #[test]
     fn tuple_output_uses_named_source_templates_for_body_lowering_and_effects() {
-        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"renamed-output-library.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_write"))).collect::<Vec<_>>();
+        let mut declarations=crate::frontend::parse(include_str!("../../lib/collections.rusk"),"renamed-output-library.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_write"))).collect::<Vec<_>>();
         for statement in &mut declarations {
             if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
                 name.text = "unrelated_output_name".into();
@@ -1725,9 +1731,9 @@ extern fn __write__(value:Int){{cpp_name:"field_output",effects:"io_write",code:
 "#
         );
         let sources = [
-            Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+            Source::standard(crate::frontend::parse(&types, "types.rusk").unwrap()),
             Source::standard(declarations),
-            Source::user(crate::parse("__write__((1,2));", "caller.rusk").unwrap()),
+            Source::user(crate::frontend::parse("__write__((1,2));", "caller.rusk").unwrap()),
         ];
         let cpp = Compiler::default()
             .compile(&sources, crate::backend::Emit::Cpp)
@@ -1787,7 +1793,8 @@ extern fn __write__(value:Int){{cpp_name:"field_output",effects:"io_write",code:
                     "duplicate native derivation",
                 ),
             ] {
-                let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+                let statements =
+                    crate::frontend::parse(&source, "<stdlib/collections.rusk>").unwrap();
                 let source = if standard {
                     Source::standard(statements)
                 } else {
@@ -1796,7 +1803,7 @@ extern fn __write__(value:Int){{cpp_name:"field_output",effects:"io_write",code:
                 let error = Compiler::default()
                     .compile(
                         &[
-                            Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                            Source::standard(crate::frontend::parse(TYPES, "types.rusk").unwrap()),
                             source,
                         ],
                         crate::backend::Emit::Cpp,
@@ -1809,7 +1816,7 @@ extern fn __write__(value:Int){{cpp_name:"field_output",effects:"io_write",code:
 
     #[test]
     fn tuple_comparison_bodies_lowering_and_contracts_follow_source_roles() {
-        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"renamed-compare-library.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_eq"))).collect::<Vec<_>>();
+        let mut declarations=crate::frontend::parse(include_str!("../../lib/collections.rusk"),"renamed-compare-library.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_eq"))).collect::<Vec<_>>();
         for statement in &mut declarations {
             if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
                 name.text = "unrelated_equal_name".into();
@@ -1834,9 +1841,11 @@ extern fn __eq__(a:Int,b:Int)->Bool{{cpp_name:"field_equal",code:"Obj<bool> fiel
 "#
             );
             let sources = [
-                Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                Source::standard(crate::frontend::parse(&types, "types.rusk").unwrap()),
                 Source::standard(declarations.clone()),
-                Source::user(crate::parse("__eq__((1,2),(1,3));", "caller.rusk").unwrap()),
+                Source::user(
+                    crate::frontend::parse("__eq__((1,2),(1,3));", "caller.rusk").unwrap(),
+                ),
             ];
             let cpp = Compiler::default()
                 .compile(&sources, crate::backend::Emit::Cpp)
@@ -1859,7 +1868,7 @@ extern fn __eq__(a:Int,b:Int)->Bool{{cpp_name:"field_equal",code:"Obj<bool> fiel
     }
     #[test]
     fn tuple_predeclarations_follow_trusted_representations_instead_of_scalar_names() {
-        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"renamed-policy.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_eq"))).collect::<Vec<_>>();
+        let mut declarations=crate::frontend::parse(include_str!("../../lib/collections.rusk"),"renamed-policy.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_eq"))).collect::<Vec<_>>();
         for statement in &mut declarations {
             if let Stmt::GenericExternFunction(_, _, _, _, properties) = statement {
                 properties
@@ -1887,9 +1896,9 @@ let x:=value();__eq__((x,x),(x,x));
             let cpp = Compiler::default()
                 .compile(
                     &[
-                        Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                        Source::standard(crate::frontend::parse(&types, "types.rusk").unwrap()),
                         Source::standard(declarations.clone()),
-                        Source::user(crate::parse(&user, "caller.rusk").unwrap()),
+                        Source::user(crate::frontend::parse(&user, "caller.rusk").unwrap()),
                     ],
                     crate::backend::Emit::Cpp,
                 )

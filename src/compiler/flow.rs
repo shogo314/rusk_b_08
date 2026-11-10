@@ -31,16 +31,15 @@ impl Compiler {
                             id: ValueId::Probe,
                             ty: ty.into(),
                             initialized: true,
-                            access: name
-                                .access
-                                .as_ref()
-                                .map(|annotation| crate::hir::AccessInfo {
+                            access: name.access.as_ref().map(|annotation| {
+                                crate::ir::hir::AccessInfo {
                                     name: name.text.clone(),
                                     declaration: name.span.clone(),
                                     annotation: annotation.clone(),
-                                }),
+                                }
+                            }),
                             binding: name.binding.as_ref().map(|annotation| {
-                                crate::hir::BindingInfo {
+                                crate::ir::hir::BindingInfo {
                                     name: name.text.clone(),
                                     declaration: name.span.clone(),
                                     annotation: annotation.clone(),
@@ -58,7 +57,7 @@ impl Compiler {
                         fields
                             .as_ref()
                             .and_then(|f| f.get(i))
-                            .map_or(crate::hir::DIVERGED, |(_, t)| t.text.as_str()),
+                            .map_or(crate::ir::hir::DIVERGED, |(_, t)| t.text.as_str()),
                     )?;
                 }
             }

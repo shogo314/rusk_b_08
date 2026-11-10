@@ -1,6 +1,6 @@
 //! Assemble the C++ target from LIR and its separate native runtime bindings.
 use super::{FunctionInfo, cpp};
-use crate::lir::{Program, ProgramFunction};
+use crate::ir::lir::{Program, ProgramFunction};
 use std::collections::BTreeMap;
 pub(crate) struct Context {
     pub types: BTreeMap<String, String>,
@@ -8,12 +8,13 @@ pub(crate) struct Context {
     pub prelude: String,
     pub concrete_foreign_definitions: Vec<String>,
     pub foreign_definitions: Vec<String>,
-    pub native_unit_bridges: std::collections::BTreeSet<(usize, crate::native_abi::UnitBridge)>,
+    pub native_unit_bridges: std::collections::BTreeSet<(usize, crate::native::abi::UnitBridge)>,
     pub native_declarations: std::collections::BTreeSet<usize>,
     pub native_value_references: std::collections::BTreeSet<usize>,
     pub native_owned_references: std::collections::BTreeSet<usize>,
     pub native_rooted_references: std::collections::BTreeSet<usize>,
-    pub native_effect_references: std::collections::BTreeSet<(usize, crate::effects::Query)>,
+    pub native_effect_references:
+        std::collections::BTreeSet<(usize, crate::analysis::effects::Query)>,
     pub epilogue: String,
 }
 fn signature(function: &ProgramFunction, context: &Context, optimize: bool) -> String {
@@ -81,22 +82,22 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
         let mut actual = args;
         actual.push("rusk_loc".into());
         let result = match bridge {
-            crate::native_abi::UnitBridge::Discard => "void".into(),
-            crate::native_abi::UnitBridge::Box => format!("Obj<{}>", context.types["Unit"]),
+            crate::native::abi::UnitBridge::Discard => "void".into(),
+            crate::native::abi::UnitBridge::Box => format!("Obj<{}>", context.types["Unit"]),
         };
         let finish = match bridge {
-            crate::native_abi::UnitBridge::Discard => String::new(),
-            crate::native_abi::UnitBridge::Box => format!(
+            crate::native::abi::UnitBridge::Discard => String::new(),
+            crate::native::abi::UnitBridge::Box => format!(
                 "return make_obj<{}>({}{{}});",
                 context.types["Unit"], context.types["Unit"]
             ),
         };
         let keep_result = match bridge {
-            crate::native_abi::UnitBridge::Discard => format!(
+            crate::native::abi::UnitBridge::Discard => format!(
                 "[[maybe_unused]] Obj<{}> rusk_result=",
                 context.types["Unit"]
             ),
-            crate::native_abi::UnitBridge::Box => String::new(),
+            crate::native::abi::UnitBridge::Box => String::new(),
         };
         out += &format!(
             "{result} {}({}){{{keep_result}{}({});{finish}}}\n",
@@ -247,7 +248,7 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             })
             .unwrap_or_else(|| {
                 let name = if f.result == "Unit" && !info.unit_object {
-                    crate::native_abi::UnitBridge::Box.name(*id)
+                    crate::native::abi::UnitBridge::Box.name(*id)
                 } else {
                     info.cpp.clone()
                 };

@@ -1,48 +1,13 @@
-mod ast;
+mod analysis;
 mod backend;
-mod bindings;
 mod compiler;
-mod effects;
-mod hir;
-mod hir_flow;
-mod hir_validate;
-mod lir;
-mod lir_cleanup;
-mod native_abi;
-mod native_effects;
-mod native_lowering;
-mod readonly;
-mod rusk_grammar;
-mod source;
+mod frontend;
+mod ir;
+mod native;
 mod stdlib;
-#[allow(warnings)]
-mod rusk_grammar_trait {
-    include!(concat!(env!("OUT_DIR"), "/rusk_grammar_trait.rs"));
-}
-#[allow(warnings)]
-mod rusk_parser {
-    include!(concat!(env!("OUT_DIR"), "/rusk_parser.rs"));
-}
 
-use parol_runtime::Report;
-struct ErrorReporter;
-impl Report for ErrorReporter {}
+use frontend::{parse_cst, source};
 
-fn parse_cst<'t>(text: &'t str, file: &str) -> Result<rusk_grammar_trait::Rusk<'t>, String> {
-    let mut grammar = rusk_grammar::RuskGrammar::default();
-    rusk_parser::parse(text, file, &mut grammar).map_err(|e| {
-        if ErrorReporter::report_error(&e, file).is_err() {
-            eprintln!("{e:?}");
-        }
-        format!("{file}: syntax error")
-    })?;
-    grammar
-        .root
-        .ok_or_else(|| format!("{file}: missing parse result"))
-}
-fn parse(text: &str, file: &str) -> Result<Vec<ast::Stmt>, String> {
-    ast::lower(&parse_cst(text, file)?)
-}
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
     let command = args.next().ok_or(

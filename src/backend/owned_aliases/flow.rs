@@ -1,8 +1,8 @@
 //! Exact logical ownership at CFG edges. Reject incompatible incoming states;
 //! every accepted root redefinition starts with no surviving old aliases.
 use crate::{
-    hir::{Place, Rvalue, ValueId},
-    lir::{Function, Operation, Terminator},
+    ir::hir::{Place, Rvalue, ValueId},
+    ir::lir::{Function, Operation, Terminator},
 };
 use std::collections::{BTreeSet, VecDeque};
 #[cfg(test)]

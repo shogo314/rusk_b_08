@@ -128,7 +128,7 @@ impl Compiler {
 
     fn predeclared_tuple_value(&self, ty: &str) -> bool {
         fn eligible(compiler: &Compiler, ty: &str, depth: usize) -> bool {
-            use crate::hir::{Scalar, Type};
+            use crate::ir::hir::{Scalar, Type};
             if depth >= 64 {
                 return false;
             }

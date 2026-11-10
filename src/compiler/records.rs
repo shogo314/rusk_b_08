@@ -182,8 +182,8 @@ impl Compiler {
     }
 
     pub(super) fn field(&self, ty: &str, name: &Name) -> Result<(usize, String), String> {
-        if ty == crate::hir::DIVERGED {
-            return Err(crate::hir::DIVERGED.into());
+        if ty == crate::ir::hir::DIVERGED {
+            return Err(crate::ir::hir::DIVERGED.into());
         }
         if self.callables.contains_key(ty) {
             return Err(name.span.error("callable environment fields are private"));

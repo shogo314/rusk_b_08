@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    hir::{Literal, Value},
-    lir::{Block, BlockId},
+    ir::hir::{Literal, Value},
+    ir::lir::{Block, BlockId},
 };
 fn value(index: usize) -> Value {
     Value {

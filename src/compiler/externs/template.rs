@@ -8,7 +8,7 @@ pub(super) enum CallKind {
     Object,
     Rooted,
     Value,
-    Effect(crate::effects::Query),
+    Effect(crate::analysis::effects::Query),
 }
 #[derive(Clone, Copy)]
 pub(super) enum InvokeKind {
@@ -59,14 +59,14 @@ pub(super) enum Part {
         arguments: Vec<String>,
         result: String,
         kind: CallKind,
-        route: Option<crate::native_effects::composition::Specification>,
+        route: Option<crate::native::effects::composition::Specification>,
     },
     Invoke {
         name: String,
         arguments: Vec<String>,
         result: String,
         kind: InvokeKind,
-        route: Option<crate::native_effects::composition::Specification>,
+        route: Option<crate::native::effects::composition::Specification>,
     },
 }
 
@@ -215,7 +215,7 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
         let (call, route) = if let Some((signature, mapping)) = call.split_once(" via ") {
             (
                 signature,
-                Some(crate::native_effects::composition::Specification::parse(
+                Some(crate::native::effects::composition::Specification::parse(
                     mapping,
                 )?),
             )
@@ -290,9 +290,9 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                     } else if text.starts_with("boxed_call ") {
                         CallKind::Boxed
                     } else if text.starts_with("writes ") {
-                        CallKind::Effect(crate::effects::Query::Writes)
+                        CallKind::Effect(crate::analysis::effects::Query::Writes)
                     } else if text.starts_with("fails ") {
-                        CallKind::Effect(crate::effects::Query::Fails)
+                        CallKind::Effect(crate::analysis::effects::Query::Fails)
                     } else {
                         CallKind::Owned
                     },
