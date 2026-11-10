@@ -99,6 +99,7 @@ extern fn Some<T>(value:T)->Option<T> {
     code:"Obj<@{Option<T>}> @{fn}(Obj<@{T}> value,Loc){return rusk_enum_make<@{Option<T>},0>(value);}",
 }
 extern fn None<T>()->Option<T> {
+    implicit_call:"true",
     effects:"variant_constructor:1",
     code:"Obj<@{Option<T>}> @{fn}(Loc){return rusk_enum_make<@{Option<T>},1>();}",
 }

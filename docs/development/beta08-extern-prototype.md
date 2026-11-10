@@ -448,3 +448,12 @@ Vec・Dict/Setの反復子はowner、Mapped/Filteredはsource・callback・cache
 期待される結果型から、値取得の通常の署名を通して左辺の型引数を補う。複数の候補がある場合は、左辺を作る関数・enumコンストラクタの宣言された結果型と整合する文脈だけを用いる。文脈を調べる間に左辺や右辺を実行しない。標準のNoneと別の空variant・空値構築関数が共存する場合も検証する。完全な双方向型推論を追加したものではなく、通常の宣言と型注釈の規則を使う。
 
 [利用者の操作の例](https://github.com/shogo314/rusk_b_08/blob/main/examples/beta08/coalesce_protocols.rusk)は、短絡・共有・期待型・文字参照・構造体のvalueを確認する。標準由来の別名のenumでは、variant 1のpayload 1を取得して両モードで実行し、nullableな配置やOptionの並び順への依存がないことを検証する。
+
+
+## bare値のゼロ引数構築を宣言する
+
+標準の`None`だけを名前で暗黙に呼び出す分岐を削除し、具体・ジェネリックexternの`implicit_call:"true"`へ移した。引数がない通常のexternだけに指定でき、不正な値・引数付き・導出テンプレートとの併用は未使用でも宣言位置で拒否する。関数名の系列にbare呼び出しの規約を登録し、その系列の通常のゼロ引数候補を期待型とともに解決する。値のキャッシュや初回だけの呼び出しは行わない。
+
+[別名の実行例](https://github.com/shogo314/rusk_b_08/blob/main/examples/beta08/implicit_calls.rusk)では、利用者のVacantから期待型に合うOptionを構築し、tickの副作用が参照ごとに実行されることを確認する。型引数が決まらない場合は通常の推論エラーとし、ローカル変数・捕捉した変数があればそちらを優先する。指定のないRusk関数・externのbare参照は従来の関数値のままである。修飾したenum variantの既存の構築構文とは別に扱う。
+
+利用者のexternにも指定できるが、これは呼び出しの記法だけを決める情報である。Sourceの由来・共有ABI・未知の効果を変更せず、effects・aliases・lower等の標準専用情報を指定する権限も与えない。

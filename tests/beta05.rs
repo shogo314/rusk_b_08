@@ -217,7 +217,7 @@ fn invalid_types_and_uninitialized_paths_report_compile_errors() {
         "let x:Int;wt 3<2<(x:=4);wt x;",
         "let x:=try_read::<Vec<Int>>();",
         "let x:Int;let o:=Some(1);let y:=o??(x:=2);wt x;",
-        "fn Some(x:Int)->Int{return x;}wt Some(1);",
+        "fn Some(x:Int)->Int{return x;}fn Some(x:Int)->Int{return x;}wt Some(1);",
         "struct Item{x:Int;}fn __lt__(a:Item,b:Item)->Int{return 1;}wt Item{x:1}<Item{x:2}<Item{x:3};",
     ] {
         let out = Case::new(source).compile();

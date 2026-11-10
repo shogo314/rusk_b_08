@@ -15,6 +15,23 @@ pub(super) struct ExternalType {
 }
 
 impl Compiler {
+    pub(super) fn register_implicit_call(
+        &mut self,
+        name: &Name,
+        arity: usize,
+        properties: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        if let Some(value) = properties.get("implicit_call") {
+            if value != "true" || arity != 0 || properties.contains_key("derive") {
+                return Err(name
+                    .span
+                    .error("implicit_call requires true, no parameters, and an ordinary extern"));
+            }
+            self.implicit_calls.insert(name.text.clone());
+        }
+        Ok(())
+    }
+
     pub(super) fn register_return_abi(
         &mut self,
         index: usize,
@@ -130,8 +147,10 @@ impl Compiler {
                 "operation",
                 "return_abi",
                 "derive",
+                "implicit_call",
             ],
         )?;
+        self.register_implicit_call(name, arguments.len(), properties)?;
         if properties.get("return_abi").is_some_and(|v| v != "object") {
             return Err(name
                 .span

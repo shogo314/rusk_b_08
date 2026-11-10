@@ -242,6 +242,8 @@ extern_symbol   = "extern" "symbol" identifier "{" properties "}" ;
 properties      = { identifier ":" string_literal "," } ;
 ```
 
+引数のないextern関数に`implicit_call:"true"`を付けると、変数のない位置のbare名を、その関数へのゼロ引数呼び出しとして扱います。通常の期待型・候補解決を使い、参照するたびに呼び出します。標準のbare `None`もこの宣言を使います。ローカル変数があれば変数を優先し、この指定のない通常の関数名は従来どおり関数値です。この指定は効果・保持の信頼契約を与えません。
+
 プロパティの値は文字列です。各プロパティには最後の項目を含めて `,` が必要です。型の `cpp_name`、関数の `cpp_name` / `code`、共通コードの `code` などの契約は [開発ガイド](../development/index.md) を参照してください。
 
 ## enumとmatch

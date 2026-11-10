@@ -2282,6 +2282,16 @@ fn coalesce_protocols_preserve_readonly_noescape_and_validate_unselected_paths()
 
 #[test]
 fn option_constructor_names_follow_ordinary_function_overload_rules() {
+    for options in [vec![], vec!["--no-opt"]] {
+        let out =
+            Case::new("fn Some(x:Int)->Int{return x;}wt Some(1);").run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1\n");
+    }
     let source = r#"
 fn Some(x:Str)->Int{return x.len();}
 fn Some<T>(x:T,unused:Int)->T{return x;}
@@ -2315,4 +2325,52 @@ let values:=[1];let held:=Some(values,0);held[0]=4;wt values;
             "{error}"
         );
     }
+}
+
+#[test]
+fn bare_values_use_declared_calls_and_unmarked_functions_remain_callable_values() {
+    let source = include_str!("../examples/beta08/implicit_calls.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"8\n9 10\nYes\n1 2 3\n20 30\n11 12\n13\n14\n");
+    }
+}
+
+#[test]
+fn implicit_call_declarations_validate_unused_arity_values_and_effect_trust() {
+    for source in [
+        "extern fn unused<T>(x:T)->T{implicit_call:\"true\",code:\"unused\",}",
+        "extern fn unused<T>()->T{implicit_call:\"false\",code:\"unused\",}",
+        "extern fn unused(x:Int)->Int{implicit_call:\"true\",cpp_name:\"unused\",code:\"unused\",}",
+        "extern fn unused()->Int{implicit_call:\"false\",cpp_name:\"unused\",code:\"unused\",}",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("main.rusk:") && error.contains("implicit_call requires"),
+            "{error}"
+        );
+    }
+    for source in [
+        "extern fn spoof<T>()->T{implicit_call:\"true\",effects:\"read_fresh\",code:\"unused\",}",
+        "extern fn spoof()->Int{implicit_call:\"true\",effects:\"read_fresh\",cpp_name:\"spoof\",code:\"unused\",}",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("main.rusk:")
+                && error.contains("reserved for the embedded standard library"),
+            "{error}"
+        );
+    }
+    let out = Case::new("extern fn Vacant<T>()->Option<T>{implicit_call:\"true\",code:\"unused\",}let value:=Vacant;").compile();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("main.rusk:"));
 }

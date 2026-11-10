@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/implicit_calls.rusk').read_text(),b'',b'8\n9 10\nYes\n1 2 3\n20 30\n11 12\n13\n14\n'),
     ((ROOT/'examples/beta08/coalesce_protocols.rusk').read_text(),b'',b'7 0\n3 1\n8 9 10 0\na ab!\n6\n'),
     (f'include {json.dumps(str(ROOT/"examples/beta08/runtime_resources/example.rusk"))};\n',b'',b'10\n11 3\n'),
     ((ROOT/'examples/beta08/lazy_copy_lifetime.rusk').read_text(),b'',b'0 8 9\n0 3 4\n'),

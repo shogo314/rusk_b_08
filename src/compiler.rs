@@ -115,6 +115,7 @@ pub struct Compiler {
     generic_functions: Vec<generics::GenericFunction>,
     generic_instances: BTreeMap<(usize, Vec<String>), usize>,
     generic_calls: BTreeMap<usize, Span>,
+    implicit_calls: BTreeSet<String>,
     functions: Vec<Function>,
     native_contracts: BTreeMap<usize, crate::effects::Summary>,
     native_contract_dependencies: BTreeMap<usize, BTreeSet<usize>>,
@@ -310,8 +311,10 @@ impl Compiler {
                                         "lower_rooted",
                                         "operation",
                                         "return_abi",
+                                        "implicit_call",
                                     ],
                                 )?;
+                                self.register_implicit_call(n, params.len(), p)?;
                                 (property(n, p, "cpp_name")?, property(n, p, "code")?, None)
                             }
                             Stmt::UserFunction(_, _, params, _, body) => (
@@ -1419,7 +1422,9 @@ impl Compiler {
             }
             ExprKind::Var(n) => {
                 let variable = self.lookup_variable(n, false)?;
-                if (n.text == "None" || n.text.contains("::")) && variable.is_none() {
+                if (self.implicit_calls.contains(&n.text) || n.text.contains("::"))
+                    && variable.is_none()
+                {
                     return self.call(&n.text, vec![], expected, &n.span);
                 }
                 let Some(v) = variable else {

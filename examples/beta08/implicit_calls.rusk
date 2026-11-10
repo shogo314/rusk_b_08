@@ -1,0 +1,26 @@
+// Bare values use the declaration's ordinary zero-argument call, including
+// generic result inference. The property grants no effect or ownership trust.
+extern fn Vacant<T>()->Option<T> {
+    implicit_call:"true",
+    code:"Obj<@{Option<T>}> @{fn}(Loc){return rusk_enum_make<@{Option<T>},1>();}",
+}
+extern fn tick()->Int {
+    implicit_call:"true",
+    cpp_name:"rusk_implicit_tick",
+    code:"Obj<std::int64_t> rusk_implicit_tick(Loc){static std::int64_t count=0;return make_obj<std::int64_t>(++count);}",
+}
+extern fn native_function()->Int {
+    cpp_name:"rusk_unmarked_function",
+    code:"Obj<std::int64_t> rusk_unmarked_function(Loc){return make_obj<std::int64_t>(20);}",
+}
+fn ordinary_function()->Int{return 30;}
+
+let absent:Option<Vec<Int>>:=Vacant;
+let held:=absent??[7];held[0]=8;wt held;
+let expected:Int:=Vacant??9;wt expected,Vacant::<Int>()??10;
+let unit:Option<Unit>:=Vacant;wt unit.is_none();
+wt tick,tick,tick();
+let native:=native_function;let ordinary:=ordinary_function;wt native(),ordinary();
+{let Vacant:=Some(11);let tick:=12;wt Vacant??0,tick;}
+let capture:=()=>{let empty:Option<Int>:=Vacant;return empty;};wt capture()??13;
+let standard:Option<Int>:=None;wt standard??14;
