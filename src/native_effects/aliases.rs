@@ -59,6 +59,32 @@ pub(crate) fn parse(text: &str, parameters: usize) -> Result<Vec<Mapping>, Strin
     Ok(mappings)
 }
 
+pub(crate) fn resolve(
+    root: &str,
+    path: &[String],
+    types: &BTreeMap<String, Type>,
+) -> Result<Vec<Projection>, String> {
+    let mut ty = root.to_owned();
+    let mut projections = vec![];
+    for name in path {
+        let kind = types.get(&ty).ok_or("unknown native alias type")?;
+        let field = kind
+            .retained_fields()
+            .iter()
+            .position(|(n, _)| n == name)
+            .map(Projection::Retained)
+            .or_else(|| {
+                kind.fields()
+                    .and_then(|fields| fields.iter().position(|(n, _)| n == name))
+                    .map(Projection::Field)
+            })
+            .ok_or("unknown native alias member")?;
+        ty = crate::effects::project_type(&ty, std::slice::from_ref(&field), types)?;
+        projections.push(field);
+    }
+    Ok(projections)
+}
+
 pub(crate) fn apply(
     base: &mut Summary,
     text: &str,
@@ -66,31 +92,6 @@ pub(crate) fn apply(
     result: &str,
     types: &BTreeMap<String, Type>,
 ) -> Result<(), String> {
-    fn resolve(
-        root: &str,
-        path: &[String],
-        types: &BTreeMap<String, Type>,
-    ) -> Result<Vec<Projection>, String> {
-        let mut ty = root.to_owned();
-        let mut projections = vec![];
-        for name in path {
-            let kind = types.get(&ty).ok_or("unknown native alias type")?;
-            let field = kind
-                .retained_fields()
-                .iter()
-                .position(|(n, _)| n == name)
-                .map(Projection::Retained)
-                .or_else(|| {
-                    kind.fields()
-                        .and_then(|fields| fields.iter().position(|(n, _)| n == name))
-                        .map(Projection::Field)
-                })
-                .ok_or("unknown native alias member")?;
-            ty = crate::effects::project_type(&ty, std::slice::from_ref(&field), types)?;
-            projections.push(field);
-        }
-        Ok(projections)
-    }
     let mut candidate = base.clone();
     for (target, argument, source) in parse(text, parameters.len())? {
         let target = resolve(result, &target, types)?;

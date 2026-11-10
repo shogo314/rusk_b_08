@@ -29,9 +29,10 @@ extern fn __iter_next__<I,F,T,R>(it:Mapped<I,F,T,R>)->R {
 }
 
 extern fn copy<I,F,T,R>(it:Mapped<I,F,T,R>)->Mapped<I,F,T,R> {
-    lower_owned:"([&](){auto owner=$0;auto& it=owner;return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(R)->R}(it->cached,$loc):Obj<@{R}>{},it->ready,it->finished});}())",
-    lower_rooted:"([&](){auto& it=$0;return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(R)->R}(it->cached,$loc):Obj<@{R}>{},it->ready,it->finished});}())",
-    code:"Obj<@{Mapped<I,F,T,R>}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,Loc loc){return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I}(it->source,loc),@{boxed_call copy(F)->F}(it->callback,loc),it->cached?@{boxed_call copy(R)->R}(it->cached,loc):Obj<@{R}>{},it->ready,it->finished});}",
+    effects:"read_fresh",
+    lower_owned:"([&](){auto clone=[&](const auto& it){return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I via (0.source) into return.source}(it->source,$loc),@{boxed_call copy(F)->F via (0.callback) into return.callback}(it->callback,$loc),it->cached?@{boxed_call copy(R)->R via (0.cached) into return.cached}(it->cached,$loc):Obj<@{R}>{},it->ready,it->finished});};if constexpr(@{writes copy(I)->I}||@{writes copy(F)->F}||@{writes copy(R)->R}){auto owner=$0;return clone(owner);}else return clone($0);}())",
+    lower_rooted:"([&](){auto& it=$0;return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I via (0.source) into return.source}(it->source,$loc),@{boxed_call copy(F)->F via (0.callback) into return.callback}(it->callback,$loc),it->cached?@{boxed_call copy(R)->R via (0.cached) into return.cached}(it->cached,$loc):Obj<@{R}>{},it->ready,it->finished});}())",
+    code:"Obj<@{Mapped<I,F,T,R>}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,Loc loc){return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I via (0.source) into return.source}(it->source,loc),@{boxed_call copy(F)->F via (0.callback) into return.callback}(it->callback,loc),it->cached?@{boxed_call copy(R)->R via (0.cached) into return.cached}(it->cached,loc):Obj<@{R}>{},it->ready,it->finished});}",
 }
 
 extern fn __assign__<I,F,T,R>(target:Mapped<I,F,T,R>,source:Mapped<I,F,T,R>)->Unit {
@@ -64,9 +65,10 @@ extern fn __iter_next__<I,F,T>(it:Filtered<I,F,T>)->T {
 }
 
 extern fn copy<I,F,T>(it:Filtered<I,F,T>)->Filtered<I,F,T> {
-    lower_owned:"([&](){auto owner=$0;auto& it=owner;return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(T)->T}(it->cached,$loc):Obj<@{T}>{},it->ready,it->finished});}())",
-    lower_rooted:"([&](){auto& it=$0;return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(T)->T}(it->cached,$loc):Obj<@{T}>{},it->ready,it->finished});}())",
-    code:"Obj<@{Filtered<I,F,T>}> @{fn}(Obj<@{Filtered<I,F,T>}> it,Loc loc){return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I}(it->source,loc),@{boxed_call copy(F)->F}(it->callback,loc),it->cached?@{boxed_call copy(T)->T}(it->cached,loc):Obj<@{T}>{},it->ready,it->finished});}",
+    effects:"read_fresh",
+    lower_owned:"([&](){auto clone=[&](const auto& it){return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I via (0.source) into return.source}(it->source,$loc),@{boxed_call copy(F)->F via (0.callback) into return.callback}(it->callback,$loc),it->cached?@{boxed_call copy(T)->T via (0.cached) into return.cached}(it->cached,$loc):Obj<@{T}>{},it->ready,it->finished});};if constexpr(@{writes copy(I)->I}||@{writes copy(F)->F}||@{writes copy(T)->T}){auto owner=$0;return clone(owner);}else return clone($0);}())",
+    lower_rooted:"([&](){auto& it=$0;return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I via (0.source) into return.source}(it->source,$loc),@{boxed_call copy(F)->F via (0.callback) into return.callback}(it->callback,$loc),it->cached?@{boxed_call copy(T)->T via (0.cached) into return.cached}(it->cached,$loc):Obj<@{T}>{},it->ready,it->finished});}())",
+    code:"Obj<@{Filtered<I,F,T>}> @{fn}(Obj<@{Filtered<I,F,T>}> it,Loc loc){return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I via (0.source) into return.source}(it->source,loc),@{boxed_call copy(F)->F via (0.callback) into return.callback}(it->callback,loc),it->cached?@{boxed_call copy(T)->T via (0.cached) into return.cached}(it->cached,loc):Obj<@{T}>{},it->ready,it->finished});}",
 }
 
 extern fn __assign__<I,F,T>(target:Filtered<I,F,T>,source:Filtered<I,F,T>)->Unit {

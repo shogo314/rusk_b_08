@@ -116,6 +116,8 @@ pub struct Compiler {
     functions: Vec<Function>,
     native_contracts: BTreeMap<usize, crate::effects::Summary>,
     native_contract_dependencies: BTreeMap<usize, BTreeSet<usize>>,
+    native_mapped_dependencies:
+        BTreeMap<usize, Vec<crate::native_effects::composition::Dependency>>,
     native_lowerings: BTreeMap<usize, crate::native_lowering::Lowering>,
     native_references: BTreeSet<usize>,
     native_value_references: BTreeSet<usize>,
@@ -533,21 +535,39 @@ impl Compiler {
             let proven = conditional
                 .iter()
                 .copied()
-                .filter(|id| {
-                    let base = &self.native_contracts[id];
-                    self.native_contract_dependencies[id]
+                .filter_map(|id| {
+                    let base = &self.native_contracts[&id];
+                    if !self.native_contract_dependencies[&id]
                         .iter()
                         .all(|dependency| {
                             crate::native_effects::dependency_covered(base, &summaries[*dependency])
                         })
+                    {
+                        return None;
+                    }
+                    let composed = crate::native_effects::composition::compose(
+                        base,
+                        self.native_mapped_dependencies
+                            .get(&id)
+                            .map(Vec::as_slice)
+                            .unwrap_or(&[]),
+                        &summaries,
+                    )?;
+                    Some((id, composed))
                 })
                 .collect::<Vec<_>>();
             if proven.is_empty() {
                 break;
             }
-            for id in proven {
+            for (id, composed) in proven {
+                composed.validate_signature(
+                    &lir.functions[id].params,
+                    &lir.functions[id].result,
+                    &lir.types,
+                    false,
+                )?;
                 conditional.remove(&id);
-                lir.functions[id].effects = self.native_contracts[&id].clone();
+                lir.functions[id].effects = composed;
             }
             summaries = crate::effects::analyze(&lir);
         }

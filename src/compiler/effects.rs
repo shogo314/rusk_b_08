@@ -1,6 +1,47 @@
 use super::*;
 
 impl Compiler {
+    pub(super) fn record_native_dependency(
+        &mut self,
+        owner: usize,
+        dependency: usize,
+        route: Option<&crate::native_effects::composition::Specification>,
+        span: &Span,
+    ) -> Result<(), String> {
+        self.native_contract_dependencies.entry(owner).or_default();
+        if let Some(route) = route {
+            if self.functions[owner].origin != Origin::StandardLibrary {
+                return Err(span
+                    .error("native call mappings are reserved for the embedded standard library"));
+            }
+            let outer = &self.functions[owner];
+            let child = &self.functions[dependency];
+            let mapped = route
+                .resolve(
+                    dependency,
+                    &outer.params,
+                    &outer.result,
+                    &child.params,
+                    &child.result,
+                    &self.ir_types(),
+                )
+                .map_err(|e| span.error(e))?;
+            let mappings = self.native_mapped_dependencies.entry(owner).or_default();
+            if !mappings.contains(&mapped) {
+                if mappings.len() >= 4096 {
+                    return Err(span.error("native call mapping work limit exceeded"));
+                }
+                mappings.push(mapped);
+            }
+        } else {
+            self.native_contract_dependencies
+                .entry(owner)
+                .or_default()
+                .insert(dependency);
+        }
+        Ok(())
+    }
+
     pub(super) fn validate_lowering_source(
         &self,
         name: &Name,
@@ -509,3 +550,6 @@ extern fn checked(x:Int)->Int {cpp_name:"checked",code:"unused",effects:"checked
         }
     }
 }
+
+#[cfg(test)]
+mod mapped_tests;

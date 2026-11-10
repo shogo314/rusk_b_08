@@ -1,0 +1,10 @@
+fn local<T>(readonly noescape it:T){let saved=it;}
+let values:=[1,2,3];local(values.map((x:Int)=>x+1));local(values.filter((x:Int)=>x>1));
+extern type Cursor{cpp_name:"std::int64_t",}
+extern fn cursor()->Cursor{cpp_name:"mapped_cursor",code:"Obj<std::int64_t> mapped_cursor(Loc){return make_obj<std::int64_t>(0);}",}
+fn __iter__(x:Cursor)->Cursor{return x;}
+extern fn __iter_has_next__(x:Cursor)->Bool{cpp_name:"mapped_has",code:"Obj<bool> mapped_has(Obj<std::int64_t> x,Loc){return make_obj<bool>(*x<3);}",}
+extern fn __iter_next__(x:Cursor)->Int{cpp_name:"mapped_next",code:"Obj<std::int64_t> mapped_next(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>((*x)++);}",}
+fn copy(x:Cursor)->Cursor{return x;}
+let input:=cursor();let mapped:=input.map((x:Int)=>x+10);local(mapped);
+let duplicate=mapped;wt __iter_next__(mapped),__iter_next__(duplicate);

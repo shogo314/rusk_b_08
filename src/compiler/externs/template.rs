@@ -59,12 +59,14 @@ pub(super) enum Part {
         arguments: Vec<String>,
         result: String,
         kind: CallKind,
+        route: Option<crate::native_effects::composition::Specification>,
     },
     Invoke {
         name: String,
         arguments: Vec<String>,
         result: String,
         kind: InvokeKind,
+        route: Option<crate::native_effects::composition::Specification>,
     },
 }
 
@@ -123,6 +125,22 @@ pub(super) fn expand_arguments(
 
 pub(super) fn validate_argument_bounds(parts: &[Part], count: usize) -> Result<(), String> {
     for part in parts {
+        if let Part::Call {
+            route: Some(route), ..
+        }
+        | Part::Invoke {
+            route: Some(route), ..
+        } = part
+        {
+            route.validate_bounds(count)?;
+            if let Part::Call { arguments, .. } | Part::Invoke { arguments, .. } = part
+                && arguments.iter().all(|a| argument_offset(a).is_none())
+            {
+                route.validate_arity(
+                    arguments.len() + usize::from(matches!(part, Part::Invoke { .. })),
+                )?;
+            }
+        }
         match part {
             Part::IfType {
                 matched, otherwise, ..
@@ -194,6 +212,23 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
             .or_else(|| text.strip_prefix("boxed_invoke "))
             .or_else(|| text.strip_prefix("writes_invoke "))
     {
+        let (call, route) = if let Some((signature, mapping)) = call.split_once(" via ") {
+            (
+                signature,
+                Some(crate::native_effects::composition::Specification::parse(
+                    mapping,
+                )?),
+            )
+        } else {
+            (call, None)
+        };
+        if route.is_some()
+            && (text.starts_with("writes ")
+                || text.starts_with("fails ")
+                || text.starts_with("writes_invoke "))
+        {
+            return Err("native effect queries cannot have call mappings".into());
+        }
         let call = call
             .chars()
             .filter(|c| !c.is_ascii_whitespace())
@@ -231,6 +266,7 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                     name,
                     arguments,
                     result: result.into(),
+                    route,
                     kind: if text.starts_with("writes_invoke ") {
                         InvokeKind::Writes
                     } else if text.starts_with("boxed_invoke ") {
@@ -244,6 +280,7 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                     name,
                     arguments,
                     result: result.into(),
+                    route,
                     kind: if text.starts_with("value_call ") {
                         CallKind::Value
                     } else if text.starts_with("rooted_call ") {
@@ -267,6 +304,19 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
         return Err("invalid native type reference".into());
     }
     Ok(Part::Type(text.into()))
+}
+
+pub(super) fn has_mappings(parts: &[Part]) -> bool {
+    parts.iter().any(|part| match part {
+        Part::Call { route, .. } | Part::Invoke { route, .. } => route.is_some(),
+        Part::IfType {
+            matched, otherwise, ..
+        } => has_mappings(matched) || has_mappings(otherwise),
+        Part::Arguments { parts, .. }
+        | Part::Fields { parts, .. }
+        | Part::Variants { parts, .. } => has_mappings(parts),
+        _ => false,
+    })
 }
 
 pub(super) fn parse(text: &str, body: bool) -> Result<Vec<Part>, String> {
@@ -296,6 +346,7 @@ pub(super) fn parse_type(mut text: &str) -> Result<Vec<Part>, String> {
             Part::Call {
                 kind: CallKind::Value,
                 arguments,
+                route: None,
                 ..
             } if arguments.iter().all(|a| argument_offset(a).is_none()) => {}
             _ => {

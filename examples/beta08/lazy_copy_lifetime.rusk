@@ -1,0 +1,28 @@
+extern symbol zz_lazy_copy_reset {
+    code:"#include <functional>\nstd::function<void()> lazy_copy_reset;\n",
+}
+extern type Token{cpp_name:"std::int64_t",}
+extern fn token()->Token{
+    cpp_name:"lazy_copy_token",
+    code:"Obj<std::int64_t> lazy_copy_token(Loc){return make_obj<std::int64_t>(7);}",
+}
+extern fn number(x:Token)->Int{
+    cpp_name:"lazy_copy_number",
+    code:"Obj<std::int64_t> lazy_copy_number(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",
+}
+extern fn copy(x:Token)->Token{
+    cpp_name:"lazy_copy_detach",
+    code:"Obj<std::int64_t> lazy_copy_detach(Obj<std::int64_t> x,Loc){if(lazy_copy_reset)lazy_copy_reset();return make_obj<std::int64_t>(*x);}",
+}
+extern fn watch<T>(values:Vec<T>){
+    code:"void @{fn}(Obj<@{Vec<T>}> values,Loc){lazy_copy_reset=[values](){values->clear();++values->version;};}",
+}
+extern fn stop(){
+    cpp_name:"lazy_copy_stop",
+    code:"void lazy_copy_stop(Loc){lazy_copy_reset={};}",
+}
+let captured:=token();
+let values:=[[1,2].map((x:Int)=>x+number(captured))];watch(values);
+let detached=values[0];stop();wt values.len(),detached.to_vec();
+let selected:=[[3,4].filter((x:Int)=>{number(captured);true})];
+watch(selected);let saved=selected[0];stop();wt selected.len(),saved.to_vec();

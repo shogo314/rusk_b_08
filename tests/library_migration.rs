@@ -2105,6 +2105,9 @@ fn lazy_algorithms_and_types_work_under_unrelated_user_names() {
         })
         .collect::<Vec<_>>()
         .join("\n")
+        .replace(" via (0.source) into return.source", "")
+        .replace(" via (0.callback) into return.callback", "")
+        .replace(" via (0.cached) into return.cached", "")
         .replace("Mapped", "Transform")
         .replace("Filtered", "Select")
         .replace("extern fn map<", "extern fn convert_values<")
@@ -2183,5 +2186,45 @@ fn iterator_copies_keep_owner_restrictions_without_retaining_them_outside_the_re
             !out.status.success() && (error.contains("noescape") || error.contains("readonly")),
             "{error}"
         );
+    }
+}
+
+#[test]
+fn lazy_copy_composes_shared_sources_and_preserves_readonly_noescape_boundaries() {
+    let source = include_str!("../examples/beta08/lazy_copy_sharing.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"10 11\n");
+    }
+    for source in [
+        "fn leak<T>(noescape it:T)->T{return copy(it);}let input:=[1].map((x:Int)=>x);leak(input);",
+        "fn leak<T>(noescape it:T)->T{return copy(it);}let input:=[1].filter((x:Int)=>true);leak(input);",
+        "extern type Token{cpp_name:\"std::int64_t\",}extern fn token()->Token{cpp_name:\"token\",code:\"Obj<std::int64_t> token(Loc){return make_obj<std::int64_t>(1);}\",}extern fn copy(x:Token)->Token{cpp_name:\"copy_token\",code:\"Obj<std::int64_t> copy_token(Obj<std::int64_t> x,Loc){return x;}\",}fn local<T>(readonly it:T){let saved=it;}let held:=token();let it:=[1].map((x:Int)=>{let captured:=held;x});local(it);",
+    ] {
+        let out = Case::new(source).compile();
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && (error.contains("readonly") || error.contains("noescape")),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn lazy_copy_holds_the_source_state_when_captured_copy_releases_its_container() {
+    let source = include_str!("../examples/beta08/lazy_copy_lifetime.rusk");
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"0 8 9\n0 3 4\n");
     }
 }

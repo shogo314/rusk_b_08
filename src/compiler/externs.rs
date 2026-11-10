@@ -180,6 +180,11 @@ impl Compiler {
                 parts.extend(template::parse(text, true).map_err(|e| name.span.error(e))?);
             }
         }
+        if origin != Origin::StandardLibrary && template::has_mappings(&parts) {
+            return Err(name
+                .span
+                .error("native call mappings are reserved for the embedded standard library"));
+        }
         let mut calls = vec![];
         let mut callbacks = vec![];
         if !properties.contains_key("derive") {
@@ -1051,6 +1056,7 @@ impl Compiler {
                     arguments,
                     result,
                     kind,
+                    route,
                 } => {
                     let ty = generics::substitute(&name, bindings);
                     let callback = self.callables.get(&ty).cloned().ok_or_else(|| {
@@ -1073,10 +1079,12 @@ impl Compiler {
                         output.push_str(&format!("rusk_writes_{}", callback.function));
                     } else {
                         if let Some(owner) = owner {
-                            self.native_contract_dependencies
-                                .entry(owner)
-                                .or_default()
-                                .insert(callback.function);
+                            self.record_native_dependency(
+                                owner,
+                                callback.function,
+                                route.as_ref(),
+                                span,
+                            )?;
                         }
                         output.push_str(&self.abi_reference(
                             callback.function,
@@ -1089,6 +1097,7 @@ impl Compiler {
                     arguments,
                     result,
                     kind,
+                    route,
                 } => {
                     let name = generics::substitute(&name, bindings);
                     let result = generics::substitute(&result, bindings);
@@ -1156,10 +1165,7 @@ impl Compiler {
                     }
                     self.used.insert(index);
                     if let Some(owner) = owner {
-                        self.native_contract_dependencies
-                            .entry(owner)
-                            .or_default()
-                            .insert(index);
+                        self.record_native_dependency(owner, index, route.as_ref(), span)?;
                     }
                     match kind {
                         template::CallKind::Effect(query) => {
