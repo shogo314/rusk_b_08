@@ -971,3 +971,35 @@ wt count;
         assert_eq!(out.stdout, b"0\nYes 0\n1\n");
     }
 }
+
+#[test]
+fn native_reference_results_are_observed_after_argument_cleanup() {
+    let case = Case::new(
+        r#"
+extern type Token{cpp_name:"std::int64_t",}
+extern symbol observation{code:"Obj<std::int64_t> input;Obj<bool> result;std::int64_t seen=-1;",}
+extern fn prepare(){cpp_name:"prepare",code:"void prepare(Loc){result=make_obj<bool>(true);seen=-1;input=Obj<std::int64_t>(new std::int64_t(1),[](auto* p){*result=false;delete p;});}",}
+extern fn inspect(x:Token)->Bool{cpp_name:"inspect",code:"Obj<bool> inspect(Obj<std::int64_t> x,Loc){input.reset();return result;}",}
+extern fn touch(x:Token)->Unit{return_abi:"object",cpp_name:"touch",code:"Obj<Unit> touch(Obj<std::int64_t> x,Loc){input.reset();return Obj<Unit>(new Unit{},[](auto* p){seen=*result?1:0;delete p;});}",}
+extern fn observed()->Int{cpp_name:"observed",code:"Obj<std::int64_t> observed(Loc){return make_obj<std::int64_t>(seen);}",}
+extern fn normal<T>()->Bool{code:"Obj<bool> @{fn}(Loc loc){auto value=@{call inspect(T)->Bool}(input,loc);return make_obj<bool>(*value);}",}
+extern fn reference<T>()->Bool{code:"Obj<bool> @{fn}(Loc loc){return make_obj<bool>(@{value_call inspect(T)->Bool}(input,loc));}",}
+extern fn normal_unit<T>(){code:"void @{fn}(Loc loc){auto value=@{boxed_call touch(T)->Unit}(input,loc);}",}
+extern fn bridged_unit<T>(){code:"void @{fn}(Loc loc){@{call touch(T)->Unit}(input,loc);}",}
+extern fn value_unit<T>(){code:"void @{fn}(Loc loc){@{value_call touch(T)->Unit}(input,loc);}",}
+prepare();wt normal::<Token>();prepare();wt reference::<Token>();
+prepare();normal_unit::<Token>();wt observed();
+prepare();bridged_unit::<Token>();wt observed();
+prepare();value_unit::<Token>();wt observed();
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"No\nNo\n0\n0\n0\n");
+    }
+}

@@ -940,3 +940,99 @@ let first:=try_read::<Unit>();wt first.is_some();let second:=try_read::<Unit>();
         );
     }
 }
+
+#[test]
+fn derived_enum_copies_prove_independence_only_for_covered_payload_operations() {
+    let case = Case::new(
+        r#"
+enum Choice{Pair(Int,Vec<Int>),Empty}
+fn detached(readonly noescape value:Choice)->Choice{return copy(value);}
+let values:=[1,2];let first:=Choice::Pair(3,values);let second:=detached(first);values[0]=9;
+wt match second{Pair(n,v)=>(n,v[0]),Empty=>(0,0),};
+fn optional(readonly noescape value:Option<Unit>)->Option<Unit>{return copy(value);}
+extern fn same(a:Unit,b:Unit)->Bool{cpp_name:"same",code:"Obj<bool> same(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+let source:=Some({});let copied:=optional(source);wt same(source.value(),copied.value());
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3 1\nNo\n");
+    }
+    for copier in [
+        "fn copy(x:Leaf)->Leaf{return x;}",
+        r#"extern fn copy(x:Leaf)->Leaf{cpp_name:"opaque_copy",code:"Obj<std::int64_t> opaque_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",}"#,
+    ] {
+        let source = format!(
+            r#"
+extern type Leaf{{cpp_name:"std::int64_t",}}
+{copier}
+enum Choice{{Value(Leaf),Empty}}
+fn blocked(noescape input:Choice)->Choice{{return copy(input);}}
+"#
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("noescape"));
+    }
+}
+
+#[test]
+fn derived_enum_copy_pins_input_during_callbacks_and_keeps_the_payload_snapshot() {
+    let source = r#"
+extern type Leaf{cpp_name:"std::int64_t",}
+enum Choice{Pair(Leaf,Int),Empty}
+extern symbol observation{code:"std::function<void()> change_source;",}
+extern fn leaf()->Leaf{cpp_name:"leaf",code:"Obj<std::int64_t> leaf(Loc){return make_obj<std::int64_t>(4);}",}
+extern fn value(x:Leaf)->Int{cpp_name:"value_leaf",code:"Obj<std::int64_t> value_leaf(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn watch<F>(f:F){code:"void @{fn}(Obj<@{F}> f,Loc loc){change_source=[f,loc](){@{invoke F()->Unit}(f,loc);};}",}
+extern fn unwatch(){cpp_name:"unwatch",code:"void unwatch(Loc){change_source={};}",}
+extern fn copy(x:Leaf)->Leaf{cpp_name:"copy_leaf",code:"Obj<std::int64_t> copy_leaf(Obj<std::int64_t> x,Loc){if(change_source)change_source();return make_obj<std::int64_t>(*x);}",}
+let source:=Choice::Pair(leaf(),7);watch(()=>{source=Choice::Empty;});let copied=source;unwatch();
+wt match source{Pair(x,n)=>false,Empty=>true,};
+wt match copied{Pair(x,n)=>(value(x),n),Empty=>(0,0),};
+"#;
+    let case = Case::new(source);
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes\n4 7\n");
+    }
+}
+
+#[test]
+fn owned_enum_copy_holds_the_input_object_until_payload_callbacks_finish() {
+    let case = Case::new(
+        r#"
+extern type Leaf{cpp_name:"std::int64_t",}
+enum Choice{Pair(Leaf,Int),Empty}
+extern symbol observation{code:"std::function<void()> clear_source;std::int64_t dropped=0,during=-1;",}
+extern fn leaf()->Leaf{cpp_name:"leaf",code:"Obj<std::int64_t> leaf(Loc){return make_obj<std::int64_t>(4);}",}
+extern fn wrap<T>(x:T)->T{code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc){return Obj<@{T}>(new @{T}(*x),[](auto* p){++dropped;delete p;});}",}
+extern fn watch<T>(a:Vec<T>){code:"void @{fn}(Obj<@{Vec<T>}> a,Loc){clear_source=[a](){a->clear();++a->version;};}",}
+extern fn clear_watch(){cpp_name:"clear_watch",code:"void clear_watch(Loc){clear_source={};}",}
+extern fn copy(x:Leaf)->Leaf{cpp_name:"copy_leaf",code:"Obj<std::int64_t> copy_leaf(Obj<std::int64_t> x,Loc){if(clear_source)clear_source();during=dropped;return make_obj<std::int64_t>(*x);}",}
+extern fn first_copy<T>(a:Vec<T>)->T{code:"Obj<@{T}> @{fn}(Obj<@{Vec<T>}> a,Loc loc){return @{owned_call copy(T)->T}((*a)[0],loc);}",}
+extern fn counts()->(Int,Int){cpp_name:"counts",code:"Obj<RuskRecord0> counts(Loc){return make_obj<RuskRecord0>(RuskRecord0{make_obj<std::int64_t>(during),make_obj<std::int64_t>(dropped)});}",}
+let rows:=[wrap(Choice::Pair(leaf(),7))];watch(rows);let copied:=first_copy(rows);clear_watch();
+wt counts(),rows.len(),match copied{Pair(x,n)=>n,Empty=>0,};
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"0 1 0 7\n");
+    }
+}

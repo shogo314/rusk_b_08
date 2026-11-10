@@ -18,6 +18,10 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'option_vector_copy': ('let a:=[Some(1);1000];let total:=0;'
+                           'for round in 0..100{let b=a;total+=b[0].value();}wt total;'),
+    'enum_vector_copy': ('enum Item{Pair(Int,Str),Empty}let a:=[Item::Pair(1,"ab");1000];'
+                         'let total:=0;for round in 0..100{let b=a;match b[0]{Pair(n,s)=>{total+=n;},Empty=>{},};}wt total;'),
     'option_input': ('let total:=0;while let Some(value)=try_read::<Int>(){total+=value;}wt total;'),
     'option_construction': ('let total:=0;for i in 0..200000{let option:=Some(i);'
                             'match option{Some(value)=>{total+=value;},None=>{},};}wt total;'),

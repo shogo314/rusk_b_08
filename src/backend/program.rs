@@ -90,8 +90,15 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
                 context.types["Unit"], context.types["Unit"]
             ),
         };
+        let keep_result = match bridge {
+            crate::native_abi::UnitBridge::Discard => format!(
+                "[[maybe_unused]] Obj<{}> rusk_result=",
+                context.types["Unit"]
+            ),
+            crate::native_abi::UnitBridge::Box => String::new(),
+        };
         out += &format!(
-            "{result} {}({}){{{}({});{finish}}}\n",
+            "{result} {}({}){{{keep_result}{}({});{finish}}}\n",
             bridge.name(*id),
             params.join(","),
             context.functions[*id].cpp,
@@ -150,10 +157,20 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
                 let mut call_args = args.clone();
                 call_args.push("rusk_loc".into());
                 let call = format!("{}({})", info.cpp, call_args.join(","));
-                if f.result == "Unit" {
+                if f.result == "Unit" && info.unit_object {
+                    format!(
+                        "([&](){{[[maybe_unused]] Obj<{}> rusk_result={call};}}())",
+                        context.types[&f.result]
+                    )
+                } else if f.result == "Unit" {
                     call
                 } else {
-                    format!("*{call}")
+                    // Complete the call's full-expression, including argument
+                    // destruction, before observing its shared result.
+                    format!(
+                        "([&](){{Obj<{}> rusk_result={call};return *rusk_result;}}())",
+                        context.types[&f.result]
+                    )
                 }
             });
         let (result, expression) = if f.result == "Unit" {

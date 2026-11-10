@@ -1,0 +1,16 @@
+enum Choice {Text(Char,Vec<Int>), Empty}
+fn detached(readonly noescape value:Choice)->Choice {return copy(value);}
+let text:="ab";
+let original:=Choice::Text(text[0],[3]);
+let copied:=detached(original);
+original=Choice::Empty;
+text.push_back('!');
+wt text;
+wt match copied {Text(ch,values)=>(ch,values[0]),Empty=>('?',0),};
+extern fn same(a:Unit,b:Unit)->Bool {
+    cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",
+}
+fn duplicate(readonly noescape value:Option<Unit>)->Option<Unit> {return copy(value);}
+let source:=Some({});
+let result:=duplicate(source);
+wt same(source.value(),result.value());

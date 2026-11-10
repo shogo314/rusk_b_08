@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod bindings;
 mod callables;
 mod containers;
+mod copy_contracts;
 mod cpp;
 mod effects;
 mod enums;
@@ -87,6 +88,7 @@ pub struct Compiler {
     enum_definitions: BTreeMap<String, enums::Definition>,
     enums: BTreeMap<String, enums::Enum>,
     enum_copies: BTreeMap<String, Vec<Vec<usize>>>,
+    enum_copy_functions: BTreeMap<String, usize>,
     preparing_enums: Vec<String>,
     containers: BTreeMap<String, containers::Container>,
     container_copies: BTreeMap<String, Vec<usize>>,

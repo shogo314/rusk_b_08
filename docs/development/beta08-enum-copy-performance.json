@@ -1,0 +1,126 @@
+{
+  "utc": "2026-11-10T00:27:14.100485+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "86673e0cdd23d7a797d5a6f8b8cb7c23b31b9a42f9022fa24fad3e1e9a4f4092"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "option_vector_copy": {
+      "source": "let a:=[Some(1);1000];let total:=0;for round in 0..100{let b=a;total+=b[0].value();}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "0fff8c07981ac7f9c92e7d206be56ca0f87c067a101acf99406818c3bc090cf8",
+          "runs_ms": [
+            5.480065,
+            3.975411,
+            3.865565,
+            3.912582,
+            3.775365,
+            3.858831,
+            4.03922,
+            3.881734,
+            3.825109,
+            4.177718,
+            3.858351,
+            4.29492,
+            5.067471,
+            3.733627,
+            3.795813
+          ],
+          "output": "100\n",
+          "allocations": 202215,
+          "shared_ptr_copies": 202708,
+          "median_ms": 3.881734
+        },
+        "current": {
+          "cpp_sha256": "91486d8f5970a11280cbbb4890f1437fbeaff2bbafd418376555adfc3c9aee18",
+          "runs_ms": [
+            4.394665,
+            4.138249,
+            3.884021,
+            3.920787,
+            3.843424,
+            4.061761,
+            4.179332,
+            3.93792,
+            3.733645,
+            3.857458,
+            3.947858,
+            3.979347,
+            3.812274,
+            3.827603,
+            4.524277
+          ],
+          "output": "100\n",
+          "allocations": 202215,
+          "shared_ptr_copies": 202608,
+          "median_ms": 3.93792
+        }
+      },
+      "speedup": 0.9857320615959694
+    },
+    "enum_vector_copy": {
+      "source": "enum Item{Pair(Int,Str),Empty}let a:=[Item::Pair(1,\"ab\");1000];let total:=0;for round in 0..100{let b=a;match b[0]{Pair(n,s)=>{total+=n;},Empty=>{},};}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "b52c7efd3b64f412bb9f4220116b71bcea1e6d15344cdecbc18b3ae5003096db",
+          "runs_ms": [
+            6.134708,
+            6.421127,
+            6.63669,
+            5.971797,
+            5.7602,
+            6.822545,
+            6.272288,
+            6.095354,
+            6.431619,
+            6.140231,
+            6.641849,
+            6.438519,
+            6.146603,
+            5.837063,
+            5.828799
+          ],
+          "output": "100\n",
+          "allocations": 303316,
+          "shared_ptr_copies": 405508,
+          "median_ms": 6.146603
+        },
+        "current": {
+          "cpp_sha256": "6cd3e428c0d5f8bf404bb364b415f7d2186b15da784b5870edf04895a10e9d5d",
+          "runs_ms": [
+            6.158565,
+            6.405762,
+            6.240624,
+            5.811906,
+            6.438429,
+            6.483627,
+            6.199342,
+            6.409495,
+            6.104474,
+            6.151783,
+            6.02717,
+            6.318024,
+            6.995792,
+            5.934376,
+            6.084157
+          ],
+          "output": "100\n",
+          "allocations": 303316,
+          "shared_ptr_copies": 405408,
+          "median_ms": 6.199342
+        }
+      },
+      "speedup": 0.9914928068172396
+    }
+  }
+}

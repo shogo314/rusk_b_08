@@ -114,7 +114,7 @@ impl Compiler {
             },
         );
         let ty = &name.text;
-        self.native_function(
+        let copy_index = self.native_function(
             "copy",
             vec![ty.clone()],
             ty,
@@ -123,6 +123,8 @@ impl Compiler {
             },
             &name.span,
         )?;
+        self.enum_copy_functions.insert(ty.clone(), copy_index);
+        self.register_derived_copy(copy_index);
         self.native_function("__assign__",vec![ty.clone();2],"Unit",|cpp|format!("void {cpp}(Obj<{native}> x,Obj<{native}> y,Loc loc){{auto snapshot=deep_copy(y,loc);x->value=std::move(snapshot->value);}}"),&name.span)?;
         Ok(true)
     }
@@ -296,6 +298,8 @@ impl Compiler {
                 }
                 variants.push(copies);
             }
+            let index = self.enum_copy_functions[&ty];
+            self.set_derived_copy_dependencies(index, &ty, variants.iter().flatten().copied())?;
             self.enum_copies.insert(ty, variants);
         }
         Ok(())
