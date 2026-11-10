@@ -19,7 +19,12 @@ pub(super) struct CaptureContext {
 
 impl Compiler {
     pub(super) fn local_variable(&self, name: &str) -> Option<Variable> {
-        self.scopes.iter().rev().find_map(|s| s.get(name)).cloned()
+        self.context
+            .scopes
+            .iter()
+            .rev()
+            .find_map(|s| s.get(name))
+            .cloned()
     }
 
     pub(super) fn lookup_variable(
@@ -37,7 +42,7 @@ impl Compiler {
             if callable_only && !self.callables.contains_key(&local.ty) {
                 return Ok(None);
             }
-            self.scopes[0].insert(name.text.clone(), local.clone());
+            self.context.scopes[0].insert(name.text.clone(), local.clone());
             return Ok(Some(local));
         }
         let Some(variable) = context.available.get(&name.text).cloned() else {
@@ -99,7 +104,7 @@ impl Compiler {
             .unwrap()
             .locals
             .insert(name.text.clone(), local.clone());
-        self.scopes[0].insert(name.text.clone(), local.clone());
+        self.context.scopes[0].insert(name.text.clone(), local.clone());
         Ok(Some(local))
     }
 
@@ -109,7 +114,7 @@ impl Compiler {
         args: Vec<Value>,
         span: &Span,
     ) -> Result<Value, String> {
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
 
@@ -148,7 +153,7 @@ impl Compiler {
             .last()
             .map(|c| c.available.clone())
             .unwrap_or_default();
-        for scope in &self.scopes {
+        for scope in &self.context.scopes {
             available.extend(scope.clone());
         }
         let key = format!(
@@ -156,7 +161,7 @@ impl Compiler {
             span.file,
             span.line,
             span.column,
-            self.current_function,
+            self.context.current_function,
             parameters.iter().map(|(_, t)| &t.text).collect::<Vec<_>>(),
             available
                 .iter()
@@ -191,21 +196,10 @@ impl Compiler {
                 ty: ty.clone(),
                 span: span.clone(),
             });
-            let saved_body = std::mem::take(&mut self.body);
-            let saved_scopes = std::mem::take(&mut self.scopes);
-            let saved_temps = std::mem::take(&mut self.pending_temps);
-            let saved_loops = std::mem::take(&mut self.loops);
-            let saved_return = self.return_type.take();
-            let saved_exit = self.diverged;
-            let saved_infer = self.infer_return;
-            let saved_inferred = self.inferred_return.take();
-            self.diverged = false;
-            self.infer_return = true;
-            self.scopes = vec![BTreeMap::new()];
-            self.return_type = Some("Unit".into());
-            let checked = (|| {
+            let lambda_context = FunctionContext::lambda(self.context.current_function);
+            let (checked, completed) = self.with_function_context(lambda_context, |compiler| {
                 for (index, (name, ty)) in parameters.iter().enumerate() {
-                    self.declare_annotated(
+                    compiler.declare_annotated(
                         name,
                         ty.text.clone(),
                         Some(Value {
@@ -214,8 +208,8 @@ impl Compiler {
                         }),
                     )?;
                 }
-                self.expr(body, None)
-            })();
+                compiler.expr(body, None)
+            });
             let mut context = self.capture_contexts.pop().unwrap();
             // Keep the established capture/copy order independent of first use.
             let original = context
@@ -244,17 +238,9 @@ impl Compiler {
             let mut checked_body = context.prologue;
             checked_body
                 .instructions
-                .extend(std::mem::take(&mut self.body).instructions);
-            let exits = self.diverged;
-            let inferred = self.inferred_return.take();
-            self.body = saved_body;
-            self.scopes = saved_scopes;
-            self.pending_temps = saved_temps;
-            self.loops = saved_loops;
-            self.return_type = saved_return;
-            self.diverged = saved_exit;
-            self.infer_return = saved_infer;
-            self.inferred_return = saved_inferred;
+                .extend(completed.body.instructions);
+            let exits = completed.diverged;
+            let inferred = completed.inferred_return;
             let value = checked?;
             self.records.get_mut(&ty).unwrap().fields = context
                 .captures
@@ -404,7 +390,7 @@ impl Compiler {
         args: &[Expr],
         span: &Span,
     ) -> Result<Value, String> {
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
 

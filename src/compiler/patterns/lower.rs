@@ -14,11 +14,11 @@ impl Compiler {
                 id: self.temp(),
                 ty,
             };
-            self.body.push(Instruction::Declare {
+            self.context.body.push(Instruction::Declare {
                 result: result.clone(),
                 initial: None,
             });
-            self.pending_temps.push(result.id.clone());
+            self.context.pending_temps.push(result.id.clone());
             bindings.push((name, result));
         }
         let matched = self.literal("Bool", "false", &pattern.span)?;
@@ -39,14 +39,14 @@ impl Compiler {
         condition: Value,
         action: impl FnOnce(&mut Self) -> Result<(), String>,
     ) -> Result<(), String> {
-        let outer = std::mem::take(&mut self.pending_temps);
+        let outer = std::mem::take(&mut self.context.pending_temps);
         let body = self.capture(|c| {
             action(c)?;
             c.release_temps();
             Ok(())
         })?;
-        self.pending_temps = outer;
-        self.body.push(Instruction::If {
+        self.context.pending_temps = outer;
+        self.context.body.push(Instruction::If {
             condition,
             yes: body,
             no: Body::default(),
@@ -63,13 +63,13 @@ impl Compiler {
     ) -> Result<(), String> {
         let Some(((pattern, value), tail)) = tasks.split_first() else {
             for (name, slot) in &probe.bindings {
-                self.body.push(Instruction::Rebind {
+                self.context.body.push(Instruction::Rebind {
                     span: None,
                     target: Place::Local(slot.id.clone()),
                     value: bindings[&name.text].clone(),
                 });
             }
-            self.body.push(Instruction::StoreBool {
+            self.context.body.push(Instruction::StoreBool {
                 target: probe.matched.clone(),
                 value: yes.clone(),
             });
@@ -154,7 +154,7 @@ impl Compiler {
             Condition::Expr(e) => Ok((self.condition(e)?, vec![])),
             Condition::Let(pattern, source) => {
                 let value = self.expr(source, None)?;
-                if self.diverged {
+                if self.context.diverged {
                     return Ok((Value::never(), vec![]));
                 }
                 let pattern = self.resolve_pattern(pattern, &value.ty)?;
@@ -171,8 +171,8 @@ impl Compiler {
         if bindings.is_empty() {
             return action(self);
         }
-        let outer = std::mem::take(&mut self.pending_temps);
-        self.scopes.push(BTreeMap::new());
+        let outer = std::mem::take(&mut self.context.pending_temps);
+        self.context.scopes.push(BTreeMap::new());
         let mut result = Value::never();
         let slot = self.temp();
         let body = self.capture(|c| {
@@ -180,8 +180,8 @@ impl Compiler {
                 c.declare(name, value.ty.clone(), Some(value.clone()))?;
             }
             result = action(c)?;
-            if !c.diverged {
-                c.body.push(Instruction::Rebind {
+            if !c.context.diverged {
+                c.context.body.push(Instruction::Rebind {
                     span: None,
                     target: Place::Local(slot.clone()),
                     value: result.clone(),
@@ -190,19 +190,19 @@ impl Compiler {
             }
             Ok(())
         })?;
-        self.scopes.pop();
-        self.pending_temps = outer;
-        if self.diverged {
-            self.body.push(Instruction::Scope(body));
+        self.context.scopes.pop();
+        self.context.pending_temps = outer;
+        if self.context.diverged {
+            self.context.body.push(Instruction::Scope(body));
             return Ok(Value::never());
         }
         result.id = slot;
-        self.body.push(Instruction::Declare {
+        self.context.body.push(Instruction::Declare {
             result: result.clone(),
             initial: None,
         });
-        self.body.push(Instruction::Scope(body));
-        self.pending_temps.push(result.id.clone());
+        self.context.body.push(Instruction::Scope(body));
+        self.context.pending_temps.push(result.id.clone());
         Ok(result)
     }
     pub(in crate::compiler) fn pattern_statement(
@@ -216,7 +216,7 @@ impl Compiler {
         }
         self.scoped_pattern_values(bindings, |c| {
             c.statement(statement)?;
-            if c.diverged {
+            if c.context.diverged {
                 Ok(Value::never())
             } else {
                 c.literal("Unit", "", span)
@@ -232,7 +232,7 @@ impl Compiler {
         span: &Span,
     ) -> Result<Value, String> {
         let value = self.expr(source, None)?;
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
         let mut coverage = vec![];
@@ -285,11 +285,11 @@ impl Compiler {
                 |c, _| {
                     let value = c.scoped_pattern_values(&probes[0].bindings, |c| {
                         let result = c.condition(guard)?;
-                        if !c.diverged {
+                        if !c.context.diverged {
                             let writeback = c.capture(|c| {
                                 for (name, slot) in &probes[0].bindings {
                                     let current = c.find_var(name)?;
-                                    c.body.push(Instruction::Rebind {
+                                    c.context.body.push(Instruction::Rebind {
                                         span: None,
                                         target: Place::Local(slot.id.clone()),
                                         value: Value {
@@ -300,7 +300,7 @@ impl Compiler {
                                 }
                                 Ok(())
                             })?;
-                            c.body.push(Instruction::If {
+                            c.context.body.push(Instruction::If {
                                 condition: result.clone(),
                                 yes: writeback,
                                 no: Body::default(),
@@ -308,8 +308,8 @@ impl Compiler {
                         }
                         Ok(result)
                     })?;
-                    guard_exits = c.diverged;
-                    after_guard = Some(c.scopes.clone());
+                    guard_exits = c.context.diverged;
+                    after_guard = Some(c.context.scopes.clone());
                     Ok(value)
                 },
                 |c, _| c.literal("Bool", "false", span),
@@ -323,13 +323,13 @@ impl Compiler {
             expected,
             |c, h| {
                 if let Some(scopes) = after_guard {
-                    c.scopes = scopes;
+                    c.context.scopes = scopes;
                 }
                 c.scoped_pattern_values(&probes[0].bindings, |c| {
                     if guard_exits {
-                        c.diverged = true;
+                        c.context.diverged = true;
                         c.check_unreachable(&Stmt::Expr(arms[0].body.clone()))?;
-                        c.body.push(Instruction::Unreachable);
+                        c.context.body.push(Instruction::Unreachable);
                         Ok(Value::never())
                     } else {
                         c.expr(&arms[0].body, h)

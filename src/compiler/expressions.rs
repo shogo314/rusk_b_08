@@ -13,60 +13,60 @@ impl Compiler {
         F: FnOnce(&mut Self, Option<&str>) -> Result<Value, String>,
         G: FnOnce(&mut Self, Option<&str>) -> Result<Value, String>,
     {
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
         self.same("Bool", &condition.ty, span)?;
         let slot = self.temp();
-        let outer_body = std::mem::take(&mut self.body);
-        let outer_temps = std::mem::take(&mut self.pending_temps);
-        let before = self.scopes.clone();
+        let outer_body = std::mem::take(&mut self.context.body);
+        let outer_temps = std::mem::take(&mut self.context.pending_temps);
+        let before = self.context.scopes.clone();
         let a = yes(self, expected)?;
-        let yes_exit = self.diverged;
+        let yes_exit = self.context.diverged;
         if !yes_exit {
             if let Some(expected) = expected {
                 self.same(expected, &a.ty, span)?;
             }
-            self.body.push(Instruction::Rebind {
+            self.context.body.push(Instruction::Rebind {
                 span: None,
                 target: Place::Local(slot.clone()),
                 value: a.clone(),
             });
             self.release_temps();
         }
-        let yes_body = std::mem::take(&mut self.body);
-        let yes_scopes = self.scopes.clone();
-        self.scopes = before;
-        self.diverged = false;
+        let yes_body = std::mem::take(&mut self.context.body);
+        let yes_scopes = self.context.scopes.clone();
+        self.context.scopes = before;
+        self.context.diverged = false;
         let hint = if yes_exit {
             expected
         } else {
             Some(a.ty.as_str())
         };
         let b = no(self, hint)?;
-        let no_exit = self.diverged;
+        let no_exit = self.context.diverged;
         if !no_exit {
             if let Some(hint) = hint {
                 self.same(hint, &b.ty, span)?;
             }
-            self.body.push(Instruction::Rebind {
+            self.context.body.push(Instruction::Rebind {
                 span: None,
                 target: Place::Local(slot.clone()),
                 value: b.clone(),
             });
             self.release_temps();
         }
-        let no_body = std::mem::take(&mut self.body);
+        let no_body = std::mem::take(&mut self.context.body);
         if yes_exit {
         } else if no_exit {
-            self.scopes = yes_scopes;
+            self.context.scopes = yes_scopes;
         } else {
             self.intersect_initialization(&yes_scopes);
         }
-        self.body = outer_body;
-        self.pending_temps = outer_temps;
-        self.diverged = yes_exit && no_exit;
-        let result = if self.diverged {
+        self.context.body = outer_body;
+        self.context.pending_temps = outer_temps;
+        self.context.diverged = yes_exit && no_exit;
+        let result = if self.context.diverged {
             Value::never()
         } else {
             Value {
@@ -74,14 +74,14 @@ impl Compiler {
                 ty: if yes_exit { b.ty } else { a.ty },
             }
         };
-        if !self.diverged {
-            self.body.push(Instruction::Declare {
+        if !self.context.diverged {
+            self.context.body.push(Instruction::Declare {
                 result: result.clone(),
                 initial: None,
             });
-            self.pending_temps.push(result.id.clone());
+            self.context.pending_temps.push(result.id.clone());
         }
-        self.body.push(Instruction::If {
+        self.context.body.push(Instruction::If {
             condition,
             yes: yes_body,
             no: no_body,
@@ -121,7 +121,7 @@ impl Compiler {
             .collect::<Vec<_>>();
         let hint = (hints.len() == 1).then(|| hints[0].as_str());
         let value = self.expr(left, hint)?;
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
         let getter = self
@@ -205,31 +205,31 @@ impl Compiler {
     ) -> Result<(), String> {
         let (op, right, span) = &rest[0];
         let right = self.expr(right, None)?;
-        if self.diverged {
+        if self.context.diverged {
             return Ok(());
         }
         let value = self.call(binary_name(op), vec![left, right.clone()], None, span)?;
         self.same("Bool", &value.ty, span)?;
-        self.body.push(Instruction::StoreBool {
+        self.context.body.push(Instruction::StoreBool {
             target: result.clone(),
             value,
         });
         if rest.len() > 1 {
-            let before = self.scopes.clone();
-            let outer = std::mem::take(&mut self.pending_temps);
+            let before = self.context.scopes.clone();
+            let outer = std::mem::take(&mut self.context.pending_temps);
             let branch = self.capture(|c| {
                 c.chain_step(right, &rest[1..], result)?;
                 c.release_temps();
                 Ok(())
             })?;
-            self.body.push(Instruction::If {
+            self.context.body.push(Instruction::If {
                 condition: result.clone(),
                 yes: branch,
                 no: Body::default(),
             });
-            self.diverged = false;
-            self.pending_temps = outer;
-            self.scopes = before;
+            self.context.diverged = false;
+            self.context.pending_temps = outer;
+            self.context.scopes = before;
         }
         Ok(())
     }

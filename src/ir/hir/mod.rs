@@ -148,9 +148,6 @@ pub(crate) struct Body {
     pub instructions: Vec<Instruction>,
 }
 impl Body {
-    pub fn clear(&mut self) {
-        self.instructions.clear();
-    }
     pub fn push(&mut self, instruction: Instruction) {
         self.instructions.push(instruction);
     }

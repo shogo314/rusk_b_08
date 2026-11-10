@@ -9,17 +9,17 @@ impl Compiler {
                 self.compile_function(i)?;
             }
         }
-        self.scopes.push(BTreeMap::new());
+        self.context.scopes.push(BTreeMap::new());
         for source in sources {
             for s in source {
                 self.statement(s)?;
             }
         }
-        let main_body = std::mem::take(&mut self.body);
-        self.diverged = false;
+        let main_body = std::mem::take(&mut self.context.body);
+        self.context.diverged = false;
         self.complete_instantiations()?;
-        self.body = main_body;
-        self.body.push(Instruction::Return {
+        self.context.body = main_body;
+        self.context.body.push(Instruction::Return {
             value: None,
             span: None,
         });
@@ -97,7 +97,7 @@ impl Compiler {
                     }),
                 })
                 .collect(),
-            main: std::mem::take(&mut self.body),
+            main: std::mem::take(&mut self.context.body),
         };
         hir.prune_unreachable();
         hir

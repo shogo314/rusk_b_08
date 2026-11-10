@@ -3,10 +3,12 @@ use crate::frontend::ast::{
     PatternKind, Span, Stmt,
 };
 use crate::ir::hir::{Body, Call, Instruction, Literal, Place, Rvalue, Value, ValueId};
+use context::{FunctionContext, LoopContext, Variable};
 use std::collections::{BTreeMap, BTreeSet};
 mod aggregate_operations;
 mod bindings;
 mod callables;
+mod context;
 mod cpp;
 mod declarations;
 mod effects;
@@ -70,24 +72,9 @@ struct Function {
     checked: Option<Body>,
     origin: Origin,
 }
-#[derive(Clone)]
-struct Variable {
-    id: ValueId,
-    ty: String,
-    initialized: bool,
-    binding: Option<crate::ir::hir::BindingInfo>,
-    access: Option<crate::ir::hir::AccessInfo>,
-}
-#[derive(Clone)]
-struct LoopContext {
-    id: usize,
-    label: Option<Name>,
-    broken: Option<Value>,
-    break_seen: bool,
-    break_states: Vec<Vec<BTreeMap<String, Variable>>>,
-}
 #[derive(Default)]
 pub struct Compiler {
+    context: FunctionContext,
     types: BTreeMap<String, String>,
     enum_definitions: BTreeMap<String, enums::Definition>,
     enums: BTreeMap<String, enums::Enum>,
@@ -99,7 +86,6 @@ pub struct Compiler {
     lambda_types: BTreeMap<String, String>,
     lambda_counter: usize,
     capture_contexts: Vec<callables::CaptureContext>,
-    current_function: Option<usize>,
     records: BTreeMap<String, records::Record>,
     prepared_records: BTreeSet<String>,
     record_copies: BTreeMap<String, String>,
@@ -135,17 +121,9 @@ pub struct Compiler {
     native_unit_bridges: BTreeSet<(usize, crate::native::abi::UnitBridge)>,
     symbols: BTreeMap<String, symbols::Symbol>,
     symbol_order: Vec<String>,
-    scopes: Vec<BTreeMap<String, Variable>>,
-    body: Body,
     no_optimization: bool,
     counter: usize,
     used: BTreeSet<usize>,
-    loops: Vec<LoopContext>,
-    diverged: bool,
-    infer_return: bool,
-    inferred_return: Option<String>,
-    return_type: Option<String>,
-    pending_temps: Vec<ValueId>,
 }
 fn property(n: &Name, p: &BTreeMap<String, String>, key: &str) -> Result<String, String> {
     p.get(key)
@@ -189,14 +167,14 @@ impl Compiler {
         ))
     }
     fn compile_function(&mut self, index: usize) -> Result<(), String> {
-        self.current_function = Some(index);
+        let context = FunctionContext::function(index, self.functions[index].result.clone());
+        let (result, _) =
+            self.with_function_context(context, |compiler| compiler.check_function_body(index));
+        result
+    }
+    fn check_function_body(&mut self, index: usize) -> Result<(), String> {
         let f = self.functions[index].clone();
         let (params, body) = f.body.as_ref().unwrap();
-        self.diverged = false;
-        self.infer_return = false;
-        self.return_type = Some(f.result.clone());
-        self.scopes = vec![BTreeMap::new()];
-        self.body.clear();
         for (i, (param, ty)) in params.iter().zip(&f.params).enumerate() {
             self.declare_annotated(
                 param,
@@ -216,28 +194,23 @@ impl Compiler {
         if let Some(tail) = tail {
             self.statement(&Stmt::Expr((**tail).clone()))?;
         }
-        if f.result != "Unit" && !self.diverged {
+        if f.result != "Unit" && !self.context.diverged {
             return Err(f
                 .name
                 .span
                 .error("function may finish without returning a value"));
         }
         if f.result == "Unit" {
-            self.body.push(Instruction::Return {
+            self.context.body.push(Instruction::Return {
                 value: None,
                 span: None,
             });
         }
-        self.functions[index].checked = Some(std::mem::take(&mut self.body));
-        self.scopes.clear();
-        self.body.clear();
-        self.return_type = None;
-        self.diverged = false;
-        self.current_function = None;
+        self.functions[index].checked = Some(std::mem::take(&mut self.context.body));
         Ok(())
     }
     fn check_type(&mut self, n: &Name) -> Result<(), String> {
-        if self.diverged {
+        if self.context.diverged {
             return Err(crate::ir::hir::DIVERGED.into());
         }
         if self.types.contains_key(&n.text)
@@ -261,7 +234,7 @@ impl Compiler {
         r
     }
     fn emit(&mut self, ty: &str, code: Rvalue) -> Value {
-        if self.diverged {
+        if self.context.diverged {
             return Value::never();
         }
         let cpp = self.temp();
@@ -269,11 +242,11 @@ impl Compiler {
             id: cpp.clone(),
             ty: ty.into(),
         };
-        self.body.instructions.push(Instruction::Object {
+        self.context.body.instructions.push(Instruction::Object {
             result: value.clone(),
             expression: code,
         });
-        self.pending_temps.push(cpp);
+        self.context.pending_temps.push(cpp);
         value
     }
     fn find_var(&mut self, n: &Name) -> Result<Variable, String> {
@@ -281,21 +254,21 @@ impl Compiler {
             .ok_or_else(|| n.span.error(format!("unknown variable '{}'", n.text)))
     }
     fn declare(&mut self, n: &Name, ty: String, value: Option<Value>) -> Result<(), String> {
-        if self.scopes.last().unwrap().contains_key(&n.text) {
+        if self.context.scopes.last().unwrap().contains_key(&n.text) {
             return Err(n.span.error(format!("duplicate variable '{}'", n.text)));
         }
         if let Some(v) = &value {
             self.same(&ty, &v.ty, &n.span)?;
         }
         let cpp = self.temp();
-        self.body.push(Instruction::Declare {
+        self.context.body.push(Instruction::Declare {
             result: Value {
                 id: cpp.clone(),
                 ty: ty.clone(),
             },
             initial: value.clone(),
         });
-        self.body.push(Instruction::DescribeBinding {
+        self.context.body.push(Instruction::DescribeBinding {
             value: Value {
                 id: cpp.clone(),
                 ty: ty.clone(),
@@ -303,7 +276,7 @@ impl Compiler {
             name: n.clone(),
             captured: false,
         });
-        self.scopes.last_mut().unwrap().insert(
+        self.context.scopes.last_mut().unwrap().insert(
             n.text.clone(),
             Variable {
                 id: cpp,
@@ -380,7 +353,7 @@ impl Compiler {
         expected: Option<&str>,
         s: &Span,
     ) -> Result<Value, String> {
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
         if let Some(value) = self.enum_constructor(name, &args, expected, s)? {
@@ -403,12 +376,13 @@ impl Compiler {
             id: self.temp(),
             ty: f.result.clone(),
         };
-        self.pending_temps.push(result.id.clone());
-        self.body.push(Instruction::Call(Call {
+        self.context.pending_temps.push(result.id.clone());
+        self.context.body.push(Instruction::Call(Call {
             function: i,
             args,
             span: s.clone(),
             inherit_location: self
+                .context
                 .current_function
                 .is_some_and(|i| self.functions[i].origin == Origin::StandardLibrary),
             result: result.clone(),
@@ -417,7 +391,7 @@ impl Compiler {
     }
 
     fn literal(&mut self, ty: &str, text: &str, s: &Span) -> Result<Value, String> {
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
         let _cpp = self
@@ -467,25 +441,25 @@ impl Compiler {
             id: self.temp(),
             ty: ty.into(),
         };
-        self.pending_temps.push(result.id.clone());
-        self.body.instructions.push(Instruction::Literal {
+        self.context.pending_temps.push(result.id.clone());
+        self.context.body.instructions.push(Instruction::Literal {
             result: result.clone(),
             value,
         });
         Ok(result)
     }
     fn release_temps(&mut self) {
-        self.body.push(Instruction::Release(std::mem::take(
-            &mut self.pending_temps,
+        self.context.body.push(Instruction::Release(std::mem::take(
+            &mut self.context.pending_temps,
         )));
     }
     fn capture(
         &mut self,
         work: impl FnOnce(&mut Self) -> Result<(), String>,
     ) -> Result<Body, String> {
-        let saved = std::mem::take(&mut self.body);
+        let saved = std::mem::take(&mut self.context.body);
         let result = work(self);
-        let body = std::mem::replace(&mut self.body, saved);
+        let body = std::mem::replace(&mut self.context.body, saved);
         result?;
         Ok(body)
     }
@@ -495,13 +469,13 @@ impl Compiler {
         id
     }
     fn statement(&mut self, s: &Stmt) -> Result<(), String> {
-        if self.diverged {
+        if self.context.diverged {
             return self.check_unreachable(s);
         }
-        let outer = std::mem::take(&mut self.pending_temps);
+        let outer = std::mem::take(&mut self.context.pending_temps);
         self.statement_inner(s)?;
         self.release_temps();
-        self.pending_temps = outer;
+        self.context.pending_temps = outer;
         Ok(())
     }
     fn statement_inner(&mut self, s: &Stmt) -> Result<(), String> {
@@ -511,6 +485,7 @@ impl Compiler {
         match s {
             Stmt::Labeled(label, body) => {
                 if self
+                    .context
                     .loops
                     .iter()
                     .any(|l| l.label.as_ref().is_some_and(|n| n.text == label.text))
@@ -530,7 +505,7 @@ impl Compiler {
             | Stmt::Function(n, ..)
             | Stmt::UserFunction(n, ..)
             | Stmt::Symbol(n, _) => {
-                if self.return_type.is_some() || self.scopes.len() != 1 {
+                if self.context.return_type.is_some() || self.context.scopes.len() != 1 {
                     return Err(n
                         .span
                         .error("type and function declarations are currently top-level only"));
@@ -538,11 +513,12 @@ impl Compiler {
             }
             Stmt::Return(span, value) => {
                 let declared = self
+                    .context
                     .return_type
                     .clone()
                     .ok_or_else(|| span.error("return outside a function"))?;
-                let hint = if self.infer_return {
-                    self.inferred_return.clone()
+                let hint = if self.context.infer_return {
+                    self.context.inferred_return.clone()
                 } else {
                     Some(declared)
                 };
@@ -551,19 +527,19 @@ impl Compiler {
                 } else {
                     None
                 };
-                if !self.diverged {
+                if !self.context.diverged {
                     let ty = value.as_ref().map_or("Unit", |v| v.ty.as_str());
                     if let Some(hint) = &hint {
                         self.same(hint, ty, span)?;
                     }
-                    if self.infer_return {
-                        self.inferred_return = Some(ty.into());
+                    if self.context.infer_return {
+                        self.context.inferred_return = Some(ty.into());
                     }
-                    self.body.push(Instruction::Return {
+                    self.context.body.push(Instruction::Return {
                         value: if ty == "Unit" { None } else { value },
                         span: Some(span.clone()),
                     });
-                    self.diverged = true;
+                    self.context.diverged = true;
                 }
             }
             Stmt::Let(n, t, e) => {
@@ -585,7 +561,7 @@ impl Compiler {
                         }
                     })
                     .transpose()?;
-                if self.diverged {
+                if self.context.diverged {
                     self.declare_dead_binding(
                         n,
                         t.as_ref()
@@ -614,7 +590,7 @@ impl Compiler {
                     for arg in args {
                         values.push(self.expr(arg, Some("Int"))?);
                     }
-                    if self.diverged {
+                    if self.context.diverged {
                         return Ok(());
                     }
                     let v = self.call("__read__", values, Some(&t.text), &n.span)?;
@@ -641,34 +617,34 @@ impl Compiler {
             Stmt::If(cond, yes, no) => {
                 let span = cond.span().clone();
                 let (cond, bindings) = self.pattern_condition(cond)?;
-                if self.diverged {
+                if self.context.diverged {
                     return Ok(());
                 }
-                let before = self.scopes.clone();
+                let before = self.context.scopes.clone();
                 let yes_body = self.capture(|c| c.pattern_statement(&bindings, yes, &span))?;
-                let yes_state = self.scopes.clone();
-                let yes_exit = self.diverged;
-                self.scopes = before;
-                self.diverged = false;
+                let yes_state = self.context.scopes.clone();
+                let yes_exit = self.context.diverged;
+                self.context.scopes = before;
+                self.context.diverged = false;
                 let no_body = self.capture(|c| {
                     if let Some(no) = no {
                         c.statement(no)?;
                     }
                     Ok(())
                 })?;
-                let no_exit = self.diverged;
-                self.body.push(Instruction::If {
+                let no_exit = self.context.diverged;
+                self.context.body.push(Instruction::If {
                     condition: cond,
                     yes: yes_body,
                     no: no_body,
                 });
                 if yes_exit {
                 } else if no_exit {
-                    self.scopes = yes_state;
+                    self.context.scopes = yes_state;
                 } else {
                     self.intersect_initialization(&yes_state);
                 }
-                self.diverged = yes_exit && no_exit;
+                self.context.diverged = yes_exit && no_exit;
             }
             Stmt::While(cond, body, otherwise) => {
                 let id = self.loop_id();
@@ -677,7 +653,7 @@ impl Compiler {
                 } else {
                     None
                 };
-                self.loops.push(LoopContext {
+                self.context.loops.push(LoopContext {
                     id,
                     label,
                     broken: flag.clone(),
@@ -685,16 +661,16 @@ impl Compiler {
                     break_states: vec![],
                 });
                 let mut condition_exits = false;
-                let outer = std::mem::take(&mut self.pending_temps);
-                let mut before_body = self.scopes.clone();
+                let outer = std::mem::take(&mut self.context.pending_temps);
+                let mut before_body = self.context.scopes.clone();
                 let loop_body = self.capture(|c| {
                     let (condition, bindings) = c.pattern_condition(cond)?;
-                    before_body = c.scopes.clone();
-                    condition_exits = c.diverged;
-                    if c.diverged {
+                    before_body = c.context.scopes.clone();
+                    condition_exits = c.context.diverged;
+                    if c.context.diverged {
                         return Ok(());
                     }
-                    c.body.push(Instruction::If {
+                    c.context.body.push(Instruction::If {
                         condition,
                         yes: Body::default(),
                         no: Body {
@@ -708,43 +684,43 @@ impl Compiler {
                     c.release_temps();
                     Ok(())
                 })?;
-                let context = self.loops.pop().unwrap();
-                self.diverged = false;
-                self.pending_temps = outer;
-                self.scopes = before_body;
+                let context = self.context.loops.pop().unwrap();
+                self.context.diverged = false;
+                self.context.pending_temps = outer;
+                self.context.scopes = before_body;
                 for state in &context.break_states {
                     self.intersect_initialization(state);
                 }
-                self.body.push(Instruction::Loop {
+                self.context.body.push(Instruction::Loop {
                     id,
                     body: loop_body,
                 });
                 if let Some(otherwise) = otherwise {
-                    let before = self.scopes.clone();
+                    let before = self.context.scopes.clone();
                     let otherwise = self.capture(|c| c.statement(otherwise))?;
-                    self.scopes = before;
-                    self.body.push(Instruction::If {
+                    self.context.scopes = before;
+                    self.context.body.push(Instruction::If {
                         condition: flag.unwrap(),
                         yes: Body::default(),
                         no: otherwise,
                     });
                 }
-                self.diverged = condition_exits && !context.break_seen;
+                self.context.diverged = condition_exits && !context.break_seen;
             }
             Stmt::For(name, source, body, otherwise) => {
                 let source = self.expr(source, None)?;
-                if self.diverged {
+                if self.context.diverged {
                     return Ok(());
                 }
                 let iterator = self.call("__iter__", vec![source], None, name.span())?;
                 let id = self.loop_id();
-                let before = self.scopes.clone();
+                let before = self.context.scopes.clone();
                 let flag = if otherwise.is_some() {
                     Some(self.literal("Bool", "false", name.span())?)
                 } else {
                     None
                 };
-                let outer = std::mem::take(&mut self.pending_temps);
+                let outer = std::mem::take(&mut self.context.pending_temps);
                 let loop_body = self.capture(|c| {
                     let has = c.call(
                         "__iter_has_next__",
@@ -753,18 +729,18 @@ impl Compiler {
                         name.span(),
                     )?;
                     c.same("Bool", &has.ty, name.span())?;
-                    c.body.push(Instruction::If {
+                    c.context.body.push(Instruction::If {
                         condition: has,
                         yes: Body::default(),
                         no: Body {
                             instructions: vec![Instruction::Break(id)],
                         },
                     });
-                    c.scopes.push(BTreeMap::new());
+                    c.context.scopes.push(BTreeMap::new());
                     let value = c.call("__iter_next__", vec![iterator], None, name.span())?;
                     c.declare_binding(name, value)?;
                     c.release_temps();
-                    c.loops.push(LoopContext {
+                    c.context.loops.push(LoopContext {
                         id,
                         label: label.clone(),
                         broken: flag.clone(),
@@ -780,22 +756,22 @@ impl Compiler {
                     if let Some(tail) = tail {
                         c.statement(&Stmt::Expr((**tail).clone()))?;
                     }
-                    c.loops.pop();
-                    c.scopes.pop();
+                    c.context.loops.pop();
+                    c.context.scopes.pop();
                     Ok(())
                 })?;
-                self.diverged = false;
-                self.pending_temps = outer;
-                self.scopes = before;
-                self.body.push(Instruction::Loop {
+                self.context.diverged = false;
+                self.context.pending_temps = outer;
+                self.context.scopes = before;
+                self.context.body.push(Instruction::Loop {
                     id,
                     body: loop_body,
                 });
                 if let Some(otherwise) = otherwise {
-                    let before = self.scopes.clone();
+                    let before = self.context.scopes.clone();
                     let otherwise = self.capture(|c| c.statement(otherwise))?;
-                    self.scopes = before;
-                    self.body.push(Instruction::If {
+                    self.context.scopes = before;
+                    self.context.body.push(Instruction::If {
                         condition: flag.unwrap(),
                         yes: Body::default(),
                         no: otherwise,
@@ -803,9 +779,9 @@ impl Compiler {
                 }
             }
             Stmt::Loop(body) => {
-                let before = self.scopes.clone();
+                let before = self.context.scopes.clone();
                 let id = self.loop_id();
-                self.loops.push(LoopContext {
+                self.context.loops.push(LoopContext {
                     id,
                     label,
                     broken: None,
@@ -813,33 +789,37 @@ impl Compiler {
                     break_states: vec![],
                 });
                 let body = self.capture(|c| c.statement(body))?;
-                let context = self.loops.pop().unwrap();
-                self.scopes = before;
-                self.diverged = !context.break_seen;
-                self.body.push(Instruction::Loop { id, body });
+                let context = self.context.loops.pop().unwrap();
+                self.context.scopes = before;
+                self.context.diverged = !context.break_seen;
+                self.context.body.push(Instruction::Loop { id, body });
             }
             Stmt::Break(span, label) => {
                 let index = self.loop_target(label.as_ref(), span)?;
-                let context = self.loops[index].clone();
-                self.loops[index].break_seen = true;
-                self.loops[index].break_states.push(self.scopes.clone());
+                let context = self.context.loops[index].clone();
+                self.context.loops[index].break_seen = true;
+                self.context.loops[index]
+                    .break_states
+                    .push(self.context.scopes.clone());
                 if let Some(flag) = context.broken {
                     let yes = self.literal("Bool", "true", span)?;
-                    self.body.push(Instruction::StoreBool {
+                    self.context.body.push(Instruction::StoreBool {
                         target: flag,
                         value: yes,
                     });
                 }
-                self.body.push(Instruction::Break(context.id));
-                self.diverged = true;
+                self.context.body.push(Instruction::Break(context.id));
+                self.context.diverged = true;
             }
             Stmt::Continue(span, label) => {
                 let index = self.loop_target(label.as_ref(), span)?;
-                self.body.push(Instruction::Continue(self.loops[index].id));
-                self.diverged = true;
+                self.context
+                    .body
+                    .push(Instruction::Continue(self.context.loops[index].id));
+                self.context.diverged = true;
             }
             Stmt::Block(statements, tail) => {
-                self.scopes.push(BTreeMap::new());
+                self.context.scopes.push(BTreeMap::new());
                 let body = self.capture(|c| {
                     for statement in statements {
                         c.statement(statement)?;
@@ -849,8 +829,8 @@ impl Compiler {
                     }
                     Ok(())
                 })?;
-                self.scopes.pop();
-                self.body.push(Instruction::Scope(body));
+                self.context.scopes.pop();
+                self.context.body.push(Instruction::Scope(body));
             }
             Stmt::Expr(e) | Stmt::Match(e) => {
                 self.expr(e, None)?;
@@ -859,22 +839,22 @@ impl Compiler {
         Ok(())
     }
     fn condition(&mut self, expr: &Expr) -> Result<Value, String> {
-        let outer = std::mem::take(&mut self.pending_temps);
+        let outer = std::mem::take(&mut self.context.pending_temps);
         let value = self.expr(expr, None)?;
-        if self.diverged {
-            self.pending_temps = outer;
+        if self.context.diverged {
+            self.context.pending_temps = outer;
             return Ok(Value::never());
         }
         let result = self.call("__bool__", vec![value], None, &expr.span)?;
         self.same("Bool", &result.ty, &expr.span)?;
-        self.pending_temps.retain(|name| name != &result.id);
+        self.context.pending_temps.retain(|name| name != &result.id);
         self.release_temps();
-        self.pending_temps = outer;
-        self.pending_temps.push(result.id.clone());
+        self.context.pending_temps = outer;
+        self.context.pending_temps.push(result.id.clone());
         Ok(result)
     }
     fn intersect_initialization(&mut self, other: &[BTreeMap<String, Variable>]) {
-        for (scope, other_scope) in self.scopes.iter_mut().zip(other) {
+        for (scope, other_scope) in self.context.scopes.iter_mut().zip(other) {
             for (name, variable) in scope {
                 variable.initialized &= other_scope.get(name).map_or_else(
                     || {
@@ -889,14 +869,14 @@ impl Compiler {
         }
     }
     fn expr(&mut self, e: &Expr, expected: Option<&str>) -> Result<Value, String> {
-        if self.diverged {
+        if self.context.diverged {
             return Ok(Value::never());
         }
         let result = self.expr_inner(e, expected);
         match result {
             Err(error) if error == crate::ir::hir::DIVERGED => Ok(Value::never()),
             Err(error) => Err(error),
-            Ok(_) if self.diverged => Ok(Value::never()),
+            Ok(_) if self.context.diverged => Ok(Value::never()),
             Ok(value) => Ok(value),
         }
     }
@@ -910,7 +890,7 @@ impl Compiler {
             ExprKind::Coalesce(a, b) => self.coalesce(a, b, expected, &e.span),
             ExprKind::Unwrap(value) => {
                 let value = self.expr(value, None)?;
-                if self.diverged {
+                if self.context.diverged {
                     return Ok(Value::never());
                 }
                 self.call("value", vec![value], None, &e.span)
@@ -996,30 +976,30 @@ impl Compiler {
             }
             ExprKind::Logical(op, left, right) => {
                 let left = self.condition(left)?;
-                if self.diverged {
+                if self.context.diverged {
                     return Ok(Value::never());
                 }
                 let result = self.emit("Bool", Rvalue::BoolCopy(left.clone()));
-                let before = self.scopes.clone();
-                let outer = std::mem::take(&mut self.pending_temps);
+                let before = self.context.scopes.clone();
+                let outer = std::mem::take(&mut self.context.pending_temps);
                 let branch = self.capture(|c| {
                     let right = c.condition(right)?;
-                    c.body.push(Instruction::StoreBool {
+                    c.context.body.push(Instruction::StoreBool {
                         target: result.clone(),
                         value: right,
                     });
                     c.release_temps();
                     Ok(())
                 })?;
-                self.diverged = false;
-                self.pending_temps = outer;
-                self.scopes = before;
+                self.context.diverged = false;
+                self.context.pending_temps = outer;
+                self.context.scopes = before;
                 let (yes, no) = if op == "||" {
                     (Body::default(), branch)
                 } else {
                     (branch, Body::default())
                 };
-                self.body.push(Instruction::If {
+                self.context.body.push(Instruction::If {
                     condition: left,
                     yes,
                     no,
@@ -1037,7 +1017,7 @@ impl Compiler {
                     return self.function_value(n);
                 };
                 if v.ty == crate::ir::hir::DIVERGED {
-                    self.diverged = true;
+                    self.context.diverged = true;
                     return Ok(Value::never());
                 }
                 if !v.initialized {
@@ -1122,7 +1102,7 @@ impl Compiler {
                         let (index, ty) = self.field(&receiver.ty, field)?;
                         let rhs = self.expr(right, Some(&ty))?;
                         self.same(&ty, &rhs.ty, &right.span)?;
-                        self.body.push(Instruction::Rebind {
+                        self.context.body.push(Instruction::Rebind {
                             span: Some(e.span.clone()),
                             target: Place::Field {
                                 owner: receiver,
@@ -1139,7 +1119,7 @@ impl Compiler {
                             let item = self.tuple_item(&array, position, &index.span)?;
                             let rhs = self.expr(right, Some(&item.ty))?;
                             self.same(&item.ty, &rhs.ty, &right.span)?;
-                            self.body.push(Instruction::Rebind {
+                            self.context.body.push(Instruction::Rebind {
                                 span: Some(e.span.clone()),
                                 target: Place::Field {
                                     owner: array,
@@ -1182,17 +1162,17 @@ impl Compiler {
                     };
                     let v = self.find_var(n)?;
                     let r = self.expr(right, Some(&v.ty))?;
-                    if self.diverged {
+                    if self.context.diverged {
                         return Ok(Value::never());
                     }
                     self.same(&v.ty, &r.ty, &e.span)?;
                     self.check_fixed_rebind(&v, &e.span)?;
-                    self.body.push(Instruction::Rebind {
+                    self.context.body.push(Instruction::Rebind {
                         span: Some(e.span.clone()),
                         target: Place::Local(v.id.clone()),
                         value: r,
                     });
-                    for scope in self.scopes.iter_mut().rev() {
+                    for scope in self.context.scopes.iter_mut().rev() {
                         if let Some(v) = scope.get_mut(&n.text) {
                             v.initialized = true;
                             break;

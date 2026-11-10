@@ -16,7 +16,7 @@ impl Compiler {
                     .span
                     .error("escape modifiers require a parameter identity"));
             };
-            self.body.push(Instruction::AnnotateEscape {
+            self.context.body.push(Instruction::AnnotateEscape {
                 parameter: *parameter,
                 info: crate::ir::hir::EscapeInfo {
                     name: name.text.clone(),
@@ -32,9 +32,15 @@ impl Compiler {
                 declaration: name.span.clone(),
                 annotation: annotation.clone(),
             };
-            let variable = self.scopes.last_mut().unwrap().get_mut(&name.text).unwrap();
+            let variable = self
+                .context
+                .scopes
+                .last_mut()
+                .unwrap()
+                .get_mut(&name.text)
+                .unwrap();
             variable.binding = Some(info.clone());
-            self.body.push(Instruction::AnnotateBinding {
+            self.context.body.push(Instruction::AnnotateBinding {
                 value: Value {
                     id: variable.id.clone(),
                     ty: variable.ty.clone(),
@@ -48,9 +54,15 @@ impl Compiler {
                 declaration: name.span.clone(),
                 annotation: annotation.clone(),
             };
-            let variable = self.scopes.last_mut().unwrap().get_mut(&name.text).unwrap();
+            let variable = self
+                .context
+                .scopes
+                .last_mut()
+                .unwrap()
+                .get_mut(&name.text)
+                .unwrap();
             variable.access = Some(info.clone());
-            self.body.push(Instruction::AnnotateAccess {
+            self.context.body.push(Instruction::AnnotateAccess {
                 value: Value {
                     id: variable.id.clone(),
                     ty: variable.ty.clone(),

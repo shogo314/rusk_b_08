@@ -249,12 +249,12 @@ impl Compiler {
                 let target = self.find_var(name)?;
                 self.same(&target.ty, &value.ty, &left.span)?;
                 self.check_fixed_rebind(&target, &left.span)?;
-                self.body.push(Instruction::Rebind {
+                self.context.body.push(Instruction::Rebind {
                     span: Some(left.span.clone()),
                     target: Place::Local(target.id),
                     value: value.clone(),
                 });
-                for scope in self.scopes.iter_mut().rev() {
+                for scope in self.context.scopes.iter_mut().rev() {
                     if let Some(variable) = scope.get_mut(&name.text) {
                         variable.initialized = true;
                         break;
@@ -266,7 +266,7 @@ impl Compiler {
                 let owner = self.expr(owner, None)?;
                 let (index, ty) = self.field(&owner.ty, name)?;
                 self.same(&ty, &value.ty, &left.span)?;
-                self.body.push(Instruction::Rebind {
+                self.context.body.push(Instruction::Rebind {
                     span: Some(left.span.clone()),
                     target: Place::Field { owner, index },
                     value: value.clone(),
@@ -279,7 +279,7 @@ impl Compiler {
                     let position = literal_index(index)?;
                     let item = self.tuple_item(&owner, position, &index.span)?;
                     self.same(&item.ty, &value.ty, &left.span)?;
-                    self.body.push(Instruction::Rebind {
+                    self.context.body.push(Instruction::Rebind {
                         span: Some(left.span.clone()),
                         target: Place::Field {
                             owner,
