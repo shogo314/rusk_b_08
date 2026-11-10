@@ -46,15 +46,13 @@ impl Compiler {
                     .error("invalid native return ABI; expected object"));
             }
             if result == "Unit" {
-                self.native_unit_objects.insert(index);
+                self.native_info_mut(index).unit_object = true;
             }
         }
         Ok(())
     }
     pub(super) fn abi_reference_name(&self, index: usize, object: bool) -> String {
-        if self.functions[index].result != "Unit"
-            || object == self.native_unit_objects.contains(&index)
-        {
+        if self.functions[index].result != "Unit" || object == self.native_unit_object(index) {
             self.functions[index].cpp.clone()
         } else {
             (if object {
@@ -66,10 +64,8 @@ impl Compiler {
         }
     }
     pub(super) fn abi_reference(&mut self, index: usize, object: bool) -> String {
-        if self.functions[index].result == "Unit"
-            && object != self.native_unit_objects.contains(&index)
-        {
-            self.native_unit_bridges.insert((
+        if self.functions[index].result == "Unit" && object != self.native_unit_object(index) {
+            self.native_requests.unit_bridges.insert((
                 index,
                 if object {
                     crate::native::abi::UnitBridge::Box
@@ -80,7 +76,7 @@ impl Compiler {
             if self.functions[index].body.is_none()
                 && template::identifier(&self.functions[index].cpp)
             {
-                self.native_references.insert(index);
+                self.native_requests.declarations.insert(index);
             }
         }
         self.abi_reference_name(index, object)
@@ -1086,7 +1082,8 @@ impl Compiler {
                     )?;
                     self.used.insert(callback.function);
                     if matches!(kind, template::InvokeKind::Writes) {
-                        self.native_effect_references
+                        self.native_requests
+                            .effects
                             .insert((callback.function, crate::analysis::effects::Query::Writes));
                         output.push_str(&format!("rusk_writes_{}", callback.function));
                     } else {
@@ -1155,7 +1152,7 @@ impl Compiler {
                     if let template::CallKind::Effect(query) = kind {
                         // A semantic query does not call or take the address of
                         // a native definition, so it needs no target prototype.
-                        self.native_effect_references.insert((index, query));
+                        self.native_requests.effects.insert((index, query));
                         output.push_str(&format!("rusk_{}_{index}", query.name()));
                         continue;
                     }
@@ -1173,7 +1170,7 @@ impl Compiler {
                     if self.functions[index].body.is_none()
                         && template::identifier(&self.functions[index].cpp)
                     {
-                        self.native_references.insert(index);
+                        self.native_requests.declarations.insert(index);
                     }
                     self.used.insert(index);
                     if let Some(owner) = owner {
@@ -1184,16 +1181,16 @@ impl Compiler {
                             unreachable!("effect query handled above: {query:?}");
                         }
                         template::CallKind::Value => {
-                            self.native_value_references.insert(index);
+                            self.native_requests.values.insert(index);
                             output.push_str(&format!("rusk_value_ref_{index}"));
                         }
                         template::CallKind::Rooted => {
-                            self.native_rooted_references.insert(index);
+                            self.native_requests.rooted.insert(index);
                             self.abi_reference(index, true);
                             output.push_str(&format!("rusk_rooted_ref_{index}"));
                         }
                         template::CallKind::Object => {
-                            self.native_owned_references.insert(index);
+                            self.native_requests.owned.insert(index);
                             self.abi_reference(index, true);
                             output.push_str(&format!("rusk_owned_ref_{index}"));
                         }

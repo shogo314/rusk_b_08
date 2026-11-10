@@ -9,11 +9,10 @@ impl Compiler {
             .map(|(id, f)| crate::backend::FunctionInfo {
                 cpp: f.cpp.clone(),
                 result: f.result.clone(),
-                unit_object: self.native_unit_objects.contains(&id),
+                unit_object: self.native_unit_object(id),
                 trusted: f.body.is_none()
-                    && (f.origin == Origin::StandardLibrary
-                        || self.native_lowerings.contains_key(&id)),
-                lowering: self.native_lowerings.get(&id).cloned(),
+                    && (f.origin == Origin::StandardLibrary || self.native_lowering(id).is_some()),
+                lowering: self.native_lowering(id).cloned(),
             })
             .collect();
         let mut prelude = String::new();
@@ -50,13 +49,14 @@ impl Compiler {
             prelude,
             concrete_foreign_definitions: definitions(concrete_foreign_definitions),
             foreign_definitions: definitions(foreign_definitions),
-            native_unit_bridges: self.native_unit_bridges.clone(),
-            native_value_references: self.native_value_references.clone(),
-            native_owned_references: self.native_owned_references.clone(),
-            native_rooted_references: self.native_rooted_references.clone(),
-            native_effect_references: self.native_effect_references.clone(),
+            native_unit_bridges: self.native_requests.unit_bridges.clone(),
+            native_value_references: self.native_requests.values.clone(),
+            native_owned_references: self.native_requests.owned.clone(),
+            native_rooted_references: self.native_requests.rooted.clone(),
+            native_effect_references: self.native_requests.effects.clone(),
             native_declarations: self
-                .native_references
+                .native_requests
+                .declarations
                 .iter()
                 .copied()
                 .chain(

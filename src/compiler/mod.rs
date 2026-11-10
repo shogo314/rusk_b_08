@@ -21,6 +21,7 @@ mod generics;
 mod input;
 mod ir_types;
 mod native_functions;
+mod native_info;
 mod patterns;
 mod pipeline;
 mod records;
@@ -105,20 +106,9 @@ pub struct Compiler {
     generic_calls: BTreeMap<usize, Span>,
     implicit_calls: BTreeSet<String>,
     functions: Vec<Function>,
-    native_contracts: BTreeMap<usize, crate::analysis::effects::Summary>,
-    native_contract_dependencies: BTreeMap<usize, BTreeSet<usize>>,
-    native_mapped_dependencies:
-        BTreeMap<usize, Vec<crate::native::effects::composition::Dependency>>,
-    native_lowerings: BTreeMap<usize, crate::native::lowering::Lowering>,
-    native_enum_operations: BTreeMap<usize, enum_operations::Operation>,
-    native_references: BTreeSet<usize>,
-    native_value_references: BTreeSet<usize>,
-    native_owned_references: BTreeSet<usize>,
-    native_rooted_references: BTreeSet<usize>,
-    native_effect_references: BTreeSet<(usize, crate::analysis::effects::Query)>,
+    native_info: BTreeMap<usize, native_info::NativeFunctionInfo>,
+    native_requests: native_info::NativeRequests,
     native_types: BTreeMap<String, type_metadata::Metadata>,
-    native_unit_objects: BTreeSet<usize>,
-    native_unit_bridges: BTreeSet<(usize, crate::native::abi::UnitBridge)>,
     symbols: BTreeMap<String, symbols::Symbol>,
     symbol_order: Vec<String>,
     no_optimization: bool,

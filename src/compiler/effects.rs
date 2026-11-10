@@ -8,7 +8,9 @@ impl Compiler {
         route: Option<&crate::native::effects::composition::Specification>,
         span: &Span,
     ) -> Result<(), String> {
-        self.native_contract_dependencies.entry(owner).or_default();
+        self.native_info_mut(owner)
+            .dependencies
+            .get_or_insert_with(BTreeSet::new);
         if let Some(route) = route {
             if self.functions[owner].origin != Origin::StandardLibrary {
                 return Err(span
@@ -26,7 +28,7 @@ impl Compiler {
                     &self.ir_types(),
                 )
                 .map_err(|e| span.error(e))?;
-            let mappings = self.native_mapped_dependencies.entry(owner).or_default();
+            let mappings = &mut self.native_info_mut(owner).mapped_dependencies;
             if !mappings.contains(&mapped) {
                 if mappings.len() >= 4096 {
                     return Err(span.error("native call mapping work limit exceeded"));
@@ -34,9 +36,9 @@ impl Compiler {
                 mappings.push(mapped);
             }
         } else {
-            self.native_contract_dependencies
-                .entry(owner)
-                .or_default()
+            self.native_info_mut(owner)
+                .dependencies
+                .get_or_insert_with(BTreeSet::new)
                 .insert(dependency);
         }
         Ok(())
@@ -126,16 +128,13 @@ impl Compiler {
             _ => return Err(name.span.error("invalid native operation descriptor")),
         };
         if scalar.is_some() || owned.is_some() {
-            self.native_lowerings.insert(
-                index,
-                crate::native::lowering::Lowering {
-                    scalar,
-                    owned,
-                    borrowed,
-                    rooted,
-                    assignment,
-                },
-            );
+            self.native_info_mut(index).lowering = Some(crate::native::lowering::Lowering {
+                scalar,
+                owned,
+                borrowed,
+                rooted,
+                assignment,
+            });
         }
         Ok(())
     }

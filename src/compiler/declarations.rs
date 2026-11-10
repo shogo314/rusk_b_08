@@ -227,7 +227,7 @@ impl Compiler {
                                 source.origin,
                             )?
                         {
-                            self.native_contracts.insert(self.functions.len(), effects);
+                            self.native_info_mut(self.functions.len()).contract = Some(effects);
                         }
                         if let Stmt::Function(_, _, _, properties) = s {
                             self.register_return_abi(self.functions.len(), n, properties, &result)?;

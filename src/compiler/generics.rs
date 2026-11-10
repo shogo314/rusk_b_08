@@ -713,7 +713,7 @@ impl Compiler {
                     )
                 })?
         {
-            self.native_contracts.insert(index, effects);
+            self.native_info_mut(index).contract = Some(effects);
         }
         if let Some(properties) = &definition.foreign {
             let mut properties = properties.clone();

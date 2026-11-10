@@ -4,7 +4,8 @@ impl Compiler {
     pub(super) fn native_operation_needed(&self, index: usize) -> bool {
         self.used.contains(&index)
             || self
-                .native_effect_references
+                .native_requests
+                .effects
                 .iter()
                 .any(|(id, _)| *id == index)
     }
@@ -16,14 +17,11 @@ impl Compiler {
         index: usize,
         span: &Span,
     ) -> Result<String, String> {
-        self.native_effect_references
+        self.native_requests
+            .effects
             .insert((index, crate::analysis::effects::Query::Writes));
         let code = self.render_native_derivation(kind, ty, index, "deep_copy", span)?;
-        let dependencies = self
-            .native_contract_dependencies
-            .get(&index)
-            .cloned()
-            .unwrap_or_default();
+        let dependencies = self.native_dependencies(index).cloned().unwrap_or_default();
         self.set_derived_copy_dependencies(index, ty, dependencies)?;
         Ok(code)
     }
@@ -103,7 +101,7 @@ impl Compiler {
             &properties,
             definition.origin,
         )? {
-            self.native_contracts.insert(index, contract);
+            self.native_info_mut(index).contract = Some(contract);
         }
         for key in ["lower", "lower_owned", "lower_borrowed", "lower_rooted"] {
             if let Some(expression) = properties.get(key).cloned() {
@@ -124,7 +122,7 @@ impl Compiler {
     }
 
     pub(super) fn register_derived_copy(&mut self, index: usize) {
-        self.native_lowerings.insert(index,crate::native::lowering::Lowering {
+        self.native_info_mut(index).lowering = Some(crate::native::lowering::Lowering {
             rooted: Some(crate::native::lowering::Template::parse("deep_copy($0,$loc)",1).expect("rooted aggregate copy expression")),
             owned: Some(crate::native::lowering::Template::parse(&format!("([&](){{if constexpr(rusk_writes_{index}){{auto owner=$0;return deep_copy(owner,$loc);}}else return deep_copy($0,$loc);}}())"),1).expect("derived aggregate copy expression")),
             ..Default::default()
@@ -136,17 +134,13 @@ impl Compiler {
         ty: &str,
         dependencies: impl IntoIterator<Item = usize>,
     ) -> Result<(), String> {
-        self.native_contracts.insert(
-            index,
-            crate::native::effects::contract(
-                "checked_read_fresh",
-                &[ty.into()],
-                ty,
-                &self.ir_types(),
-            )?,
-        );
-        self.native_contract_dependencies
-            .insert(index, dependencies.into_iter().collect());
+        self.native_info_mut(index).contract = Some(crate::native::effects::contract(
+            "checked_read_fresh",
+            &[ty.into()],
+            ty,
+            &self.ir_types(),
+        )?);
+        self.native_info_mut(index).dependencies = Some(dependencies.into_iter().collect());
         Ok(())
     }
 }

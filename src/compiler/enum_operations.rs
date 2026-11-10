@@ -67,29 +67,24 @@ impl Compiler {
                 }
             }
         }
-        self.native_enum_operations.insert(index, operation);
+        self.native_info_mut(index).enum_operation = Some(operation);
         Ok(())
     }
 
     pub(super) fn guarded_enum_field(&self, test: usize, getter: usize) -> Option<(usize, usize)> {
         for id in [test, getter] {
             if self.functions[id].origin != Origin::StandardLibrary
-                || self
-                    .native_contract_dependencies
-                    .get(&id)
-                    .is_some_and(|d| !d.is_empty())
-                || self
-                    .native_mapped_dependencies
-                    .get(&id)
-                    .is_some_and(|d| !d.is_empty())
+                || self.native_dependencies(id).is_some_and(|d| !d.is_empty())
+                || !self.native_mappings(id).is_empty()
             {
                 return None;
             }
         }
-        let Operation::Test(tested) = *self.native_enum_operations.get(&test)? else {
+        let Operation::Test(tested) = self.native_info.get(&test)?.enum_operation? else {
             return None;
         };
-        let Operation::Field { variant, field } = *self.native_enum_operations.get(&getter)? else {
+        let Operation::Field { variant, field } = self.native_info.get(&getter)?.enum_operation?
+        else {
             return None;
         };
         (tested == variant && self.functions[test].params == self.functions[getter].params)

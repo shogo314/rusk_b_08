@@ -92,7 +92,7 @@ impl Compiler {
                     result: f.result.clone(),
                     body: f.checked.clone(),
                     access: crate::analysis::readonly::Summary::default(),
-                    effects: self.native_contracts.get(&id).cloned().unwrap_or_else(|| {
+                    effects: self.native_contract(id).cloned().unwrap_or_else(|| {
                         crate::analysis::effects::Summary::unanalyzed(f.params.len())
                     }),
                 })
@@ -107,13 +107,13 @@ impl Compiler {
         hir: &mut crate::ir::hir::Program,
     ) -> Result<crate::ir::lir::Program, String> {
         let conditional = self
-            .native_contract_dependencies
-            .keys()
-            .copied()
-            .filter(|id| {
-                self.native_contracts.get(id).is_some_and(|s| {
-                    s.source == crate::analysis::effects::SummarySource::NativeContract
-                })
+            .native_info
+            .iter()
+            .filter_map(|(&id, info)| {
+                info.dependencies.as_ref()?;
+                let contract = info.contract.as_ref()?;
+                (contract.source == crate::analysis::effects::SummarySource::NativeContract)
+                    .then_some(id)
             })
             .collect::<BTreeSet<_>>();
         for &id in &conditional {
@@ -148,8 +148,12 @@ impl Compiler {
                 .iter()
                 .copied()
                 .filter_map(|id| {
-                    let base = &self.native_contracts[&id];
-                    if !self.native_contract_dependencies[&id]
+                    let base = self
+                        .native_contract(id)
+                        .expect("conditional native contract");
+                    if !self
+                        .native_dependencies(id)
+                        .expect("conditional native dependencies")
                         .iter()
                         .all(|dependency| {
                             crate::native::effects::dependency_covered(
@@ -162,10 +166,7 @@ impl Compiler {
                     }
                     let composed = crate::native::effects::composition::compose(
                         base,
-                        self.native_mapped_dependencies
-                            .get(&id)
-                            .map(Vec::as_slice)
-                            .unwrap_or(&[]),
+                        self.native_mappings(id),
                         &summaries,
                     )?;
                     Some((id, composed))
