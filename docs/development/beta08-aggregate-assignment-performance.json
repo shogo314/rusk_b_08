@@ -1,0 +1,360 @@
+{
+  "utc": "2026-11-10T01:26:23.034025+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "7d1072ffaa83615cb76cf9d7a3610f2e43c4fe3374e2e346ad7747d275eef1ac"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "opaque_record_assignment": {
+      "source": "extern type Leaf{cpp_name:\"std::int64_t\",}extern fn leaf()->Leaf{cpp_name:\"assignment_leaf\",code:\"Obj<std::int64_t> assignment_leaf(Loc){return make_obj<std::int64_t>(1);}\",}extern fn copy(x:Leaf)->Leaf{cpp_name:\"assignment_leaf_copy\",code:\"Obj<std::int64_t> assignment_leaf_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}\",}struct Row{value:Leaf;}let a:=Row{value:leaf()};let b:=Row{value:leaf()};for round in 0..100000{a=b;}wt 1;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "fe31efcdbf2aca7645c6cc56320f8cbd6521210c659a0ec3bd443c3860b3274d",
+          "runs_ms": [
+            3.968363,
+            2.561409,
+            2.598638,
+            2.414356,
+            2.446937,
+            2.379542,
+            2.487652,
+            2.542994,
+            2.452306,
+            2.59051,
+            2.441314,
+            2.545658,
+            2.557188,
+            2.524038,
+            2.436904
+          ],
+          "output": "1\n",
+          "allocations": 200014,
+          "shared_ptr_copies": 500007,
+          "median_ms": 2.524038
+        },
+        "current": {
+          "cpp_sha256": "91eda683ec2eedbc11487f5fcefa6cebaf0302c8d1055e143321d0b958541219",
+          "runs_ms": [
+            2.464058,
+            2.421738,
+            2.372598,
+            2.932758,
+            2.530792,
+            2.535141,
+            2.380393,
+            2.672296,
+            2.509713,
+            2.493812,
+            2.429742,
+            2.567658,
+            2.399256,
+            2.470328,
+            2.449889
+          ],
+          "output": "1\n",
+          "allocations": 200014,
+          "shared_ptr_copies": 500007,
+          "median_ms": 2.470328
+        }
+      },
+      "speedup": 1.0217420520675797
+    },
+    "record_assignment": {
+      "source": "struct Row{value:Int;text:Str;}let a:=Row{value:0,text:\"\"};let b:=Row{value:1,text:\"ab\"};let total:=0;for round in 0..100000{a=b;total+=a.value;}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "8a19b37c55fb31046176ba78e891415cc9d8b3bdf76f808ab2f74237030d289f",
+          "runs_ms": [
+            3.309611,
+            3.576967,
+            3.317273,
+            3.441233,
+            3.312935,
+            3.408142,
+            3.351837,
+            3.480265,
+            3.436404,
+            3.521319,
+            3.284079,
+            3.526529,
+            3.305047,
+            3.847354,
+            3.278768
+          ],
+          "output": "100000\n",
+          "allocations": 300016,
+          "shared_ptr_copies": 800009,
+          "median_ms": 3.408142
+        },
+        "current": {
+          "cpp_sha256": "0b1bdb5a73bc44638b5f0d7a1f7afcf9715a920e94d684a49bad8608af1bca9f",
+          "runs_ms": [
+            3.342909,
+            3.426887,
+            3.43921,
+            3.528706,
+            3.315159,
+            3.503999,
+            3.88637,
+            3.475748,
+            3.687501,
+            3.769821,
+            3.321338,
+            3.618158,
+            3.480743,
+            3.555212,
+            3.498787
+          ],
+          "output": "100000\n",
+          "allocations": 300016,
+          "shared_ptr_copies": 800009,
+          "median_ms": 3.498787
+        }
+      },
+      "speedup": 0.9740924497547292
+    },
+    "enum_assignment": {
+      "source": "enum Item{Pair(Int,Str),Empty}let a:=Item::Empty;let b:=Item::Pair(1,\"ab\");let total:=0;for round in 0..100000{a=b;match a{Pair(n,s)=>{total+=n;},Empty=>{},};}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "2a19366f50d64717bb46371d146b88c23b9b3589ec54711a6abbd96e5e31e477",
+          "runs_ms": [
+            6.327757,
+            6.58766,
+            6.673981,
+            6.38408,
+            6.320734,
+            7.223873,
+            6.238652,
+            6.413827,
+            6.69543,
+            7.035523,
+            6.527381,
+            6.758971,
+            6.430071,
+            6.267299,
+            6.4515
+          ],
+          "output": "100000\n",
+          "allocations": 400014,
+          "shared_ptr_copies": 1900007,
+          "median_ms": 6.4515
+        },
+        "current": {
+          "cpp_sha256": "a564a19d833e5260039e36db6689b2da1a4c2a94863e9bbdb8fdf34e8f921a44",
+          "runs_ms": [
+            6.442429,
+            6.831933,
+            6.602948,
+            6.482736,
+            6.430156,
+            6.656737,
+            6.451226,
+            6.33547,
+            6.47482,
+            6.958523,
+            6.242753,
+            6.480584,
+            6.288488,
+            6.548039,
+            6.5319
+          ],
+          "output": "100000\n",
+          "allocations": 400014,
+          "shared_ptr_copies": 1900007,
+          "median_ms": 6.480584
+        }
+      },
+      "speedup": 0.9955121328571622
+    },
+    "record_vector_copy": {
+      "source": "struct Row{value:Int;text:Str;}let a:=[Row{value:1,text:\"ab\"};1000];let total:=0;for round in 0..100{let b=a;total+=b[0].value;}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "5a852bfcc3ab7acc2aa75b2d9e7051ec589ae9a030120a1623a52a339f680bbd",
+          "runs_ms": [
+            6.481703,
+            6.637413,
+            6.896823,
+            6.51758,
+            6.47483,
+            6.688347,
+            6.690591,
+            6.540322,
+            6.806015,
+            6.710332,
+            7.228877,
+            6.876869,
+            6.586641,
+            6.490783,
+            7.004156
+          ],
+          "output": "100\n",
+          "allocations": 303216,
+          "shared_ptr_copies": 202608,
+          "median_ms": 6.688347
+        },
+        "current": {
+          "cpp_sha256": "be7b9941e13111e2f0fedf102ad646c9055a77e5a9c5442e2763fae43a31d322",
+          "runs_ms": [
+            6.760039,
+            6.808279,
+            6.843855,
+            6.524562,
+            6.504875,
+            6.915224,
+            6.650116,
+            6.515836,
+            6.565428,
+            6.71003,
+            7.129946,
+            6.83816,
+            6.485704,
+            6.601379,
+            6.577233
+          ],
+          "output": "100\n",
+          "allocations": 303216,
+          "shared_ptr_copies": 202508,
+          "median_ms": 6.650116
+        }
+      },
+      "speedup": 1.0057489222744387
+    },
+    "enum_vector_copy": {
+      "source": "enum Item{Pair(Int,Str),Empty}let a:=[Item::Pair(1,\"ab\");1000];let total:=0;for round in 0..100{let b=a;match b[0]{Pair(n,s)=>{total+=n;},Empty=>{},};}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "c4bf4b9a1cad8d6d34b0f50d97badc6a88b0d4a7c56371be0f64c33199fbb40f",
+          "runs_ms": [
+            6.307539,
+            7.060929,
+            6.052065,
+            6.052695,
+            6.064367,
+            6.728805,
+            6.040824,
+            6.692335,
+            6.13026,
+            6.063462,
+            6.235673,
+            6.122428,
+            6.02095,
+            6.414591,
+            6.317825
+          ],
+          "output": "100\n",
+          "allocations": 303316,
+          "shared_ptr_copies": 405508,
+          "median_ms": 6.13026
+        },
+        "current": {
+          "cpp_sha256": "ebc4218c6b361a022c24c34d06134bc82b1c5744c6c7ceaed7a957731823307a",
+          "runs_ms": [
+            6.378881,
+            7.004153,
+            5.681104,
+            6.557042,
+            6.088322,
+            6.137133,
+            6.100283,
+            6.116845,
+            5.983707,
+            6.110182,
+            6.381898,
+            6.685656,
+            6.140933,
+            6.056988,
+            6.423896
+          ],
+          "output": "100\n",
+          "allocations": 303316,
+          "shared_ptr_copies": 405408,
+          "median_ms": 6.137133
+        }
+      },
+      "speedup": 0.9988800959666345
+    }
+  },
+  "pre_rooted_reference_probe": {
+    "utc": "2026-11-10T01:21:09.559803+00:00",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+    "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "compiler_sha256": {
+      "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+      "current": "d440b9d77b1607684e97643357ee35225405c2364add555694c6f0ce49369e59"
+    },
+    "repeats": 15,
+    "flags": [
+      "-std=c++20",
+      "-O2"
+    ],
+    "timing": "interleaved; compilation excluded; instrumentation measured separately",
+    "cases": {
+      "opaque_record_assignment": {
+        "source": "extern type Leaf{cpp_name:\"std::int64_t\",}extern fn leaf()->Leaf{cpp_name:\"assignment_leaf\",code:\"Obj<std::int64_t> assignment_leaf(Loc){return make_obj<std::int64_t>(1);}\",}extern fn copy(x:Leaf)->Leaf{cpp_name:\"assignment_leaf_copy\",code:\"Obj<std::int64_t> assignment_leaf_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}\",}struct Row{value:Leaf;}let a:=Row{value:leaf()};let b:=Row{value:leaf()};for round in 0..100000{a=b;}wt 1;",
+        "variants": {
+          "baseline": {
+            "cpp_sha256": "ae497a36d7e64ecf3da957bc3dda605b325de37aab773b21e3e789373826f49b",
+            "runs_ms": [
+              2.573286,
+              2.584233,
+              3.26621,
+              2.514202,
+              2.652916,
+              2.435853,
+              2.461933,
+              2.351071,
+              2.418732,
+              2.537422,
+              2.526513,
+              2.445672,
+              2.36973,
+              2.754764,
+              2.400197
+            ],
+            "output": "1\n",
+            "allocations": 200014,
+            "shared_ptr_copies": 500007,
+            "median_ms": 2.514202
+          },
+          "current": {
+            "cpp_sha256": "a1078d5b2510c647bb46aca1b60a331d1fd293c8c657cfb29b08fe5fb1b6355f",
+            "runs_ms": [
+              3.794035,
+              3.621765,
+              3.548271,
+              3.324563,
+              3.490406,
+              3.636102,
+              3.340963,
+              3.500335,
+              3.433856,
+              3.364457,
+              3.60775,
+              3.982495,
+              3.353697,
+              3.322169,
+              3.566389
+            ],
+            "output": "1\n",
+            "allocations": 200014,
+            "shared_ptr_copies": 600007,
+            "median_ms": 3.500335
+          }
+        },
+        "speedup": 0.7182746794235408
+      }
+    }
+  }
+}

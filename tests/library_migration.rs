@@ -1010,8 +1010,7 @@ wt match copied{Pair(x,n)=>(value(x),n),Empty=>(0,0),};
 
 #[test]
 fn owned_enum_copy_holds_the_input_object_until_payload_callbacks_finish() {
-    let case = Case::new(
-        r#"
+    let source = r#"
 extern type Leaf{cpp_name:"std::int64_t",}
 enum Choice{Pair(Leaf,Int),Empty}
 extern symbol observation{code:"std::function<void()> clear_source;std::int64_t dropped=0,during=-1;",}
@@ -1024,6 +1023,92 @@ extern fn first_copy<T>(a:Vec<T>)->T{code:"Obj<@{T}> @{fn}(Obj<@{Vec<T>}> a,Loc 
 extern fn counts()->(Int,Int){cpp_name:"counts",code:"Obj<RuskRecord0> counts(Loc){return make_obj<RuskRecord0>(RuskRecord0{make_obj<std::int64_t>(during),make_obj<std::int64_t>(dropped)});}",}
 let rows:=[wrap(Choice::Pair(leaf(),7))];watch(rows);let copied:=first_copy(rows);clear_watch();
 wt counts(),rows.len(),match copied{Pair(x,n)=>n,Empty=>0,};
+"#;
+    for source in [
+        source.to_string(),
+        source.replace(
+            "return @{owned_call copy(T)->T}((*a)[0],loc);",
+            "auto held=(*a)[0];return @{rooted_call copy(T)->T}(held,loc);",
+        ),
+    ] {
+        let case = Case::new(&source);
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(out.stdout, b"0 1 0 7\n");
+        }
+    }
+}
+
+#[test]
+fn aggregate_assignments_use_independent_declarations_and_preserve_identity() {
+    let library = include_str!("../lib/collections.rusk");
+    let start = library.find("extern fn aggregate_assign_body<").unwrap();
+    let end = library[start..]
+        .find("// Standard Option operations")
+        .unwrap()
+        + start;
+    let declarations = library[start..end]
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("derive:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("fn aggregate_assign_body<", "fn set_record<")
+        .replace("fn sum_assign_body<", "fn set_enum<");
+    let case = Case::new(&format!(
+        r#"{declarations}
+extern fn same<T>(a:T,b:T)->Bool {{code:"Obj<@{{Bool}}> @{{fn}}(Obj<@{{T}}> a,Obj<@{{T}}> b,Loc){{return make_obj<@{{Bool}}>(a==b);}}",}}
+struct Row{{text:Char;unit:Unit;}}
+let text:="ab";let unit:={{}};let source:=Row{{text:text[0],unit:unit}};let target:=Row{{text:'z',unit:{{}}}};let alias:=target;
+set_record(target,source);wt same(target,alias),same(target.unit,unit),target.text;
+source:=Row{{text:'x',unit:{{}}}};text+="!";wt text,target.text;
+target=target;wt same(target,alias),target.text;
+enum State{{Empty,Present(Char,Unit),}}
+let value:=State::Present(text[1],unit);let destination:=State::Empty;let held:=destination;
+set_enum(destination,value);value:=State::Empty;text+="?";
+match destination{{Present(c,u)=>{{wt same(destination,held),same(u,unit),c,text;}},_=>{{}},}};
+destination=destination;match destination{{Present(c,_)=>{{wt same(destination,held),c;}},_=>{{}},}};
+enum Reversed<T>{{Missing,Present(T),}}
+let n:=Reversed::Present(7);let m:=Reversed::Present(9);set_enum(n,m);m:=Reversed::Missing;
+match n{{Present(v)=>{{wt v;}},_=>{{}},}};
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"Yes No a\nab! a\nYes a\nYes No b ab!?\nYes b\n9\n"
+        );
+    }
+}
+
+#[test]
+fn aggregate_assignment_cleanup_keeps_the_established_field_update_order() {
+    let case = Case::new(
+        r#"
+extern symbol assignment_observer {code:"std::function<void()> assignment_observer;std::string assignment_log;",}
+extern fn token()->Unit {
+    return_abi:"object",cpp_name:"assignment_token",
+    code:"Obj<Unit> assignment_token(Loc){return Obj<Unit>(new Unit{},[](Unit* p){if(assignment_observer)assignment_observer();delete p;});}",
+}
+extern fn watch<T>(value:T) {
+    code:"void @{fn}(Obj<@{T}> value,Loc){assignment_observer=[weak=std::weak_ptr<@{T}>(value)](){if(auto owner=weak.lock())assignment_log=std::to_string(*owner->field_0)+\",\"+std::to_string(*owner->field_2);};}",
+}
+extern fn observed()->Str {
+    cpp_name:"assignment_observed",code:"Obj<std::string> assignment_observed(Loc){return make_obj<std::string>(assignment_log);}",
+}
+struct Row{first:Int;token:Unit;last:Int;}
+let target:=Row{first:1,token:token(),last:3};let source:=Row{first:7,token:{},last:9};
+watch(target);target=source;wt observed(),target.first,target.last;
 "#,
     );
     for options in [vec![], vec!["--no-opt"]] {
@@ -1033,6 +1118,41 @@ wt counts(),rows.len(),match copied{Pair(x,n)=>n,Empty=>0,};
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_eq!(out.stdout, b"0 1 0 7\n");
+        assert_eq!(out.stdout, b"7,3 7 9\n");
+    }
+}
+
+#[test]
+fn derived_assignment_keeps_unknown_effects_and_propagates_copy_failures() {
+    for source in [
+        "struct Row{n:Int;}fn blocked(noescape x:Row,y:Row){x=y;}blocked(Row{n:1},Row{n:2});",
+        "enum E{Value(Int),Empty}fn blocked(noescape x:E,y:E){x=y;}blocked(E::Value(1),E::Empty);",
+        "struct Row{n:Int;}fn blocked(readonly x:Row,y:Row){x=y;}blocked(Row{n:1},Row{n:2});",
+    ] {
+        let case = Case::new(source);
+        let out = case.compile();
+        assert!(!out.status.success());
+        assert!(!case.0.join("main.cpp").exists());
+    }
+    let definitions = r#"
+extern type Leaf {cpp_name:"std::int64_t",}
+extern fn leaf()->Leaf {cpp_name:"assignment_leaf",code:"Obj<std::int64_t> assignment_leaf(Loc){return make_obj<std::int64_t>(1);}",}
+extern fn copy(x:Leaf)->Leaf {cpp_name:"assignment_copy",code:"Obj<std::int64_t> assignment_copy(Obj<std::int64_t>,Loc loc){fail(loc,\"copy rejected\");}",}
+"#;
+    for operation in [
+        "struct Row{n:Leaf;}let a:=Row{n:leaf()};let b:=Row{n:leaf()};wt \"before\";a=b;",
+        "enum E{Value(Leaf),Empty}let a:=E::Empty;let b:=E::Value(leaf());wt \"before\";a=b;",
+    ] {
+        for options in [vec![], vec!["--no-opt"]] {
+            let out =
+                Case::new(&format!("{definitions}{operation}")).run_with_options("", &options);
+            assert!(!out.status.success());
+            assert_eq!(out.stdout, b"before\n");
+            let error = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                error.contains("main.rusk:") && error.contains("copy rejected"),
+                "{error}"
+            );
+        }
     }
 }

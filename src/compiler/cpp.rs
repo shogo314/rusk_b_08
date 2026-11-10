@@ -37,6 +37,7 @@ impl Compiler {
             .partition(|&&id| {
                 self.functions[id].origin != Origin::Generated
                     && !self.generic_calls.contains_key(&id)
+                    && !self.native_derived_functions.contains(&id)
             });
         let definitions = |ids: Vec<&usize>| {
             ids.into_iter()
@@ -56,6 +57,7 @@ impl Compiler {
             native_unit_bridges: self.native_unit_bridges.clone(),
             native_value_references: self.native_value_references.clone(),
             native_owned_references: self.native_owned_references.clone(),
+            native_rooted_references: self.native_rooted_references.clone(),
             native_effect_references: self.native_effect_references.clone(),
             native_declarations: self
                 .native_references

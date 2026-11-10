@@ -42,7 +42,7 @@ impl Compiler {
         self.record_copy_functions
             .insert(record.name.text.clone(), copy_index);
         self.register_derived_copy(copy_index);
-        for (name, params, result, cpp, code) in [
+        for (name, params, result, cpp, code, derivation) in [
             (
                 "copy",
                 vec![record.name.text.clone()],
@@ -51,17 +51,23 @@ impl Compiler {
                 format!(
                     "Obj<{native}> {copy}(Obj<{native}> value, Loc loc) {{ return deep_copy(value,loc); }}"
                 ),
+                None,
             ),
             (
                 "__assign__",
                 vec![record.name.text.clone(); 2],
                 "Unit".into(),
                 assign.clone(),
-                format!(
-                    "void {assign}(Obj<{native}> target, Obj<{native}> source, Loc loc) {{ auto snapshot=deep_copy(source,loc); *target=std::move(*snapshot); }}"
-                ),
+                String::new(),
+                Some("record_assign"),
             ),
         ] {
+            if let Some(kind) = derivation {
+                self.native_derivation_tasks.insert(
+                    self.functions.len(),
+                    (kind.into(), record.name.text.clone()),
+                );
+            }
             self.functions.push(Function {
                 name: Name {
                     text: name.into(),

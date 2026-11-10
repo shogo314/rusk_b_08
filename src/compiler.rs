@@ -4,10 +4,10 @@ use crate::ast::{
 };
 use crate::hir::{Body, Call, Instruction, Literal, Place, Rvalue, Value, ValueId};
 use std::collections::{BTreeMap, BTreeSet};
+mod aggregate_operations;
 mod bindings;
 mod callables;
 mod containers;
-mod copy_contracts;
 mod cpp;
 mod effects;
 mod enums;
@@ -104,6 +104,8 @@ pub struct Compiler {
     prepared_records: BTreeSet<String>,
     record_copies: BTreeMap<String, String>,
     native_derivations: BTreeMap<String, generics::GenericFunction>,
+    native_derivation_tasks: BTreeMap<usize, (String, String)>,
+    native_derived_functions: BTreeSet<usize>,
     record_copy_functions: BTreeMap<String, usize>,
     generic_extern_types: BTreeMap<String, externs::ExternalType>,
     preparing_extern_types: BTreeSet<String>,
@@ -118,6 +120,7 @@ pub struct Compiler {
     native_references: BTreeSet<usize>,
     native_value_references: BTreeSet<usize>,
     native_owned_references: BTreeSet<usize>,
+    native_rooted_references: BTreeSet<usize>,
     native_effect_references: BTreeSet<(usize, crate::effects::Query)>,
     native_types: BTreeMap<String, type_metadata::Metadata>,
     native_unit_objects: BTreeSet<usize>,
@@ -316,6 +319,7 @@ impl Compiler {
                                         "lower",
                                         "lower_owned",
                                         "lower_borrowed",
+                                        "lower_rooted",
                                         "operation",
                                         "return_abi",
                                     ],
@@ -464,10 +468,15 @@ impl Compiler {
             self.prepare_record_copies()?;
             self.prepare_container_copies()?;
             self.prepare_enum_copies()?;
+            self.prepare_derived_functions()?;
             if index == self.functions.len()
                 && self.record_copies.len() == self.records.len()
                 && self.container_copies.len() == self.containers.len()
                 && self.enum_copies.len() == self.enums.len()
+                && self
+                    .native_derivation_tasks
+                    .keys()
+                    .all(|id| !self.used.contains(id) || self.native_derived_functions.contains(id))
             {
                 break;
             }

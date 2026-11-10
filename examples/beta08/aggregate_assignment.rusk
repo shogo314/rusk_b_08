@@ -1,0 +1,14 @@
+extern symbol assignment_observer {code:"std::function<void()> assignment_observer;std::string assignment_log;",}
+extern fn token()->Unit {
+    return_abi:"object",cpp_name:"assignment_token",
+    code:"Obj<Unit> assignment_token(Loc){return Obj<Unit>(new Unit{},[](Unit* p){if(assignment_observer)assignment_observer();delete p;});}",
+}
+extern fn watch<T>(value:T) {
+    code:"void @{fn}(Obj<@{T}> value,Loc){assignment_observer=[weak=std::weak_ptr<@{T}>(value)](){if(auto owner=weak.lock())assignment_log=std::to_string(*owner->field_0)+\",\"+std::to_string(*owner->field_2);};}",
+}
+extern fn observed()->Str {
+    cpp_name:"assignment_observed",code:"Obj<std::string> assignment_observed(Loc){return make_obj<std::string>(assignment_log);}",
+}
+struct Row{first:Int;token:Unit;last:Int;}
+let target:=Row{first:1,token:token(),last:3};let source:=Row{first:7,token:{},last:9};
+watch(target);target=source;wt observed(),target.first,target.last;

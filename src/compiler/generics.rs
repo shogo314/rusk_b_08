@@ -624,7 +624,7 @@ impl Compiler {
         }
         if let Some(properties) = &definition.foreign {
             let mut properties = properties.clone();
-            for key in ["lower", "lower_owned", "lower_borrowed"] {
+            for key in ["lower", "lower_owned", "lower_borrowed", "lower_rooted"] {
                 if let Some(expression) = properties.get(key).cloned() {
                     let expression = self.render_native(
                         &expression,

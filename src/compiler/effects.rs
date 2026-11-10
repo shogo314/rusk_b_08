@@ -7,9 +7,15 @@ impl Compiler {
         properties: &BTreeMap<String, String>,
         origin: Origin,
     ) -> Result<(), String> {
-        if ["lower", "lower_owned", "lower_borrowed", "operation"]
-            .iter()
-            .any(|p| properties.contains_key(*p))
+        if [
+            "lower",
+            "lower_owned",
+            "lower_borrowed",
+            "lower_rooted",
+            "operation",
+        ]
+        .iter()
+        .any(|p| properties.contains_key(*p))
             && origin != Origin::StandardLibrary
         {
             return Err(name.span.error(
@@ -41,6 +47,7 @@ impl Compiler {
         let scalar = parse("lower")?;
         let owned = parse("lower_owned")?;
         let borrowed = parse("lower_borrowed")?;
+        let rooted = parse("lower_rooted")?;
         if scalar.is_some()
             && !self
                 .ir_types()
@@ -51,7 +58,9 @@ impl Compiler {
                 .span
                 .error("scalar lowering requires a declared scalar representation"));
         }
-        if (scalar.is_some() && owned.is_some()) || (borrowed.is_some() && owned.is_none()) {
+        if (scalar.is_some() && owned.is_some())
+            || ((borrowed.is_some() || rooted.is_some()) && owned.is_none())
+        {
             return Err(name
                 .span
                 .error("incompatible native lowering representations"));
@@ -78,6 +87,7 @@ impl Compiler {
                     scalar,
                     owned,
                     borrowed,
+                    rooted,
                     assignment,
                 },
             );
@@ -332,7 +342,7 @@ let x:=unrelated(1,2);store(x,4);
 
     #[test]
     fn lowering_rejects_untrusted_sources_and_invalid_descriptors() {
-        for key in ["lower", "lower_owned", "lower_borrowed"] {
+        for key in ["lower", "lower_owned", "lower_borrowed", "lower_rooted"] {
             let text = format!(
                 "{TYPES} extern fn unused<T>(x:T)->Int{{code:\"unused\",{key}:\"@{{Missing}}\",}}"
             );
@@ -350,6 +360,7 @@ let x:=unrelated(1,2);store(x,4);
                 "invalid native lowering reference",
             ),
             ("lower_borrowed:\"$0\",", "Int", "incompatible"),
+            ("lower_rooted:\"$0\",", "Int", "incompatible"),
             ("lower:\"1\",lower_owned:\"$0\",", "Int", "incompatible"),
             ("lower:\"1\",", "Str", "scalar lowering requires"),
             (

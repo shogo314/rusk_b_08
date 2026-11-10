@@ -1299,3 +1299,36 @@ fn native_variants_share_the_structural_expansion_work_limit() {
     );
     assert!(!case.0.join("main.cpp").exists());
 }
+
+#[test]
+fn rooted_native_references_preserve_rusk_results_aliases_and_unit_abis() {
+    let case = Case::new(
+        r#"
+fn alias(x:Int)->Int{x=9;return x;}
+extern fn rooted_alias<T>(x:T)->T {
+    return_abi:"object",code:"Obj<@{T}> @{fn}(Obj<@{T}> x,Loc loc){return @{rooted_call alias(T)->T}(x,loc);}",
+}
+extern fn token(n:Int)->Unit {
+    return_abi:"object",cpp_name:"rooted_token",code:"Obj<Unit> rooted_token(Obj<std::int64_t> n,Loc){return Obj<Unit>(new Unit{},[n](Unit* p){++*n;delete p;});}",
+}
+extern fn rooted_token<T>(n:T)->Unit {
+    return_abi:"object",code:"Obj<@{Unit}> @{fn}(Obj<@{T}> n,Loc loc){return @{rooted_call token(T)->Unit}(n,loc);}",
+}
+fn nothing(x:Unit){}
+extern fn rooted_void<T>(x:T)->Unit {
+    return_abi:"object",code:"Obj<@{Unit}> @{fn}(Obj<@{T}> x,Loc loc){return @{rooted_call nothing(T)->Unit}(x,loc);}",
+}
+let x:=1;let y:=rooted_alias(x);y=12;wt x;
+let n:=0;{let u:=rooted_token(n);rooted_void({});wt n;}wt n;
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"12\n0\n1\n");
+    }
+}

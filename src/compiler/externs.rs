@@ -136,6 +136,7 @@ impl Compiler {
                 "lower",
                 "lower_owned",
                 "lower_borrowed",
+                "lower_rooted",
                 "operation",
                 "return_abi",
                 "derive",
@@ -154,7 +155,13 @@ impl Compiler {
         self.validate_lowering_source(name, properties, origin)?;
         property(name, properties, "code")?;
         let mut parts = Vec::new();
-        for key in ["code", "lower", "lower_owned", "lower_borrowed"] {
+        for key in [
+            "code",
+            "lower",
+            "lower_owned",
+            "lower_borrowed",
+            "lower_rooted",
+        ] {
             if let Some(text) = properties.get(key) {
                 parts.extend(template::parse(text, true).map_err(|e| name.span.error(e))?);
             }
@@ -217,18 +224,32 @@ impl Compiler {
                 ));
             }
             generics::parameters_valid(parameters)?;
-            if !matches!(kind.as_str(), "record_copy" | "enum_copy")
+            let assignment = matches!(kind.as_str(), "record_assign" | "enum_assign");
+            let valid_kind = assignment || matches!(kind.as_str(), "record_copy" | "enum_copy");
+            if !valid_kind
                 || parameters.len() != 1
-                || arguments.len() != 1
-                || arguments[0].1.text != parameters[0].text
-                || result.as_ref().is_none_or(|r| r.text != parameters[0].text)
+                || arguments.len() != if assignment { 2 } else { 1 }
+                || arguments
+                    .iter()
+                    .any(|(_, ty)| ty.text != parameters[0].text)
+                || result.as_ref().is_none_or(|r| {
+                    r.text
+                        != if assignment {
+                            "Unit"
+                        } else {
+                            &parameters[0].text
+                        }
+                })
+                || (assignment && parameters[0].text == "Unit")
                 || properties
                     .keys()
                     .any(|key| !matches!(key.as_str(), "code" | "derive"))
             {
-                return Err(name.span.error(
-                    "invalid native copy derivation; expected one type parameter and (T)->T",
-                ));
+                return Err(name.span.error(if assignment {
+                    "invalid native assignment derivation; expected one type parameter and (T,T)->Unit"
+                }else{
+                    "invalid native copy derivation; expected one type parameter and (T)->T"
+                }));
             }
             if self
                 .native_derivations
@@ -514,7 +535,13 @@ impl Compiler {
             {
                 self.validate_symbolic_type(&ty.text, &definition.parameters, &ty.span)?;
             }
-            for key in ["code", "lower", "lower_owned", "lower_borrowed"] {
+            for key in [
+                "code",
+                "lower",
+                "lower_owned",
+                "lower_borrowed",
+                "lower_rooted",
+            ] {
                 if let Some(text) = properties.get(key) {
                     self.validate_native_parts(
                         template::parse(text, true).map_err(|e| definition.name.span.error(e))?,
@@ -821,6 +848,11 @@ impl Compiler {
                             self.native_value_references.insert(index);
                             output.push_str(&format!("rusk_value_ref_{index}"));
                         }
+                        template::CallKind::Rooted => {
+                            self.native_rooted_references.insert(index);
+                            self.abi_reference(index, true);
+                            output.push_str(&format!("rusk_rooted_ref_{index}"));
+                        }
                         template::CallKind::Object => {
                             self.native_owned_references.insert(index);
                             self.abi_reference(index, true);
@@ -953,5 +985,109 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
         assert!(cpp.contains("/* source_sum_derivation */ Obj<RuskEnum0> deep_copy"));
         assert!(cpp.contains("field_copy(rusk_enum_payload<RuskEnum0,1>(snapshot).field_0,loc)"));
         assert!(!cpp.contains("renamed_sum_implementation("));
+    }
+    #[test]
+    fn aggregate_assignment_roles_use_source_bodies_and_adapter_ordering() {
+        for (role, source) in [
+            (
+                "record_assign",
+                "struct Row{a:Int;b:Int;}let x:=Row{a:1,b:2};let y:=Row{a:3,b:4};x=y;",
+            ),
+            (
+                "enum_assign",
+                "enum E{Empty,Value(Int),}let x:=E::Empty;let y:=E::Value(3);x=y;",
+            ),
+        ] {
+            let mut declarations = crate::parse(
+                include_str!("../../lib/collections.rusk"),
+                "other-library.rusk",
+            )
+            .unwrap()
+            .into_iter()
+            .filter(
+                |s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive")),
+            )
+            .collect::<Vec<_>>();
+            for statement in &mut declarations {
+                if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement
+                    && properties["derive"] == role
+                {
+                    name.text = "unrelated_assignment_name".into();
+                    properties
+                        .get_mut("code")
+                        .unwrap()
+                        .insert_str(0, "/* source_assignment */ ");
+                }
+            }
+            let cpp = Compiler::default()
+                .compile(
+                    &[
+                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        Source::standard(declarations),
+                        Source::user(crate::parse(source, "caller.rusk").unwrap()),
+                    ],
+                    crate::backend::Emit::Cpp,
+                )
+                .unwrap();
+            let body = cpp.find("/* source_assignment */ void ").unwrap();
+            let adapter = cpp.find(" rusk_rooted_ref_").unwrap();
+            assert!(adapter < body);
+            assert!(cpp[body..].contains("auto snapshot=rusk_rooted_ref_"));
+            assert!(!cpp.contains("unrelated_assignment_name("));
+        }
+    }
+
+    #[test]
+    fn assignment_derivations_reject_invalid_signatures_and_untrusted_origins() {
+        let definition = r#"extern fn custom_assignment<T>(target:T,source:T)->Unit{derive:"record_assign",code:"unused",}"#;
+        for (source, standard, expected) in [
+            (
+                definition.to_string(),
+                false,
+                "reserved for the embedded standard library",
+            ),
+            (
+                definition.replace("record_assign", "enum_assign"),
+                false,
+                "reserved for the embedded standard library",
+            ),
+            (
+                definition.replace("source:T", "source:Int"),
+                true,
+                "invalid native assignment derivation",
+            ),
+            (
+                definition.replace("->Unit", "->T"),
+                true,
+                "invalid native assignment derivation",
+            ),
+            (
+                definition.replace("<T>", "<T,R>"),
+                true,
+                "invalid native assignment derivation",
+            ),
+            (
+                format!("{definition}{definition}"),
+                true,
+                "duplicate native derivation",
+            ),
+        ] {
+            let declarations = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+            let source = if standard {
+                Source::standard(declarations)
+            } else {
+                Source::user(declarations)
+            };
+            let error = Compiler::default()
+                .compile(
+                    &[
+                        Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                        source,
+                    ],
+                    crate::backend::Emit::Cpp,
+                )
+                .unwrap_err();
+            assert!(error.contains(expected), "{error}");
+        }
     }
 }

@@ -18,6 +18,17 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'opaque_record_assignment': ('extern type Leaf{cpp_name:"std::int64_t",}'
+        'extern fn leaf()->Leaf{cpp_name:"assignment_leaf",code:"Obj<std::int64_t> assignment_leaf(Loc){return make_obj<std::int64_t>(1);}",}'
+        'extern fn copy(x:Leaf)->Leaf{cpp_name:"assignment_leaf_copy",code:"Obj<std::int64_t> assignment_leaf_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",}'
+        'struct Row{value:Leaf;}let a:=Row{value:leaf()};let b:=Row{value:leaf()};'
+        'for round in 0..100000{a=b;}wt 1;'),
+    'record_assignment': ('struct Row{value:Int;text:Str;}let a:=Row{value:0,text:""};'
+                           'let b:=Row{value:1,text:"ab"};let total:=0;'
+                           'for round in 0..100000{a=b;total+=a.value;}wt total;'),
+    'enum_assignment': ('enum Item{Pair(Int,Str),Empty}let a:=Item::Empty;'
+                         'let b:=Item::Pair(1,"ab");let total:=0;for round in 0..100000{a=b;'
+                         'match a{Pair(n,s)=>{total+=n;},Empty=>{},};}wt total;'),
     'option_vector_copy': ('let a:=[Some(1);1000];let total:=0;'
                            'for round in 0..100{let b=a;total+=b[0].value();}wt total;'),
     'enum_vector_copy': ('enum Item{Pair(Int,Str),Empty}let a:=[Item::Pair(1,"ab");1000];'

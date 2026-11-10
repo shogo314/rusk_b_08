@@ -16,6 +16,15 @@ extern fn sum_copy_body<T>(value:T)->T {
     code:"Obj<@{T}> @{fn}(const Obj<@{T}>& value,[[maybe_unused]] Loc loc){auto snapshot=value->value;switch(rusk_enum_index<@{T}>(snapshot)){@{variants T as V}case @{index V}:{@{fields T variant V as F,I}auto field_@{index I}=@{boxed_call copy(F)->F}(rusk_enum_payload<@{T},@{index V}>(snapshot).field_@{index I},loc);@{end}return std::apply([](auto&&... fields){return rusk_enum_make<@{T},@{index V}>(std::move(fields)...);},std::tuple{@{fields T variant V as F,I}std::move(field_@{index I}),@{end}});}@{end}default:fail(loc,\"invalid enum tag\");}}",
 }
 
+extern fn aggregate_assign_body<T>(target:T,source:T)->Unit {
+    derive:"record_assign",
+    code:"void @{fn}(Obj<@{T}> target,Obj<@{T}> source,Loc loc){auto snapshot=@{rooted_call copy(T)->T}(source,loc);*target=std::move(*snapshot);}",
+}
+extern fn sum_assign_body<T>(target:T,source:T)->Unit {
+    derive:"enum_assign",
+    code:"void @{fn}(Obj<@{T}> target,Obj<@{T}> source,Loc loc){auto snapshot=@{rooted_call copy(T)->T}(source,loc);target->value=std::move(snapshot->value);}",
+}
+
 // Standard Option operations use the ordinary enum and generic function paths.
 extern fn Some<T>(value:T)->Option<T> {
     effects:"variant_constructor:0",

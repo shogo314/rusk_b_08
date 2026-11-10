@@ -125,7 +125,15 @@ impl Compiler {
         )?;
         self.enum_copy_functions.insert(ty.clone(), copy_index);
         self.register_derived_copy(copy_index);
-        self.native_function("__assign__",vec![ty.clone();2],"Unit",|cpp|format!("void {cpp}(Obj<{native}> x,Obj<{native}> y,Loc loc){{auto snapshot=deep_copy(y,loc);x->value=std::move(snapshot->value);}}"),&name.span)?;
+        let assign_index = self.native_function(
+            "__assign__",
+            vec![ty.clone(); 2],
+            "Unit",
+            |_| String::new(),
+            &name.span,
+        )?;
+        self.native_derivation_tasks
+            .insert(assign_index, ("enum_assign".into(), ty.clone()));
         Ok(true)
     }
     fn constructor_parts(&self, name: &str) -> Option<(String, String)> {

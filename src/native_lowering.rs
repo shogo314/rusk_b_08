@@ -65,6 +65,7 @@ impl Template {
 pub(crate) struct Lowering {
     pub scalar: Option<Template>,
     pub owned: Option<Template>,
+    pub rooted: Option<Template>,
     pub borrowed: Option<Template>,
     pub assignment: bool,
 }

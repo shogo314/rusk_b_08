@@ -12,6 +12,7 @@ pub(crate) struct Context {
     pub native_declarations: std::collections::BTreeSet<usize>,
     pub native_value_references: std::collections::BTreeSet<usize>,
     pub native_owned_references: std::collections::BTreeSet<usize>,
+    pub native_rooted_references: std::collections::BTreeSet<usize>,
     pub native_effect_references: std::collections::BTreeSet<(usize, crate::effects::Query)>,
     pub epilogue: String,
 }
@@ -120,7 +121,17 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
         params.push("Loc".into());
         out += &format!("{} rusk_value_ref_{id}({});\n", result, params.join(","));
     }
-    for id in &context.native_owned_references {
+    for (id, kind) in context
+        .native_owned_references
+        .iter()
+        .map(|id| (id, "owned"))
+        .chain(
+            context
+                .native_rooted_references
+                .iter()
+                .map(|id| (id, "rooted")),
+        )
+    {
         let f = &program.functions[*id];
         let mut params = f
             .params
@@ -129,7 +140,7 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             .collect::<Vec<_>>();
         params.push("Loc".into());
         out += &format!(
-            "Obj<{}> rusk_owned_ref_{id}({});\n",
+            "Obj<{}> rusk_{kind}_ref_{id}({});\n",
             context.types[&f.result],
             params.join(",")
         );
@@ -184,7 +195,17 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
             params.join(",")
         );
     }
-    for id in &context.native_owned_references {
+    for (id, kind) in context
+        .native_owned_references
+        .iter()
+        .map(|id| (id, "owned"))
+        .chain(
+            context
+                .native_rooted_references
+                .iter()
+                .map(|id| (id, "rooted")),
+        )
+    {
         let f = &program.functions[*id];
         let info = &context.functions[*id];
         let args = (0..f.params.len())
@@ -199,7 +220,13 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
         params.push("[[maybe_unused]] Loc rusk_loc".into());
         let lowering = info.lowering.as_ref().filter(|_| info.trusted);
         let expression = lowering
-            .and_then(|l| l.owned.as_ref())
+            .and_then(|l| {
+                if kind == "rooted" {
+                    l.rooted.as_ref().or(l.owned.as_ref())
+                } else {
+                    l.owned.as_ref()
+                }
+            })
             .map(|t| t.render(&args, "rusk_loc"))
             .or_else(|| {
                 let returned = &f.effects.returned;
@@ -229,7 +256,7 @@ pub(crate) fn emit(program: &Program, context: &Context, optimize: bool) -> Stri
                 format!("{name}({})", actual.join(","))
             });
         out += &format!(
-            "Obj<{}> rusk_owned_ref_{id}({}){{return {expression};}}\n",
+            "Obj<{}> rusk_{kind}_ref_{id}({}){{return {expression};}}\n",
             context.types[&f.result],
             params.join(",")
         );

@@ -6,6 +6,7 @@ pub(super) enum CallKind {
     Owned,
     Boxed,
     Object,
+    Rooted,
     Value,
     Effect(crate::effects::Query),
 }
@@ -99,6 +100,7 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
             .or_else(|| text.strip_prefix("boxed_call "))
             .or_else(|| text.strip_prefix("value_call "))
             .or_else(|| text.strip_prefix("owned_call "))
+            .or_else(|| text.strip_prefix("rooted_call "))
             .or_else(|| text.strip_prefix("writes "))
             .or_else(|| text.strip_prefix("fails "))
             .or_else(|| text.strip_prefix("invoke "))
@@ -157,6 +159,8 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
                     result: result.into(),
                     kind: if text.starts_with("value_call ") {
                         CallKind::Value
+                    } else if text.starts_with("rooted_call ") {
+                        CallKind::Rooted
                     } else if text.starts_with("owned_call ") {
                         CallKind::Object
                     } else if text.starts_with("boxed_call ") {
