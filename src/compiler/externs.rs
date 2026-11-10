@@ -1035,7 +1035,16 @@ impl Compiler {
                     let index = self
                         .resolve_callable(&name, &values, Some(&result), span)?
                         .ok_or_else(|| {
-                            span.error(format!("no matching native callable '{name}'"))
+                            if values.is_empty()
+                                && name == result
+                                && self.types.contains_key(&result)
+                            {
+                                span.error(format!(
+                                    "type '{result}' has no zero-argument constructor"
+                                ))
+                            } else {
+                                span.error(format!("no matching native callable '{name}'"))
+                            }
                         })?;
                     self.same(&result, &self.functions[index].result, span)?;
                     if let template::CallKind::Effect(query) = kind {

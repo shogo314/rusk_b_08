@@ -92,7 +92,6 @@ pub struct Compiler {
     preparing_enums: Vec<String>,
     containers: BTreeMap<String, containers::Container>,
     container_copies: BTreeMap<String, Vec<usize>>,
-    container_functions: BTreeMap<String, usize>,
     callables: BTreeMap<String, callables::Callable>,
     function_types: BTreeMap<usize, String>,
     lambda_types: BTreeMap<String, String>,
@@ -744,9 +743,6 @@ impl Compiler {
         expected: Option<&str>,
         span: &Span,
     ) -> Result<Option<usize>, String> {
-        if let Some(id) = self.container_constructor(name, args, expected, span)? {
-            return Ok(Some(id));
-        }
         if let Some(id) = self.resolve(name, args, expected, span)? {
             return Ok(Some(id));
         }
@@ -760,8 +756,10 @@ impl Compiler {
         if name == "__write__" && args.len() == 1 && args[0].ty.starts_with("Tuple<") {
             return self.tuple_write_function(&args[0].ty, span).map(Some);
         }
-        if let Some(id) = self.collection_operation(name, args, expected, span)? {
-            return Ok(Some(id));
+        if name == "__read__"
+            && let Some(ty) = expected
+        {
+            return self.read_function(ty, args.len(), span).map(Some);
         }
         self.higher_order(name, args, span)
     }
@@ -1373,9 +1371,15 @@ impl Compiler {
                     let index_value = tuples::literal_index(index)?;
                     return self.tuple_item(&array, index_value, &index.span);
                 }
-                let key = self.dictionary_types(&array.ty).map(|(k, _)| k);
-                let index = self.expr(index, Some(key.as_deref().unwrap_or("Int")))?;
-                self.call("__getitem__", vec![array, index], None, &e.span)
+                let hints =
+                    self.argument_hints("__getitem__", 2, std::slice::from_ref(&array), expected);
+                let hint = if hints.len() == 1 {
+                    hints.first().map(String::as_str)
+                } else {
+                    None
+                };
+                let index = self.expr(index, hint)?;
+                self.call("__getitem__", vec![array, index], expected, &e.span)
             }
             ExprKind::Range(start, end) => {
                 let start = self.expr(start, Some("Int"))?;
@@ -1455,9 +1459,7 @@ impl Compiler {
                 for arg in args {
                     // Use a context only when every remaining overload agrees.
                     let hints = self.argument_hints(&n.text, args.len(), &values, expected);
-                    let builtin_hint = self
-                        .enum_argument_hint(&n.text, &values, expected)
-                        .or_else(|| self.container_argument_hint(&n.text, &values));
+                    let builtin_hint = self.enum_argument_hint(&n.text, &values, expected);
                     let hint = if hints.len() == 1 {
                         hints.first().map(String::as_str)
                     } else {
@@ -1537,15 +1539,30 @@ impl Compiler {
                             });
                             return Ok(self.emit(&item.ty, Rvalue::Share(rhs)));
                         }
-                        let dict = self.dictionary_types(&array.ty);
-                        let index = self.expr(
-                            index,
-                            Some(dict.as_ref().map_or("Int", |(k, _)| k.as_str())),
-                        )?;
-                        let element = dict
-                            .map(|(_, v)| v)
-                            .or_else(|| vector_element(&array.ty).map(str::to_string));
-                        let rhs = self.expr(right, element.as_deref())?;
+                        let hints = self.argument_hints(
+                            "__setitem__",
+                            3,
+                            std::slice::from_ref(&array),
+                            None,
+                        );
+                        let hint = if hints.len() == 1 {
+                            hints.first().map(String::as_str)
+                        } else {
+                            None
+                        };
+                        let index = self.expr(index, hint)?;
+                        let hints = self.argument_hints(
+                            "__setitem__",
+                            3,
+                            &[array.clone(), index.clone()],
+                            None,
+                        );
+                        let hint = if hints.len() == 1 {
+                            hints.first().map(String::as_str)
+                        } else {
+                            None
+                        };
+                        let rhs = self.expr(right, hint)?;
                         return self.call("__setitem__", vec![array, index, rhs], None, &e.span);
                     }
                     let ExprKind::Var(n) = &left.kind else {

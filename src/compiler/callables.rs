@@ -460,11 +460,10 @@ impl Compiler {
             let mut values = vec![owner];
             for arg in args {
                 let hints = self.argument_hints(&name.text, args.len() + 1, &values, expected);
-                let builtin_hint = self.container_argument_hint(&name.text, &values);
                 let hint = if hints.len() == 1 {
                     hints.first().map(String::as_str)
                 } else {
-                    builtin_hint.as_deref()
+                    None
                 };
                 values.push(self.expr(arg, hint)?);
             }

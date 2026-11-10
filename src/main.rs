@@ -136,6 +136,10 @@ fn run() -> Result<(), String> {
                 include_str!("../lib/vec.rusk"),
                 "<stdlib/vec.rusk>",
             )?),
+            compiler::Source::standard(parse(
+                include_str!("../lib/hash_collections.rusk"),
+                "<stdlib/hash_collections.rusk>",
+            )?),
             compiler::Source::standard(algorithms),
             compiler::Source::user(source),
         ],

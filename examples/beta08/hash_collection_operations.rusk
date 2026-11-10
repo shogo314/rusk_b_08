@@ -1,0 +1,13 @@
+let map:Dict<Str,Option<Int>>:=Dict();map.set("empty",None);map["some"]:=Some(7);
+wt map.len(),map.is_empty(),!map,map.contains("some"),map.get("empty")?!.is_none(),map["some"]?!;
+let keys:=map.keys();keys.sort();wt keys;
+let vectors:=Dict::<Int,Vec<Int>>();vectors[1].push_back(3);vectors[1].push_back(4);wt vectors[1],vectors.len();
+let nested:=Dict::<Int,Dict<Str,Int>>();nested[1]["x"]=5;wt nested[1]["x"];
+let members:Set<Str>:=Set();let original:="before";
+wt members.insert(original),members.insert(original);original[0]='B';
+let exported:=members.get("before")?!;exported[0]='A';wt members.contains("before"),members.contains("after");
+let values:=members.values();values[0][0]='Z';wt members.contains("before");
+wt members.erase("before"),members.erase("before"),members.len(),members.is_empty();
+let text:="ab";let chars:=Dict::<Int,Char>();chars.set(1,text[0]);
+let held:=chars.values()[0];chars.clear();held='Z';wt text;
+held:='?';text.push_back('!');wt text;

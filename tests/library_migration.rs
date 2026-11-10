@@ -1671,3 +1671,112 @@ fn tuple_comparison_templates_are_usable_under_unrelated_user_names() {
         assert_eq!(out.stdout, b"Yes Yes\n");
     }
 }
+
+#[test]
+fn hash_collection_declarations_keep_context_defaults_copy_and_value_lifetimes() {
+    for (source, expected) in [
+        (
+            include_str!("../examples/beta08/hash_collection_operations.rusk"),
+            "2 No No Yes Yes 7\nempty some\n3 4 1\n5\nYes No\nYes No\nYes\nYes No 0 Yes\nZb\nZb!\n",
+        ),
+        (
+            include_str!("../examples/beta08/dictionary_unit_values.rusk"),
+            "Yes Yes Yes\nNo 2\n2 Yes\n",
+        ),
+    ] {
+        let case = Case::new(source);
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options("", &options);
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(out.stdout, expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn hash_collection_operations_work_with_unrelated_user_type_and_constructor_names() {
+    let declarations = include_str!("../lib/hash_collections.rusk")
+        .split("\n}\n")
+        .filter(|part| !part.contains("extern fn hash_default_value<"))
+        .collect::<Vec<_>>()
+        .join("\n}\n")
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("effects:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("Dict", "Store")
+        .replace("Set", "Members");
+    let case = Case::new(&format!(
+        r#"
+extern type<K,V> Store{{cpp_name:"RuskDict<{{K}},{{V}}>",}}
+extern type<K> Members{{cpp_name:"RuskSet<{{K}}>",}}
+{declarations}
+let store:Store<Str,Option<Int>>:=Store();store["empty"]:=None;store.set("some",Some(3));
+wt store.get("empty")?!.is_none(),store["some"]?!,store.len();
+let keys:=store.keys();keys.sort();wt keys;
+let vectors:Store<Int,Vec<Int>>:=Store();vectors[1].push_back(8);wt vectors[1];
+let members:Members<Str>:=Members();wt members.insert("hello"),members.get("hello")?!;
+wt members.erase("hello"),!members;
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes 3 2\nempty some\n8\nYes hello\nYes Yes\n");
+    }
+}
+
+#[test]
+fn hash_collection_size_queries_are_readonly_noescape_and_default_order_is_preserved() {
+    let source = r#"
+fn size(readonly noescape d:Dict<Str,Vec<Int>>)->Int{return d.len();}
+fn empty(readonly noescape s:Set<Int>)->Bool{return !s&&s.is_empty();}
+let d:=Dict::<Str,Vec<Int>>();d.set("x",[7]);wt size(d),empty(Set::<Int>());
+extern type Value{cpp_name:"std::int64_t",}
+extern symbol default_state{code:"Obj<std::string> original_key;",}
+extern fn watch(key:Str){cpp_name:"watch_default_key",code:"void watch_default_key(Obj<std::string> key,Loc){original_key=key;}",}
+extern fn Value()->Value{cpp_name:"make_default_value",code:"Obj<std::int64_t> make_default_value(Loc){*original_key=\"changed\";return make_obj<std::int64_t>(9);}",}
+extern fn copy(value:Value)->Value{cpp_name:"copy_default_value",code:"Obj<std::int64_t> copy_default_value(Obj<std::int64_t> value,Loc){return make_obj<std::int64_t>(*value);}",}
+extern fn number(value:Value)->Int{cpp_name:"default_value_number",code:"Obj<std::int64_t> default_value_number(Obj<std::int64_t> value,Loc){return value;}",}
+let values:=Dict::<Str,Value>();let key:="before";watch(key);wt number(values[key]),key;
+wt values.contains("before"),values.contains("changed"),values.len();
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 Yes\n9 changed\nYes No 1\n");
+    }
+}
+
+#[test]
+fn indexed_protocols_use_normal_argument_and_result_contexts() {
+    let source = r#"
+extern type Slot{cpp_name:"std::int64_t",}
+extern fn slot()->Slot{cpp_name:"context_slot",code:"Obj<std::int64_t> context_slot(Loc){return make_obj<std::int64_t>(3);}",}
+extern fn __getitem__<T>(slot:Slot,index:Int)->T{
+    code:"Obj<@{T}> @{fn}(Obj<@{Slot}> slot,Obj<@{Int}> index,Loc){return make_obj<@{T}>(static_cast<@{T}>(*slot+*index));}",
+}
+let value:=slot();let number:Int:=value[4];let flag:Bool:=value[-3];wt number,flag;
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"7 No\n");
+    }
+}

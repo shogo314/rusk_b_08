@@ -1,0 +1,12 @@
+extern fn Unit()->Unit {
+    return_abi:"object",cpp_name:"dictionary_unit",
+    code:"Obj<Unit> dictionary_unit(Loc){return make_obj<Unit>(Unit{});}",
+}
+extern fn same(a:Unit,b:Unit)->Bool {
+    cpp_name:"dictionary_same_unit",code:"Obj<bool> dictionary_same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",
+}
+let values:=Dict::<Str,Unit>();let original:=Unit();
+let returned:=__setitem__(values,"x",original);
+wt same(original,returned),same(values.get("x")?!,original),same(values["x"],original);
+let inserted:=values["new"];wt same(inserted,original),values.len();
+let held:=values.values();values.clear();wt held.len(),same(held[0],original)||same(held[1],original);

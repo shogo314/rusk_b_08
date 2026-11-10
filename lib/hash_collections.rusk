@@ -1,0 +1,122 @@
+// Hash collection operations use ordinary generic extern resolution.
+
+extern fn Dict<K,V>()->Dict<K,V> {
+    effects:"read_fresh",
+    code:"Obj<@{Dict<K,V>}> @{fn}([[maybe_unused]] Loc loc){return make_obj<@{Dict<K,V>}>(@{Dict<K,V>}{});}",
+}
+
+extern fn len<K,V>(x:Dict<K,V>)->Int {
+    effects:"checked_read_fresh",
+    code:"Obj<@{Int}> @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Int}>(checked_int(x->entries.size(),loc));}",
+}
+
+extern fn is_empty<K,V>(x:Dict<K,V>)->Bool {
+    effects:"read_fresh",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(x->entries.empty());}",
+}
+
+extern fn __bool__<K,V>(x:Dict<K,V>)->Bool {
+    effects:"read_fresh",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(!x->entries.empty());}",
+}
+
+extern fn __not__<K,V>(x:Dict<K,V>)->Bool {
+    effects:"read_fresh",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(x->entries.empty());}",
+}
+
+extern fn clear<K,V>(x:Dict<K,V>)->Unit {
+    code:"void @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){if(!x->entries.empty()){x->entries.clear();++x->version;}}",
+}
+
+extern fn contains<K,V>(x:Dict<K,V>,key:K)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Dict<K,V>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(x->entries.find(key)!=x->entries.end());}",
+}
+
+extern fn erase<K,V>(x:Dict<K,V>,key:K)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Dict<K,V>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){auto count=x->entries.erase(key);if(count)++x->version;return make_obj<@{Bool}>(count!=0);}",
+}
+
+extern fn Set<K>()->Set<K> {
+    effects:"read_fresh",
+    code:"Obj<@{Set<K>}> @{fn}([[maybe_unused]] Loc loc){return make_obj<@{Set<K>}>(@{Set<K>}{});}",
+}
+
+extern fn len<K>(x:Set<K>)->Int {
+    effects:"checked_read_fresh",
+    code:"Obj<@{Int}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Int}>(checked_int(x->entries.size(),loc));}",
+}
+
+extern fn is_empty<K>(x:Set<K>)->Bool {
+    effects:"read_fresh",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(x->entries.empty());}",
+}
+
+extern fn __bool__<K>(x:Set<K>)->Bool {
+    effects:"read_fresh",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(!x->entries.empty());}",
+}
+
+extern fn __not__<K>(x:Set<K>)->Bool {
+    effects:"read_fresh",
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(x->entries.empty());}",
+}
+
+extern fn clear<K>(x:Set<K>)->Unit {
+    code:"void @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){if(!x->entries.empty()){x->entries.clear();++x->version;}}",
+}
+
+extern fn contains<K>(x:Set<K>,key:K)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Set<K>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){return make_obj<@{Bool}>(x->entries.find(key)!=x->entries.end());}",
+}
+
+extern fn erase<K>(x:Set<K>,key:K)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Set<K>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){auto count=x->entries.erase(key);if(count)++x->version;return make_obj<@{Bool}>(count!=0);}",
+}
+
+extern fn hash_default_value<V>()->V {
+    return_abi:"object",
+    code:"Obj<@{V}> @{fn}([[maybe_unused]] Loc loc){@{if_type V matches Vec<E> with E}return @{boxed_call __vec_new__()->V}(loc);@{else}return @{boxed_call V()->V}(loc);@{end}}",
+}
+
+extern fn get<K,V>(x:Dict<K,V>,key:K)->Option<V> {
+    code:"Obj<@{Option<V>}> @{fn}(Obj<@{Dict<K,V>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){auto it=x->entries.find(key);if(it==x->entries.end())return rusk_enum_make<@{Option<V>},1>();auto value=it->second;return rusk_enum_make<@{Option<V>},0>(value);}",
+}
+
+extern fn get<K>(x:Set<K>,key:K)->Option<K> {
+    code:"Obj<@{Option<K>}> @{fn}(Obj<@{Set<K>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){auto it=x->entries.find(key);if(it==x->entries.end())return rusk_enum_make<@{Option<K>},1>();auto value=@{boxed_call copy(K)->K}(*it,loc);return rusk_enum_make<@{Option<K>},0>(value);}",
+}
+
+extern fn insert<K>(x:Set<K>,key:K)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Set<K>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){if(x->entries.find(key)!=x->entries.end())return make_obj<@{Bool}>(false);auto copied=@{boxed_call copy(K)->K}(key,loc);x->entries.insert(copied);++x->version;return make_obj<@{Bool}>(true);}",
+}
+
+extern fn set<K,V>(x:Dict<K,V>,key:K,value:V)->Unit {
+    code:"void @{fn}(Obj<@{Dict<K,V>}> x,Obj<@{K}> key,Obj<@{V}> value,[[maybe_unused]] Loc loc){auto it=x->entries.find(key);if(it!=x->entries.end())it->second=value;else{auto copied=@{boxed_call copy(K)->K}(key,loc);x->entries.emplace(copied,value);++x->version;}}",
+}
+
+extern fn __setitem__<K,V>(x:Dict<K,V>,key:K,value:V)->V {
+    return_abi:"object",
+    code:"Obj<@{V}> @{fn}(Obj<@{Dict<K,V>}> x,Obj<@{K}> key,Obj<@{V}> value,[[maybe_unused]] Loc loc){auto it=x->entries.find(key);if(it!=x->entries.end())it->second=value;else{auto copied=@{boxed_call copy(K)->K}(key,loc);x->entries.emplace(copied,value);++x->version;}return value;}",
+}
+
+extern fn __getitem__<K,V>(x:Dict<K,V>,key:K)->V {
+    return_abi:"object",
+    code:"Obj<@{V}> @{fn}(Obj<@{Dict<K,V>}> x,Obj<@{K}> key,[[maybe_unused]] Loc loc){auto it=x->entries.find(key);if(it!=x->entries.end())return it->second;auto copied=@{boxed_call copy(K)->K}(key,loc);auto value=@{boxed_call hash_default_value()->V}(loc);auto result=x->entries.emplace(copied,value);if(result.second)++x->version;return result.first->second;}",
+}
+
+extern fn keys<K,V>(x:Dict<K,V>)->Vec<K> {
+    code:"Obj<@{Vec<K>}> @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){auto result=make_obj<@{Vec<K>}>(@{Vec<K>}{});result->reserve(x->entries.size());for(const auto& entry:x->entries)result->push_back(@{boxed_call copy(K)->K}(entry.first,loc));return result;}",
+}
+
+extern fn values<K,V>(x:Dict<K,V>)->Vec<V> {
+    code:"Obj<@{Vec<V>}> @{fn}(Obj<@{Dict<K,V>}> x,[[maybe_unused]] Loc loc){auto result=make_obj<@{Vec<V>}>(@{Vec<V>}{});result->reserve(x->entries.size());for(const auto& entry:x->entries)result->push_back(entry.second);return result;}",
+}
+
+extern fn keys<K>(x:Set<K>)->Vec<K> {
+    code:"Obj<@{Vec<K>}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){auto result=make_obj<@{Vec<K>}>(@{Vec<K>}{});result->reserve(x->entries.size());for(const auto& entry:x->entries)result->push_back(@{boxed_call copy(K)->K}(entry,loc));return result;}",
+}
+
+extern fn values<K>(x:Set<K>)->Vec<K> {
+    code:"Obj<@{Vec<K>}> @{fn}(Obj<@{Set<K>}> x,[[maybe_unused]] Loc loc){auto result=make_obj<@{Vec<K>}>(@{Vec<K>}{});result->reserve(x->entries.size());for(const auto& entry:x->entries)result->push_back(@{boxed_call copy(K)->K}(entry,loc));return result;}",
+}

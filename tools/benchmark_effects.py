@@ -18,6 +18,19 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'dictionary_operations': ('let d:=Dict::<Int,Int>();let total:=0;'
+        'for round in 0..100000{let key:=round%1000;d.set(key,round);'
+        'total+=d[key];if d.contains(key){total+=1;}total+=d.get(key)?!;'
+        'if round%3==0{d.erase(key);}}wt total,d.len();'),
+    'set_operations': ('let s:=Set::<Int>();let total:=0;'
+        'for round in 0..100000{let key:=round%1000;if s.insert(key){total+=1;}'
+        'if s.contains(key){total+=1;}total+=s.get(key)??0;'
+        'if round%3==0{s.erase(key);}}wt total,s.len();'),
+    'dictionary_defaults_exports': ('let d:=Dict::<Int,Vec<Int>>();'
+        'for i in 0..1000{d[i].push_back(i);}let total:=0;'
+        'for round in 0..100{let keys:=d.keys();let values:=d.values();'
+        'total+=keys.len()+values.len();for value in values{total+=value[0];}}wt total;'),
+
     'opaque_record_assignment': ('extern type Leaf{cpp_name:"std::int64_t",}'
         'extern fn leaf()->Leaf{cpp_name:"assignment_leaf",code:"Obj<std::int64_t> assignment_leaf(Loc){return make_obj<std::int64_t>(1);}",}'
         'extern fn copy(x:Leaf)->Leaf{cpp_name:"assignment_leaf_copy",code:"Obj<std::int64_t> assignment_leaf_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",}'
