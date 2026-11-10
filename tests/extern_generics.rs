@@ -1474,3 +1474,90 @@ fn native_arguments_share_structural_depth_and_work_limits() {
     );
     assert!(!case.0.join("main.cpp").exists());
 }
+
+#[test]
+fn native_type_conditions_select_logical_patterns_and_keep_binders_lexical() {
+    let case = Case::new(
+        r#"
+extern type Score{cpp_name:"std::int64_t",}
+extern fn score(x:Int)->Score{cpp_name:"type_case_score",code:"Obj<std::int64_t> type_case_score(Obj<std::int64_t> x,Loc){return x;}",}
+extern fn kind<T>(value:T)->Int{
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}>,Loc){@{if_type T matches Int}return make_obj<@{Int}>(1);@{else}@{if_type T matches Vec<E> with E}return make_obj<@{Int}>(2);@{else}return make_obj<@{Int}>(3);@{end}@{end}}",
+}
+extern fn selected<T>(value:T)->Int{
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}> value,Loc loc){@{if_type T matches Int}return @{boxed_call copy(Int)->Int}(value,loc);@{else}return @{boxed_call no_such_function(T)->Int}(value,loc);@{end}}",
+}
+struct E{value:Int;}
+extern fn pattern<A,B>(a:A,b:B)->Bool{
+    code:"Obj<bool> @{fn}(Obj<@{A}>,Obj<@{B}>,Loc){@{if_type B matches Tuple<A,E> with E}return make_obj<bool>(true);@{else}return make_obj<bool>(false);@{end}}",
+}
+extern fn repeated<T>(x:T)->Bool{
+    code:"Obj<bool> @{fn}(Obj<@{T}>,Loc){@{if_type T matches Tuple<E,E> with E}return make_obj<bool>(true);@{else}return make_obj<bool>(false);@{end}}",
+}
+wt kind(1),kind(score(2)),kind([3]),selected(7);
+wt pattern(E{value:0},(1,2)),pattern(E{value:0},(E{value:1},2));
+wt repeated((1,2)),repeated((1,true));
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 3 2 7\nNo Yes\nYes No\n");
+    }
+}
+
+#[test]
+fn invalid_native_type_conditions_are_checked_even_in_unused_branches() {
+    for (code, message) in [
+        ("@{else}", "requires a type condition"),
+        ("@{if_type T matches Int}@{else}@{else}@{end}", "only once"),
+        (
+            "@{if_type T matches Vec<E> with E}@{else}@{E}@{end}",
+            "unknown type",
+        ),
+        ("@{if_type T matches Vec<E> with T}@{end}", "shadows"),
+        (
+            "@{if_type T matches Vec<E> with E,E}@{end}",
+            "invalid native type condition",
+        ),
+        (
+            "@{if_type T matches Int with E}@{end}",
+            "not bound by the pattern",
+        ),
+        (
+            "@{if_type T matches Missing<E> with E}@{end}",
+            "unknown type constructor",
+        ),
+        (
+            "@{if_type T matches Int}@{Missing}@{else}@{end}",
+            "unknown type",
+        ),
+        (
+            "@{if_type T matches Int}@{arguments from 2 as P,I}@{end}@{end}",
+            "offset out of range",
+        ),
+        (
+            "@{fields T as F,I}@{if_type F matches Vec<I> with I}@{end}@{end}",
+            "shadows",
+        ),
+        ("@{if_type T is Int}@{end}", "invalid native type condition"),
+    ] {
+        let case = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{code}\",}}"));
+        let out = case.compile();
+        assert!(!out.status.success(), "{code}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(message),
+            "{code}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+    let nested = "@{if_type T matches Int}".repeat(65) + &"@{end}".repeat(65);
+    let out = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{nested}\",}}")).compile();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("nesting limit exceeded"));
+}

@@ -65,7 +65,7 @@ impl Compiler {
             .ok_or_else(|| span.error(format!("missing standard {kind} derivation")))?;
         self.functions[index].origin = definition.origin;
         self.native_derived_functions.insert(index);
-        let pattern = if matches!(kind, "record_assign" | "enum_assign" | "tuple_write") {
+        let pattern = if !definition.arguments.is_empty() {
             &definition.arguments[0].1.text
         } else {
             &definition.result.as_ref().unwrap().text

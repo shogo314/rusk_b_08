@@ -504,6 +504,34 @@ impl Compiler {
     pub(super) fn container_guards(&self) -> String {
         self.containers.values().filter(|c|matches!(c.shape,Shape::Iterator{..})).map(|c|format!("void rusk_guard_iter(const Obj<{}>& it,Loc loc){{if(!it->finished && it->version!=it->owner->version)fail(loc,\"container changed during iteration\");}}\n",c.native)).collect()
     }
+    // Compatibility for the existing physical hash-key representation. Normal
+    // Tuple comparison now resolves logical field operations in the library.
+    pub(super) fn key_equal_cpp(&self) -> String {
+        let keys = self
+            .records
+            .iter()
+            .filter(|(ty, _)| self.key_type(ty))
+            .collect::<Vec<_>>();
+        let mut code = String::new();
+        for (ty, _) in &keys {
+            let native = &self.types[*ty];
+            code.push_str(&format!(
+                "bool operator==(const {native}& a,const {native}& b);\n"
+            ));
+        }
+        for (ty, record) in keys {
+            let native = &self.types[ty];
+            let comparisons = (0..record.fields.len())
+                .map(|i| format!("value_equal(a.field_{i},b.field_{i})"))
+                .collect::<Vec<_>>()
+                .join(" && ");
+            code.push_str(&format!(
+                "bool operator==(const {native}& a,const {native}& b){{return {comparisons};}}\n"
+            ));
+        }
+        code
+    }
+
     pub(super) fn key_hash_cpp(&self) -> String {
         let keys = self
             .records

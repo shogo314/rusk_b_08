@@ -126,68 +126,44 @@ impl Compiler {
         }
     }
 
-    pub(super) fn automatic_value(&self, ty: &str) -> bool {
-        if let Some(inner) = vector_element(ty) {
-            return self.automatic_value(inner);
+    fn predeclared_tuple_value(&self, ty: &str) -> bool {
+        fn eligible(compiler: &Compiler, ty: &str, depth: usize) -> bool {
+            use crate::hir::{Scalar, Type};
+            if depth >= 64 {
+                return false;
+            }
+            if ty.starts_with("Tuple<") {
+                return compiler.records.get(ty).is_some_and(|record| {
+                    record
+                        .fields
+                        .iter()
+                        .all(|(_, field)| eligible(compiler, &field.text, depth + 1))
+                });
+            }
+            match compiler.native_types.get(ty).map(|metadata| &metadata.kind) {
+                Some(Type::Scalar(Scalar::I64 | Scalar::Bool | Scalar::Char)) => true,
+                Some(Type::Buffer(element) | Type::Vector(element)) => {
+                    eligible(compiler, element, depth + 1)
+                }
+                _ => false,
+            }
         }
-        if ty.starts_with("Tuple<") {
-            return self
-                .records
-                .get(ty)
-                .is_some_and(|r| r.fields.iter().all(|(_, t)| self.automatic_value(&t.text)));
-        }
-        matches!(ty, "Int" | "Bool" | "Char" | "Str")
+        eligible(self, ty, 0)
     }
 
     pub(super) fn prepare_tuple_functions(
         &mut self,
         record: &records::Record,
-        copy_index: usize,
     ) -> Result<(), String> {
         let ty = &record.name.text;
-        if !ty.starts_with("Tuple<") || !self.automatic_value(ty) {
+        if !ty.starts_with("Tuple<") || !self.predeclared_tuple_value(ty) {
             return Ok(());
         }
         // Preserve the existing concrete-operation priority for these tuples.
         // Other tuple writers are derived after ordinary overload resolution.
         self.tuple_write_function(ty, &record.name.span)?;
-        // Only these automatically ordered tuples recursively contain standard
-        // values. Their generated deep copy cannot dispatch to user operations.
-        let effects = crate::native_effects::contract(
-            "checked_read_fresh",
-            std::slice::from_ref(ty),
-            ty,
-            &self.ir_types(),
-        )?;
-        self.native_contracts.insert(copy_index, effects);
-        let native = &self.types[ty];
-        for (name, expression) in [
-            ("__eq__", "value_equal($0,$1)"),
-            ("__ne__", "!value_equal($0,$1)"),
-            ("__lt__", "value_less($0,$1)"),
-            ("__le__", "!value_less($1,$0)"),
-            ("__gt__", "value_less($1,$0)"),
-            ("__ge__", "!value_less($0,$1)"),
-        ] {
-            let cpp = format!("{name}_{native}");
-            let template = crate::native_lowering::Template::parse(expression, 2)
-                .expect("generated tuple expression");
-            let expression = template.render(&["a".into(), "b".into()], "loc");
-            self.native_lowerings.insert(
-                self.functions.len(),
-                crate::native_lowering::Lowering {
-                    scalar: Some(template),
-                    ..Default::default()
-                },
-            );
-            let effects = crate::native_effects::contract(
-                "read_fresh",
-                &[ty.clone(), ty.clone()],
-                "Bool",
-                &self.ir_types(),
-            )?;
-            self.native_contracts.insert(self.functions.len(), effects);
-            self.functions.push(Function { name: Name { text:name.into(), span:record.name.span.clone() }, params:vec![ty.clone();2], result:"Bool".into(), cpp:cpp.clone(), code:format!("Obj<bool> {cpp}(Obj<{native}> a, Obj<{native}> b, Loc) {{ return make_obj<bool>({expression}); }}"), body:None, origin:Origin::Generated,checked:None });
+        for name in ["__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__"] {
+            self.tuple_comparison_function(name, ty, &record.name.span)?;
         }
         Ok(())
     }
@@ -205,35 +181,26 @@ impl Compiler {
         Ok(index)
     }
 
-    pub(super) fn tuple_cpp(&self) -> String {
-        let tuples: Vec<_> = self
-            .records
-            .iter()
-            .filter(|(ty, _)| ty.starts_with("Tuple<") && self.automatic_value(ty))
-            .collect();
-        let mut code = String::new();
-        for (ty, _) in &tuples {
-            let native = &self.types[*ty];
-            code.push_str(&format!("bool operator==(const {native}& a, const {native}& b);\nbool operator<(const {native}& a, const {native}& b);\n"));
-        }
-        for (ty, record) in tuples {
-            let native = &self.types[ty];
-            code.push_str(&format!(
-                "bool operator==(const {native}& a, const {native}& b) {{ return {} ; }}\n",
-                (0..record.fields.len())
-                    .map(|i| format!("value_equal(a.field_{i},b.field_{i})"))
-                    .collect::<Vec<_>>()
-                    .join(" && ")
-            ));
-            code.push_str(&format!(
-                "bool operator<(const {native}& a, const {native}& b) {{\n"
-            ));
-            for i in 0..record.fields.len() {
-                code.push_str(&format!("if(value_less(a.field_{i},b.field_{i})) return true; if(value_less(b.field_{i},a.field_{i})) return false;\n"));
-            }
-            code.push_str("return false; }\n");
-        }
-        code
+    pub(super) fn tuple_comparison_function(
+        &mut self,
+        name: &str,
+        ty: &str,
+        span: &Span,
+    ) -> Result<Option<usize>, String> {
+        let kind = match name {
+            "__eq__" => "tuple_eq",
+            "__ne__" => "tuple_ne",
+            "__lt__" => "tuple_lt",
+            "__le__" => "tuple_le",
+            "__gt__" => "tuple_gt",
+            "__ge__" => "tuple_ge",
+            _ => return Ok(None),
+        };
+        let index =
+            self.native_function(name, vec![ty.into(); 2], "Bool", |_| String::new(), span)?;
+        self.native_derivation_tasks
+            .insert(index, (kind.into(), ty.into()));
+        Ok(Some(index))
     }
 }
 

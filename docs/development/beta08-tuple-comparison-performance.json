@@ -1,0 +1,187 @@
+{
+  "utc": "2026-11-10T03:41:18.068884+00:00",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "gcc": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "compiler_sha256": {
+    "baseline": "1b62a502c34e71c2bf6274e6c164f14ebb0c723146b49dbb940f2c2891e9d56b",
+    "current": "c17735698e6cd8fb4509251dcb14ac402707f6647bf974e7b5d766fe198d140e"
+  },
+  "repeats": 15,
+  "flags": [
+    "-std=c++20",
+    "-O2"
+  ],
+  "timing": "interleaved; compilation excluded; instrumentation measured separately",
+  "cases": {
+    "tuple_comparisons": {
+      "source": "let a:=([1,2,3],(4,\"x\"));let b:=([1,2,3],(4,\"y\"));let total:=0;for round in 0..200000{if a==b{total+=1;}if a!=b{total+=1;}if a<b{total+=1;}if a<=b{total+=1;}if a>b{total+=1;}if a>=b{total+=1;}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "068c2faaeca305fd14bd9418dd37c60838378252fe98129747c632da9192eb22",
+          "runs_ms": [
+            16.33659,
+            15.854071,
+            15.866594,
+            16.49432,
+            17.010666,
+            16.460132,
+            16.365524,
+            15.899565,
+            16.027204,
+            16.280556,
+            16.13223,
+            15.689973,
+            15.975026,
+            15.841296,
+            15.952595
+          ],
+          "output": "600000\n",
+          "allocations": 1200032,
+          "shared_ptr_copies": 4800031,
+          "median_ms": 16.027204
+        },
+        "current": {
+          "cpp_sha256": "299aeabef0e5fb3839196e51407ff2ed937e5574a33592521e3b5f4864ba3ddf",
+          "runs_ms": [
+            8.387461,
+            8.018391,
+            8.402809,
+            8.156619,
+            7.912684,
+            8.457209,
+            8.139086,
+            9.182033,
+            8.065589,
+            8.154386,
+            7.55742,
+            8.303062,
+            8.319874,
+            8.243941,
+            7.7555
+          ],
+          "output": "600000\n",
+          "allocations": 32,
+          "shared_ptr_copies": 2400031,
+          "median_ms": 8.156619
+        }
+      },
+      "speedup": 1.9649322838298569
+    },
+    "extern_aggregate_key_sort": {
+      "source": "let a:=[0;1000];let total:=0;for round in 0..200{for i in 0..a.len(){a[i]=(i*7919+round)%1009;}sort_by_key(a,(x:Int)=>(x%97,-x));total+=a[500];sort_by_key(a,(x:Int)=>[x%97,-x]);total+=a[500];}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "cf2a16ae61a69bfdc9775c13386f87460e7e141ae6951c855776a87647611ea1",
+          "runs_ms": [
+            54.149831,
+            52.291711,
+            51.521663,
+            53.968221,
+            54.76354,
+            53.846465,
+            53.296408,
+            51.604929,
+            51.726085,
+            51.848424,
+            53.025353,
+            51.426527,
+            51.213598,
+            51.896115,
+            51.253273
+          ],
+          "output": "161572\n",
+          "allocations": 3003013,
+          "shared_ptr_copies": 5802602,
+          "median_ms": 51.896115
+        },
+        "current": {
+          "cpp_sha256": "a2792a8f71ecfb59e061909da6f708709e6586bcb9f49ad9d3a136b35c21412e",
+          "runs_ms": [
+            54.319958,
+            54.453427,
+            52.411084,
+            55.869521,
+            54.759115,
+            55.217905,
+            54.120196,
+            52.206763,
+            51.855356,
+            52.681329,
+            52.134225,
+            52.476436,
+            52.063395,
+            52.277374,
+            53.354937
+          ],
+          "output": "161572\n",
+          "allocations": 3003013,
+          "shared_ptr_copies": 5802602,
+          "median_ms": 52.681329
+        }
+      },
+      "speedup": 0.9850950229444668
+    },
+    "vector_comparisons": {
+      "source": "let a:=[1;2000];let b:=[1;2000];let total:=0;for round in 0..20000{b[-1]=round%3;if a==b{total+=1;}if a<b{total+=1;}}wt total;",
+      "variants": {
+        "baseline": {
+          "cpp_sha256": "3e2b1555c3b4c3b5df7ea1b249e08c9424e63ee6e9d32cca315c9825a66a833b",
+          "runs_ms": [
+            37.441656,
+            37.618626,
+            37.004139,
+            37.398264,
+            38.295539,
+            38.12421,
+            36.148871,
+            37.413272,
+            36.131199,
+            36.623929,
+            36.242276,
+            36.21744,
+            35.711275,
+            36.082746,
+            37.51873
+          ],
+          "output": "13333\n",
+          "allocations": 44018,
+          "shared_ptr_copies": 200009,
+          "median_ms": 37.004139
+        },
+        "current": {
+          "cpp_sha256": "eb2c44af861de40339ce5eaf44e54a2ea056fa5a125f50bbba636dc3184d7471",
+          "runs_ms": [
+            38.039462,
+            37.737227,
+            36.970567,
+            37.34209,
+            37.411229,
+            37.681965,
+            37.086673,
+            38.247179,
+            35.587153,
+            36.025252,
+            36.200549,
+            35.839504,
+            35.98756,
+            36.149144,
+            36.280698
+          ],
+          "output": "13333\n",
+          "allocations": 4018,
+          "shared_ptr_copies": 120009,
+          "median_ms": 36.970567
+        }
+      },
+      "speedup": 1.0009080737117177
+    }
+  },
+  "boolean_sequence_compatibility": {
+    "source": "let flags:=[true,false,true,false];sort(flags);wt flags,bisect_left(flags,true);wt ([false,true],0)<([true,false],0);",
+    "outputs": {
+      "baseline": "No No Yes Yes 2\nYes\n",
+      "current": "No No Yes Yes 2\nYes\n"
+    }
+  }
+}

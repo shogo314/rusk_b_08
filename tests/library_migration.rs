@@ -1558,3 +1558,116 @@ unrelated_output((Row{{value:2}},[3,4]));wt "";
         assert_eq!(out.stdout, b"3 3 4\n");
     }
 }
+
+#[test]
+fn tuple_comparisons_use_logical_fields_and_preserve_boolean_sequence_order() {
+    let case = Case::new(include_str!("../examples/beta08/tuple_comparisons.rusk"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"No Yes Yes Yes No No\nYes Yes Yes\nYes\nYes\nNo No Yes Yes 2\n1 2\n9 No\n"
+        );
+    }
+}
+
+#[test]
+fn tuple_comparisons_hold_fields_and_roots_across_unknown_operations() {
+    let case = Case::new(include_str!(
+        "../examples/beta08/tuple_comparison_lifetime.rusk"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1,1;1,1;30,40;Yes 4\n1,1;1,1;2,3;Yes 0\n4\n");
+    }
+}
+
+#[test]
+fn tuple_comparisons_preserve_user_overloads_and_reject_unknown_restrictions() {
+    let source = r#"
+struct Row{value:Int;}
+fn __lt__(a:(Row,Row),b:(Row,Row))->Bool{return a[1].value>b[1].value;}
+fn __eq__<T>(a:(T,Row),b:(T,Row))->Bool{return a[1].value==b[1].value;}
+wt (Row{value:1},Row{value:3})<(Row{value:9},Row{value:2});
+wt (1,Row{value:2})==(7,Row{value:2});
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes\nYes\n");
+    }
+    for restriction in ["readonly", "noescape"] {
+        let source = format!(
+            r#"
+struct Row{{value:Int;}}
+extern fn __lt__(a:Row,b:Row)->Bool{{cpp_name:"opaque_tuple_compare",code:"Obj<bool> opaque_tuple_compare(Obj<RuskRecord0>,Obj<RuskRecord0>,Loc){{return make_obj<bool>(false);}}",}}
+fn check({restriction} a:(Row,Row),b:(Row,Row))->Bool{{return a<b;}}
+check((Row{{value:1}},Row{{value:2}}),(Row{{value:3}},Row{{value:4}}));
+"#
+        );
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(restriction),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    for source in [
+        "struct NoOrder{value:Int;}wt (1,NoOrder{value:2})<(1,NoOrder{value:3});",
+        "struct WrongOrder{value:Int;}fn __lt__(a:WrongOrder,b:WrongOrder)->Int{return 1;}wt (1,WrongOrder{value:2})<(1,WrongOrder{value:3});",
+        "wt true<false;",
+    ] {
+        let case = Case::new(source);
+        let out = case.compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("main.rusk:"));
+        assert!(!case.0.join("main.cpp").exists());
+    }
+}
+
+#[test]
+fn tuple_comparison_templates_are_usable_under_unrelated_user_names() {
+    let source = include_str!("../lib/collections.rusk");
+    let equal = source.find("extern fn product_equal_body<").unwrap();
+    let less = source.find("extern fn product_less_body<").unwrap();
+    let end = source.find("extern fn product_not_equal_body<").unwrap();
+    let declarations = source[equal..end]
+        .lines()
+        .filter(|line| {
+            !line.trim_start().starts_with("derive:")
+                && !line.trim_start().starts_with("effects:")
+                && !line.trim_start().starts_with("lower:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("product_equal_body", "user_equal")
+        .replace("product_less_body", "user_less");
+    assert!(less > equal);
+    let case = Case::new(&format!(
+        "{declarations} wt user_equal((1,2),(1,2)),user_less((false,[false,true]),(false,[true,false]));"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"Yes Yes\n");
+    }
+}

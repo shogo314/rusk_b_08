@@ -26,6 +26,7 @@ impl Compiler {
         prelude += &self.enum_cpp();
         prelude += &self.lazy_cpp();
         prelude += &self.record_cpp();
+        prelude += &self.key_equal_cpp();
         prelude += &self.key_hash_cpp();
         prelude += &self.container_declarations();
         prelude += &self.lazy_copy_declarations();

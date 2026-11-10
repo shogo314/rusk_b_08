@@ -83,7 +83,7 @@ impl Compiler {
             });
         }
         self.prepared_records.insert(name.into());
-        self.prepare_tuple_functions(&record, copy_index)?;
+        self.prepare_tuple_functions(&record)?;
         Ok(())
     }
 
@@ -140,7 +140,6 @@ impl Compiler {
             }
             code.push_str("};\n");
         }
-        code.push_str(&self.tuple_cpp());
         for name in self.records.keys() {
             let native = &self.types[name];
             code.push_str(&format!("Obj<{native}> deep_copy(const Obj<{native}>& value, Loc loc = Loc{{\"<copy>\",0,0}});\n"));

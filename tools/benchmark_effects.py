@@ -47,6 +47,10 @@ CASES = {
     'vector_capacity_reuse': ('let a:=[1;10000];let small:=[2;4];let total:=0;'
                              'for round in 0..100{a=small;for i in 0..10000{a.push_back(i);}'
                              'total+=a.len();}wt total;'),
+    'tuple_comparisons': ('let a:=([1,2,3],(4,"x"));let b:=([1,2,3],(4,"y"));'
+                           'let total:=0;for round in 0..200000{'
+                           'if a==b{total+=1;}if a!=b{total+=1;}if a<b{total+=1;}'
+                           'if a<=b{total+=1;}if a>b{total+=1;}if a>=b{total+=1;}}wt total;'),
     'tuple_output': ('let row:=((1,2),[3,4],true,"ok");for round in 0..100000{wt row;}'),
     'vector_output': ('let values:=[123;1000];let matrix:=[values,values];'
                       'let rows:=[(1,2);1000];for round in 0..500{wt matrix,rows;}'),

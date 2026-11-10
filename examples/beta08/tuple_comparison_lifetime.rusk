@@ -1,0 +1,19 @@
+extern type Key{cpp_name:"std::int64_t",}
+extern symbol comparison_state{code:"std::function<void()> replace_compared;std::int64_t released_keys=0;",}
+extern fn key(x:Int)->Key{
+    cpp_name:"comparison_key",code:"Obj<std::int64_t> comparison_key(Obj<std::int64_t> x,Loc){return Obj<std::int64_t>(new std::int64_t(*x),[](auto* p){++released_keys;delete p;});}",
+}
+extern fn __lt__(a:Key,b:Key)->Bool{
+    cpp_name:"compare_keys",code:"Obj<bool> compare_keys(Obj<std::int64_t> a,Obj<std::int64_t> b,Loc){rusk_write(*a);rusk_write(',');rusk_write(*b);rusk_write(';');replace_compared();return make_obj<bool>(*a<*b);}",
+}
+extern fn watch<T>(a:T,b:T){
+    code:"void @{fn}(Obj<@{T}> a,Obj<@{T}> b,Loc){replace_compared=[a,b](){a->field_0=make_obj<std::int64_t>(10);b->field_0=make_obj<std::int64_t>(20);a->field_1=make_obj<std::int64_t>(30);b->field_1=make_obj<std::int64_t>(40);};}",
+}
+extern fn watch_owners<T>(a:Vec<T>,b:Vec<T>){
+    code:"void @{fn}(Obj<@{Vec<T>}> a,Obj<@{Vec<T>}> b,Loc){released_keys=0;replace_compared=[a,b](){a->clear();b->clear();++a->version;++b->version;};}",
+}
+extern fn released()->Int{cpp_name:"compared_keys_released",code:"Obj<std::int64_t> compared_keys_released(Loc){return make_obj<std::int64_t>(released_keys);}",}
+extern fn stop(){cpp_name:"stop_comparison",code:"void stop_comparison(Loc){replace_compared={};}",}
+let a:=(key(1),key(2));let b:=(key(1),key(3));watch(a,b);wt a<b,released();stop();
+let left:=[(key(1),key(2))];let right:=[(key(1),key(3))];watch_owners(left,right);
+wt left[0]<right[0],released();wt released();stop();

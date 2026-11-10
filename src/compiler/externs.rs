@@ -234,16 +234,21 @@ impl Compiler {
             generics::parameters_valid(parameters)?;
             let assignment = matches!(kind.as_str(), "record_assign" | "enum_assign");
             let output = kind == "tuple_write";
+            let comparison = matches!(
+                kind.as_str(),
+                "tuple_eq" | "tuple_ne" | "tuple_lt" | "tuple_le" | "tuple_gt" | "tuple_ge"
+            );
             let vector_input = kind == "vector_read";
             let input = kind == "tuple_read" || vector_input;
             let valid_kind = assignment
                 || input
                 || output
+                || comparison
                 || matches!(kind.as_str(), "record_copy" | "enum_copy");
             if !valid_kind
                 || parameters.len() != 1
                 || arguments.len()
-                    != if assignment {
+                    != if assignment || comparison {
                         2
                     } else if input {
                         0
@@ -260,7 +265,9 @@ impl Compiler {
                             || !bindings.contains_key(&parameters[0].text)
                     } else {
                         r.text
-                            != if assignment || output {
+                            != if comparison {
+                                "Bool"
+                            } else if assignment || output {
                                 "Unit"
                             } else {
                                 &parameters[0].text
@@ -268,9 +275,10 @@ impl Compiler {
                     }
                 })
                 || ((assignment || output) && parameters[0].text == "Unit")
+                || (comparison && parameters[0].text == "Bool")
                 || properties.keys().any(|key| {
                     !matches!(key.as_str(), "code" | "derive")
-                        && !(output
+                        && !((output || comparison)
                             && matches!(
                                 key.as_str(),
                                 "effects"
@@ -283,6 +291,8 @@ impl Compiler {
             {
                 return Err(name.span.error(if assignment {
                     "invalid native assignment derivation; expected one type parameter and (T,T)->Unit"
+                }else if comparison {
+                    "invalid native comparison derivation; expected one type parameter and (T,T)->Bool"
                 }else if output {
                     "invalid native output derivation; expected one type parameter and (T)->Unit"
                 }else if vector_input {
@@ -461,6 +471,42 @@ impl Compiler {
     ) -> Result<(), String> {
         for part in parts {
             match part {
+                Part::IfType {
+                    ty,
+                    pattern,
+                    parameters: names,
+                    matched,
+                    otherwise,
+                } => {
+                    self.validate_scoped_native_type(&ty, parameters, indices, span)?;
+                    let mut scoped = parameters.to_vec();
+                    let mut bound = BTreeMap::new();
+                    for name in &names {
+                        if parameters.iter().any(|p| &p.text == name) || indices.contains(name) {
+                            return Err(span.error(format!(
+                                "native type binding '{name}' shadows an existing binding"
+                            )));
+                        }
+                        scoped.push(Name {
+                            text: name.clone(),
+                            span: span.clone(),
+                        });
+                    }
+                    self.validate_scoped_native_type(&pattern, &scoped, indices, span)?;
+                    let locals = names
+                        .iter()
+                        .map(|name| Name {
+                            text: name.clone(),
+                            span: span.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    generics::unify(&pattern, &pattern, &locals, &mut bound);
+                    if names.iter().any(|name| !bound.contains_key(name)) {
+                        return Err(span.error("native type binding is not bound by the pattern"));
+                    }
+                    self.validate_native_parts(matched, &scoped, indices, span)?;
+                    self.validate_native_parts(otherwise, parameters, indices, span)?;
+                }
                 Part::Index(index) => {
                     if !indices.contains(&index) {
                         return Err(span.error(format!("unbound native field index '{index}'")));
@@ -689,6 +735,54 @@ impl Compiler {
             }
             *budget -= 1;
             match part {
+                Part::Else => return Err(span.error("unexpected native type branch")),
+                Part::IfType {
+                    ty,
+                    pattern,
+                    parameters,
+                    matched,
+                    otherwise,
+                } => {
+                    if parameters.len() > *budget {
+                        return Err(span.error("native field expansion work limit exceeded"));
+                    }
+                    *budget -= parameters.len();
+                    let ty = generics::substitute(&ty, bindings);
+                    // Alpha-rename the pattern's variables before inserting outer
+                    // concrete types. A concrete type with the same spelling as
+                    // a local binder must remain a concrete type.
+                    let renames = parameters
+                        .iter()
+                        .enumerate()
+                        .map(|(i, name)| (name.clone(), format!("${i}")))
+                        .collect::<BTreeMap<_, _>>();
+                    let pattern =
+                        generics::substitute(&generics::substitute(&pattern, &renames), bindings);
+                    let locals = parameters
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| Name {
+                            text: format!("${i}"),
+                            span: span.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    let mut inferred = BTreeMap::new();
+                    let matches = generics::unify(&pattern, &ty, &locals, &mut inferred);
+                    let mut scoped = bindings.clone();
+                    if matches {
+                        for (i, name) in parameters.into_iter().enumerate() {
+                            scoped.insert(name, inferred[&format!("${i}")].clone());
+                        }
+                    }
+                    output.push_str(&self.render_native_parts(
+                        if matches { matched } else { otherwise },
+                        &scoped,
+                        function,
+                        span,
+                        owner,
+                        budget,
+                    )?);
+                }
                 Part::Index(index) => {
                     let value = bindings
                         .get(&index)
@@ -1139,7 +1233,7 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             .unwrap()
             .into_iter()
             .filter(
-                |s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.contains_key("derive") && p["derive"] != "vector_read"),
+                |s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|kind| kind == role || matches!(kind.as_str(), "record_copy" | "enum_copy"))),
             )
             .collect::<Vec<_>>();
             for statement in &mut declarations {
@@ -1511,5 +1605,159 @@ extern fn __write__(value:Int){{cpp_name:"field_output",effects:"io_write",code:
             .next()
             .unwrap();
         assert!(output.contains("source: NativeContract"), "{hir}");
+    }
+    #[test]
+    fn tuple_comparison_roles_validate_signatures_and_trust() {
+        for role in [
+            "tuple_eq", "tuple_ne", "tuple_lt", "tuple_le", "tuple_gt", "tuple_ge",
+        ] {
+            let definition = format!(
+                r#"extern fn arbitrary_compare<T>(a:T,b:T)->Bool{{derive:"{role}",code:"unused",}}"#
+            );
+            for (source, standard, expected) in [
+                (
+                    definition.clone(),
+                    false,
+                    "reserved for the embedded standard library",
+                ),
+                (
+                    definition.replace("a:T,b:T", "a:T"),
+                    true,
+                    "invalid native comparison derivation",
+                ),
+                (
+                    definition.replace("->Bool", "->T"),
+                    true,
+                    "invalid native comparison derivation",
+                ),
+                (
+                    definition.replace("<T>", "<T,R>"),
+                    true,
+                    "invalid native comparison derivation",
+                ),
+                (
+                    definition.replace("<T>(a:T,b:T)", "<Bool>(a:Bool,b:Bool)"),
+                    true,
+                    "invalid native comparison derivation",
+                ),
+                (
+                    format!("{definition}{definition}"),
+                    true,
+                    "duplicate native derivation",
+                ),
+            ] {
+                let statements = crate::parse(&source, "<stdlib/collections.rusk>").unwrap();
+                let source = if standard {
+                    Source::standard(statements)
+                } else {
+                    Source::user(statements)
+                };
+                let error = Compiler::default()
+                    .compile(
+                        &[
+                            Source::standard(crate::parse(TYPES, "types.rusk").unwrap()),
+                            source,
+                        ],
+                        crate::backend::Emit::Cpp,
+                    )
+                    .unwrap_err();
+                assert!(error.contains(expected), "{role}: {error}");
+            }
+        }
+    }
+
+    #[test]
+    fn tuple_comparison_bodies_lowering_and_contracts_follow_source_roles() {
+        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"renamed-compare-library.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_eq"))).collect::<Vec<_>>();
+        for statement in &mut declarations {
+            if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
+                name.text = "unrelated_equal_name".into();
+                properties
+                    .get_mut("code")
+                    .unwrap()
+                    .insert_str(0, "/* equal_source */ ");
+                properties
+                    .get_mut("lower")
+                    .unwrap()
+                    .insert_str(0, "/* equal_lower */ ");
+            }
+        }
+        for (contract, expected) in [
+            (r#",effects:"read_fresh""#, "NativeContract"),
+            ("", "Opaque"),
+        ] {
+            let types = format!(
+                r#"{TYPES}
+extern type Bool{{cpp_name:"bool",representation:"bool",}}
+extern fn __eq__(a:Int,b:Int)->Bool{{cpp_name:"field_equal",code:"Obj<bool> field_equal(Obj<std::int64_t> a,Obj<std::int64_t> b,Loc){{return make_obj<bool>(*a==*b);}}"{contract},}}
+"#
+            );
+            let sources = [
+                Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                Source::standard(declarations.clone()),
+                Source::user(crate::parse("__eq__((1,2),(1,3));", "caller.rusk").unwrap()),
+            ];
+            let cpp = Compiler::default()
+                .compile(&sources, crate::backend::Emit::Cpp)
+                .unwrap();
+            assert!(cpp.contains("/* equal_source */ Obj<bool> rusk_algorithm_"));
+            assert!(cpp.contains("/* equal_lower */"));
+            assert!(!cpp.contains("unrelated_equal_name("));
+            let hir = Compiler::default()
+                .compile(&sources, crate::backend::Emit::Hir)
+                .unwrap();
+            let section = hir
+                .split("name: \"__eq__\"")
+                .nth(2)
+                .unwrap()
+                .split("name:")
+                .next()
+                .unwrap();
+            assert!(section.contains(&format!("source: {expected}")), "{hir}");
+        }
+    }
+    #[test]
+    fn tuple_predeclarations_follow_trusted_representations_instead_of_scalar_names() {
+        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"renamed-policy.rusk").unwrap().into_iter().filter(|s| matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|v|v=="tuple_eq"))).collect::<Vec<_>>();
+        for statement in &mut declarations {
+            if let Stmt::GenericExternFunction(_, _, _, _, properties) = statement {
+                properties
+                    .get_mut("code")
+                    .unwrap()
+                    .insert_str(0, "/* representation_selected */ ");
+            }
+        }
+        let types = format!(
+            r#"{TYPES}
+extern type Bool{{cpp_name:"bool",representation:"bool",}}
+extern type Number{{cpp_name:"std::int64_t",representation:"i64",}}
+extern fn __eq__(a:Number,b:Number)->Bool{{cpp_name:"number_equal",effects:"read_fresh",code:"unused",}}
+"#
+        );
+        for (ty, expected) in [("Number", true), ("Score", false)] {
+            let user = format!(
+                r#"
+extern type Score{{cpp_name:"std::int64_t",}}
+extern fn value()->{ty}{{cpp_name:"get_value",code:"unused",}}
+fn __eq__<T>(a:(T,T),b:(T,T))->Bool{{return false;}}
+let x:=value();__eq__((x,x),(x,x));
+"#
+            );
+            let cpp = Compiler::default()
+                .compile(
+                    &[
+                        Source::standard(crate::parse(&types, "types.rusk").unwrap()),
+                        Source::standard(declarations.clone()),
+                        Source::user(crate::parse(&user, "caller.rusk").unwrap()),
+                    ],
+                    crate::backend::Emit::Cpp,
+                )
+                .unwrap();
+            assert_eq!(
+                cpp.contains("/* representation_selected */"),
+                expected,
+                "{ty}"
+            );
+        }
     }
 }

@@ -750,6 +750,13 @@ impl Compiler {
         if let Some(id) = self.resolve(name, args, expected, span)? {
             return Ok(Some(id));
         }
+        if args.len() == 2
+            && args[0].ty == args[1].ty
+            && args[0].ty.starts_with("Tuple<")
+            && let Some(id) = self.tuple_comparison_function(name, &args[0].ty, span)?
+        {
+            return Ok(Some(id));
+        }
         if name == "__write__" && args.len() == 1 && args[0].ty.starts_with("Tuple<") {
             return self.tuple_write_function(&args[0].ty, span).map(Some);
         }

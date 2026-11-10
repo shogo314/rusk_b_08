@@ -1,0 +1,14 @@
+struct Row{key:Int;}
+fn __eq__(a:Row,b:Row)->Bool{return a.key==b.key;}
+fn __lt__(a:Row,b:Row)->Bool{return a.key<b.key;}
+fn compare(readonly noescape a:(Row,Row),readonly noescape b:(Row,Row))->Bool{return a<b;}
+let a:=(Row{key:1},Row{key:2});let b:=(Row{key:1},Row{key:3});
+wt a==b,a!=b,compare(a,b),a<=b,a>b,a>=b;
+wt a==a,a<=a,a>=a;
+wt (false,[false,true])<(true,[false,false]);
+wt ([false,true],0)<([true,false],0);
+let flags:=[true,false,true,false];sort(flags);wt flags,bisect_left(flags,true);
+let pairs:=[(Row{key:2},1),(Row{key:1},2)];sort(pairs);wt pairs[0][0].key,pairs[1][0].key;
+// Hash keys continue to use the existing physical equality adapter.
+let keys:=Dict::<(Int,(Str,Bool)),Int>();keys.set((1,("x",true)),9);
+wt keys.get((1,("x",true)))?!,keys.contains((1,("x",false)));

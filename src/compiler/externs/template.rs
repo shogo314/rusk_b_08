@@ -19,6 +19,15 @@ pub(super) enum InvokeKind {
 
 #[derive(Clone)]
 pub(super) enum Part {
+    // Only used while parsing a conditional; removed before returning its AST.
+    Else,
+    IfType {
+        ty: String,
+        pattern: String,
+        parameters: Vec<String>,
+        matched: Vec<Part>,
+        otherwise: Vec<Part>,
+    },
     Arguments {
         offset: usize,
         element: String,
@@ -113,6 +122,12 @@ pub(super) fn expand_arguments(
 pub(super) fn validate_argument_bounds(parts: &[Part], count: usize) -> Result<(), String> {
     for part in parts {
         match part {
+            Part::IfType {
+                matched, otherwise, ..
+            } => {
+                validate_argument_bounds(matched, count)?;
+                validate_argument_bounds(otherwise, count)?;
+            }
             Part::Arguments { offset, parts, .. } => {
                 if *offset > count {
                     return Err("native argument offset out of range".into());
@@ -247,7 +262,7 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
 }
 
 pub(super) fn parse(text: &str, body: bool) -> Result<Vec<Part>, String> {
-    parse_parts(&mut &text[..], body, 0, &mut 4096)
+    parse_parts(&mut &text[..], body, 0, &mut 4096, false)
 }
 
 fn parse_parts(
@@ -255,6 +270,7 @@ fn parse_parts(
     body: bool,
     depth: usize,
     budget: &mut usize,
+    allow_else: bool,
 ) -> Result<Vec<Part>, String> {
     if depth > 64 {
         return Err("native field expansion nesting limit exceeded".into());
@@ -293,7 +309,59 @@ fn parse_parts(
                 Err("native field expansion end without fields".into())
             };
         }
-        if body && let Some(header) = header.strip_prefix("arguments ") {
+        if body && header == "else" {
+            if !allow_else || parts.iter().any(|p| matches!(p, Part::Else)) {
+                return Err("native else requires a type condition and can occur only once".into());
+            }
+            parts.push(Part::Else);
+            continue;
+        }
+        if body && let Some(header) = header.strip_prefix("if_type ") {
+            let (ty, pattern) = header.split_once(" matches ")
+                .ok_or("invalid native type condition; expected if_type Type matches Pattern [with Parameters]")?;
+            let (pattern, parameters) =
+                if let Some((pattern, parameters)) = pattern.split_once(" with ") {
+                    (
+                        pattern.trim(),
+                        parameters
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    (pattern.trim(), vec![])
+                };
+            if !valid_type(ty.trim())
+                || !valid_type(pattern)
+                || parameters.iter().any(|p| !identifier(p))
+                || parameters
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    != parameters.len()
+            {
+                return Err("invalid native type condition or bindings".into());
+            }
+            if parameters.len() > *budget {
+                return Err("native template reference limit exceeded".into());
+            }
+            *budget -= parameters.len();
+            let mut matched = parse_parts(rest, body, depth + 1, budget, true)?;
+            let otherwise = if let Some(at) = matched.iter().position(|p| matches!(p, Part::Else)) {
+                let otherwise = matched.split_off(at + 1);
+                matched.pop();
+                otherwise
+            } else {
+                vec![]
+            };
+            parts.push(Part::IfType {
+                ty: ty.trim().into(),
+                pattern: pattern.into(),
+                parameters,
+                matched,
+                otherwise,
+            });
+        } else if body && let Some(header) = header.strip_prefix("arguments ") {
             let (prefix, binders) = header.split_once("as ").ok_or(
                 "invalid native arguments reference; expected arguments [from N] as Type,Index",
             )?;
@@ -322,7 +390,7 @@ fn parse_parts(
                 offset,
                 element: element.into(),
                 index: index.into(),
-                parts: parse_parts(rest, body, depth + 1, budget)?,
+                parts: parse_parts(rest, body, depth + 1, budget, false)?,
             });
         } else if body && let Some(header) = header.strip_prefix("variants ") {
             let (ty, index) = header
@@ -335,7 +403,7 @@ fn parse_parts(
             parts.push(Part::Variants {
                 ty: ty.into(),
                 index: index.into(),
-                parts: parse_parts(rest, body, depth + 1, budget)?,
+                parts: parse_parts(rest, body, depth + 1, budget, false)?,
             });
         } else if body && let Some(header) = header.strip_prefix("fields ") {
             let (ty, binders) = header
@@ -362,7 +430,7 @@ fn parse_parts(
                 variant,
                 element: element.into(),
                 index: index.into(),
-                parts: parse_parts(rest, body, depth + 1, budget)?,
+                parts: parse_parts(rest, body, depth + 1, budget, false)?,
             });
         } else {
             parts.push(reference(header, body)?);
