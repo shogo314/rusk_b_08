@@ -1,0 +1,18 @@
+let empty:Vec<Int>:=[];let seed:=[4];let calls:=0;
+let result:=fold(empty,seed,(a:Vec<Int>,x:Int)=>{calls+=1;a});
+result[0]=7;wt seed,result,calls;
+let shared:=[9];let held:=fold([1,2],[0],(a:Vec<Int>,x:Int)=>shared);
+shared:=[];held[0]=10;wt held,shared.len();
+
+extern symbol unit_observations {code:"inline std::int64_t fold_released_units=0,fold_unit_trace=0;",}
+extern fn step(unit:Unit,index:Int)->Unit {
+    cpp_name:"fold_observed_unit",
+    return_abi:"object",
+    code:"Obj<Unit> fold_observed_unit(Obj<Unit>,Obj<std::int64_t>,Loc){fold_unit_trace=fold_unit_trace*10+fold_released_units;return Obj<Unit>(new Unit{},[](Unit* p){++fold_released_units;delete p;});}",
+}
+extern fn observations()->Int {
+    cpp_name:"fold_unit_observations",
+    code:"Obj<std::int64_t> fold_unit_observations(Loc){return make_obj<std::int64_t>(fold_unit_trace*10+fold_released_units);}",
+}
+fold([1,2,3],{},step);wt observations();
+fold(empty,{},step);wt observations();

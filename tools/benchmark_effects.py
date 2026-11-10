@@ -133,7 +133,11 @@ CASES = {
     'sum_rusk': ('fn rusk_total(a:Vec<Int>)->Int{let total:=0;for x in a{total+=x;}return total;}'
                  'let a:=[1;1000000];let total:=0;for i in 0..20{total+=rusk_total(a);}wt total;'),
 }
-INPUTS = {'dimensions_input': b'1 '*380000, 'vector_input': b'1 '*500000, 'option_input': b'1 '*200000}
+# Preserve the original cases and add longer controls for short process/IO runs.
+CASES['range_sum_large'] = 'in n:Int; let total:=0; for i in 0..n { total+=i; } wt total;'
+CASES['tuple_output_large'] = CASES['tuple_output'].replace('100000', '1000000')
+INPUTS = {'dimensions_input': b'1 '*380000, 'vector_input': b'1 '*500000,
+          'option_input': b'1 '*200000, 'range_sum_large': b'100000000\n'}
 ALLOCATION_COUNTER = r'''
 #include <new>
 #include <cstdio>
@@ -153,6 +157,41 @@ def checked(command, input_data=None):
 
 def build(source, executable):
     checked(['g++', '-std=c++20', '-O2', str(source), '-o', str(executable)])
+
+
+def measure_counters(cpp, stem, input_data, expected, reference_copies):
+    """Count separately from timing, checking the same output for both probes."""
+    data = {}
+    instrumented = cpp.read_text().replace('#include <limits>', '#include <limits>\n'+ALLOCATION_COUNTER, 1)
+    counted = stem.with_name(stem.name+'-alloc.cpp')
+    counted.write_text(instrumented)
+    executable = counted.with_suffix('')
+    build(counted, executable)
+    run = checked([str(executable)], input_data)
+    assert run.stdout == expected
+    data['allocations'] = int(run.stderr.decode().strip().split('=')[1])
+    if reference_copies:
+        text = checked(['g++', '-std=c++20', '-E', str(cpp)]).stdout.decode()
+        hooks = [
+            ('_M_add_ref_copy()\n      { __gnu_cxx::__atomic_add_dispatch(&_M_use_count, 1); }',
+             '_M_add_ref_copy()\n      { ++::measured_refs; __gnu_cxx::__atomic_add_dispatch(&_M_use_count, 1); }'),
+            ('_Sp_counted_base<_S_single>::_M_add_ref_copy()\n    { ++_M_use_count; }',
+             '_Sp_counted_base<_S_single>::_M_add_ref_copy()\n    { ++::measured_refs; ++_M_use_count; }'),
+        ]
+        for before, after in hooks:
+            if text.count(before) != 1:
+                raise RuntimeError('unsupported libstdc++ shared_ptr layout; omit --reference-copies')
+            text = text.replace(before, after)
+        text = 'unsigned long long measured_refs=0;\n'+text
+        text += '\nstruct RefReport{~RefReport(){std::fprintf(stderr,"copies=%llu\\n",measured_refs);}} ref_report;\n'
+        counted = stem.with_name(stem.name+'-refs.cpp')
+        counted.write_text(text)
+        executable = counted.with_suffix('')
+        build(counted, executable)
+        run = checked([str(executable)], input_data)
+        assert run.stdout == expected
+        data['shared_ptr_copies'] = int(run.stderr.decode().strip().split('=')[1])
+    return data
 
 
 def main():
@@ -205,35 +244,7 @@ def main():
                     data['output_bytes'] = len(output)
                     data['output_sha256'] = hashlib.sha256(output).hexdigest()
                 row['variants'][variant] = data
-                instrumented = cpp.read_text().replace('#include <limits>', '#include <limits>\n'+ALLOCATION_COUNTER, 1)
-                counted = directory/(name+'-'+variant+'-alloc.cpp')
-                counted.write_text(instrumented)
-                executable = counted.with_suffix('')
-                build(counted, executable)
-                run = checked([str(executable)], input_data)
-                assert run.stdout == expected
-                data['allocations'] = int(run.stderr.decode().strip().split('=')[1])
-                if args.reference_copies:
-                    text = checked(['g++', '-std=c++20', '-E', str(cpp)]).stdout.decode()
-                    hooks = [
-                        ('_M_add_ref_copy()\n      { __gnu_cxx::__atomic_add_dispatch(&_M_use_count, 1); }',
-                         '_M_add_ref_copy()\n      { ++::measured_refs; __gnu_cxx::__atomic_add_dispatch(&_M_use_count, 1); }'),
-                        ('_Sp_counted_base<_S_single>::_M_add_ref_copy()\n    { ++_M_use_count; }',
-                         '_Sp_counted_base<_S_single>::_M_add_ref_copy()\n    { ++::measured_refs; ++_M_use_count; }'),
-                    ]
-                    for before, after in hooks:
-                        if text.count(before) != 1:
-                            raise RuntimeError('unsupported libstdc++ shared_ptr layout; omit --reference-copies')
-                        text = text.replace(before, after)
-                    text = 'unsigned long long measured_refs=0;\n'+text
-                    text += '\nstruct RefReport{~RefReport(){std::fprintf(stderr,"copies=%llu\\n",measured_refs);}} ref_report;\n'
-                    counted = directory/(name+'-'+variant+'-refs.cpp')
-                    counted.write_text(text)
-                    executable = counted.with_suffix('')
-                    build(counted, executable)
-                    run = checked([str(executable)], input_data)
-                    assert run.stdout == expected
-                    data['shared_ptr_copies'] = int(run.stderr.decode().strip().split('=')[1])
+                data.update(measure_counters(cpp, stem, input_data, expected, args.reference_copies))
                 jobs.append((name, variant, stem, data, expected, input_data))
             print(name, 'built and checked', flush=True)
         # Start timings only after all builds/counters complete. Reverse order

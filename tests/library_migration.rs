@@ -524,6 +524,20 @@ let folded:=fold([1,2],initial,(a:Vec<Int>,x:Int)=>{a.push_back(x);a});wt initia
 }
 
 #[test]
+fn fold_return_preserves_empty_copies_shared_results_and_unit_cleanup() {
+    let case = Case::new(include_str!("../examples/beta08/fold_return_abi.rusk"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"4 7 0\n10 0\n123\n123\n");
+    }
+}
+
+#[test]
 fn comparator_sort_preserves_stability_and_is_available_as_a_user_declaration() {
     let declarations = include_str!("../lib/algorithms.rusk")
         .replace("fn first_true<", "fn boundary_search<")

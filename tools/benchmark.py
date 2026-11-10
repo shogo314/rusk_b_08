@@ -92,6 +92,7 @@ def main():
     parser.add_argument('--compiler', type=Path, default=ROOT/'target/debug/rusk')
     parser.add_argument('--baseline-compiler', type=Path, help='compare a previous Rusk compiler on the same inputs')
     parser.add_argument('--baseline-all-cases', action='store_true', help='baseline supports every selected case, including beta04 callbacks and beta05 containers')
+    parser.add_argument('--reference-copies', action='store_true', help='also count Rusk allocations and shared_ptr copies, separately from timing')
     parser.add_argument('--compare-no-opt', action='store_true', help='also check and measure the same compiler with --no-opt')
     parser.add_argument('--repeats', type=int, default=3)
     parser.add_argument('--output', type=Path)
@@ -158,6 +159,19 @@ def main():
             reference = None
             row = {'name':name, 'size':size, 'input_sha256':hashlib.sha256(data).hexdigest(), 'source_sha256':hashlib.sha256(rusk.encode()).hexdigest(), 'seconds':{}, 'samples':{}}
             samples = {label: [] for label in commands}
+            sources = {'Rusk': 'rusk.cpp', 'Rusk baseline': 'previous.cpp',
+                       'Rusk no-opt': 'plain.cpp', 'Rusk manual': 'manual.cpp'}
+            row['cpp_sha256'] = {label: hashlib.sha256((temp/source).read_bytes()).hexdigest()
+                                 for label, source in sources.items() if label in commands}
+            if args.reference_copies:
+                from benchmark_effects import checked, measure_counters
+                reference_output = checked(commands['C++'], data).stdout
+                row['counters'] = {}
+                for label, source in sources.items():
+                    if label in commands:
+                        stem = temp/('counter-'+label.replace(' ', '-'))
+                        row['counters'][label] = measure_counters(
+                            temp/source, stem, data, reference_output, True)
             # Interleave implementations to reduce systematic ordering bias.
             for repeat in range(args.repeats):
                 labels = list(commands)
@@ -181,7 +195,7 @@ def main():
               'g++':version(['g++','--version']), 'pypy':version([pypy,'--version']) if pypy else None,
               'compiler_sha256':hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
               'baseline_compiler_sha256':hashlib.sha256(args.baseline_compiler.read_bytes()).hexdigest() if args.baseline_compiler else None,
-              'repeats':args.repeats, 'results':results}
+              'repeats':args.repeats, 'flags':['-std=c++20','-O2'], 'reference_copies':args.reference_copies, 'timing':'interleaved; compilation and optional counters excluded', 'results':results}
     output=json.dumps(report,ensure_ascii=False,indent=2)+'\n'
     print(output,end='')
     if args.output:
