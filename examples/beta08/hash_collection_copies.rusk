@@ -1,0 +1,15 @@
+let text:="ab";let letters:=Dict::<Str,Vec<Char>>();letters.set("key",[text[0]]);
+let detached=letters;letters.get("key")?![0]='z';
+wt detached.get("key")?!,text;letters.clear();text.push_back('!');wt text;
+let target:=Dict::<Int,Vec<Int>>();target.set(1,[3]);let alias:=target;
+let old:=target.get(1)?!;let source:=Dict::<Int,Vec<Int>>();source.set(2,[7]);
+target=source;target.get(2)?![0]+=1;wt alias.get(2)?!,source.get(2)?!,old;
+target=target;wt target.get(2)?!;
+let members:=Set::<Str>();members.insert("one");let independent=members;
+let original:=members;let replacement:=Set::<Str>();replacement.insert("two");
+members=replacement;replacement.clear();wt original.contains("two"),independent.contains("one");
+let keys:=members.keys();keys[0][0]='X';wt members.contains("two"),members.contains("Xwo");
+extern fn Unit()->Unit{return_abi:"object",cpp_name:"copy_unit_value",code:"Obj<Unit> copy_unit_value(Loc){return make_obj<Unit>(Unit{});}",}
+extern fn same(a:Unit,b:Unit)->Bool{cpp_name:"same_unit_value",code:"Obj<bool> same_unit_value(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+let units:=Dict::<Int,Unit>();units.set(1,Unit());let unit_copy=units;
+wt same(units.get(1)?!,unit_copy.get(1)?!);units=unit_copy;wt units.len();

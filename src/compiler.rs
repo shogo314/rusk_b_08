@@ -91,7 +91,6 @@ pub struct Compiler {
     enum_copy_functions: BTreeMap<String, usize>,
     preparing_enums: Vec<String>,
     containers: BTreeMap<String, containers::Container>,
-    container_copies: BTreeMap<String, Vec<usize>>,
     callables: BTreeMap<String, callables::Callable>,
     function_types: BTreeMap<usize, String>,
     lambda_types: BTreeMap<String, String>,
@@ -465,14 +464,12 @@ impl Compiler {
                 index += 1;
             }
             self.prepare_record_copies()?;
-            self.prepare_container_copies()?;
             self.prepare_enum_copies()?;
             self.prepare_derived_functions()?;
             if index == self.functions.len()
                 && self.record_copy_functions.iter().all(|(ty, id)| {
                     !self.native_operation_needed(*id) || self.record_copies.contains_key(ty)
                 })
-                && self.container_copies.len() == self.containers.len()
                 && self.enum_copy_functions.iter().all(|(ty, id)| {
                     !self.native_operation_needed(*id) || self.enum_copies.contains_key(ty)
                 })

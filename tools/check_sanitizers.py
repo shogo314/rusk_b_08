@@ -9,6 +9,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
+    ((ROOT/'examples/beta08/hash_copy_invalidation.rusk').read_text(),b'No',b'before\n',b'container changed during copy'),
+    ((ROOT/'examples/beta08/hash_copy_invalidation.rusk').read_text(),b'Yes',b'before\n',b'container changed during copy'),
+    ((ROOT/'examples/beta08/hash_assignment_lifetime.rusk').read_text(),b'Yes',b'before\n',b'container changed during assignment'),
+    ((ROOT/'examples/beta08/hash_assignment_lifetime.rusk').read_text(),b'No',b'before\n2 2 2\n'),
+    ((ROOT/'examples/beta08/hash_collection_copies.rusk').read_text(),b'',b'a zb\nzb!\n8 7 3\n8\nYes Yes\nYes No\nNo\n1\n'),
     ((ROOT/'examples/beta08/iterator_state_copies.rusk').read_text(),b'',b'3\n7 7\n8\n0\n2 4 6 2 4 6\n'),
     ((ROOT/'examples/beta08/hash_collection_iterators.rusk').read_text(),b'',b'key 5 Yes No\nNo No\nNo\nitem Yes No\nNo\nNo\n2 9\n2 9\n1 8\n'),
     ((ROOT/'examples/beta08/hash_collection_operations.rusk').read_text(),b'',b'2 No No Yes Yes 7\nempty some\n3 4 1\n5\nYes No\nYes No\nYes\nYes No 0 Yes\nZb\nZb!\n'),
@@ -300,14 +305,23 @@ def main():
         env['ASAN_OPTIONS']=env.get('ASAN_OPTIONS','')+':detect_leaks=0'
     with tempfile.TemporaryDirectory(prefix='rusk-sanitizers-') as directory:
         temp=Path(directory)
-        for source, data, expected in CASES:
+        for case in CASES:
+            source, data, expected = case[:3]
+            expected_error = case[3] if len(case) == 4 else None
             (temp/'main.rusk').write_text(source)
             subprocess.run([str(ROOT/'target/debug/rusk'),'compile',str(temp/'main.rusk'),'-o',str(temp/'main.cpp')],check=True)
             subprocess.run(['g++','-std=c++20','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',str(temp/'main.cpp'),'-o',str(temp/'main')],check=True)
             run=subprocess.run([str(temp/'main')],input=data,capture_output=True,env=env)
-            assert run.returncode == 0, run.stderr.decode(errors="replace")
+            assert run.returncode == (1 if expected_error else 0), run.stderr.decode(errors="replace")
             assert run.stdout==expected, (run.stdout,expected)
-            assert not run.stderr, run.stderr
+            if expected_error:
+                # A single Rusk diagnostic is expected; sanitizer reports must
+                # still fail, including reports produced during process exit.
+                assert len(run.stderr.splitlines()) == 1, run.stderr
+                assert run.stderr.startswith(str(temp/'main.rusk').encode()+b':'), run.stderr
+                assert run.stderr.rstrip().endswith(expected_error), run.stderr
+            else:
+                assert not run.stderr, run.stderr
     print(f'AddressSanitizer / UBSan: {len(CASES)} cases passed')
 
 if __name__ == '__main__':

@@ -28,7 +28,6 @@ impl Compiler {
         prelude += &self.record_cpp();
         prelude += &self.key_equal_cpp();
         prelude += &self.key_hash_cpp();
-        prelude += &self.container_declarations();
         prelude += &self.lazy_copy_declarations();
         prelude += &self.scalar_representation_checks();
         let (concrete_foreign_definitions, foreign_definitions): (Vec<_>, Vec<_>) = self
@@ -45,10 +44,7 @@ impl Compiler {
                 .map(|&id| self.functions[id].code.clone())
                 .collect()
         };
-        let epilogue = self.enum_copy_cpp()
-            + &self.record_copy_cpp()
-            + &self.container_copy_cpp()
-            + &self.lazy_copy_cpp();
+        let epilogue = self.enum_copy_cpp() + &self.record_copy_cpp() + &self.lazy_copy_cpp();
         crate::backend::Context {
             types: self.types.clone(),
             functions,

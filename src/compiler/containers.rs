@@ -59,23 +59,11 @@ impl Compiler {
         self.containers.insert(
             name.text.clone(),
             Container {
-                shape: shape.clone(),
+                shape,
                 arguments,
                 native: native.clone(),
             },
         );
-        let ty = &name.text;
-        self.native_function(
-            "copy",
-            vec![ty.clone()],
-            ty,
-            |cpp| {
-                format!("Obj<{native}> {cpp}(Obj<{native}> x,Loc loc){{return deep_copy(x,loc);}}")
-            },
-            &name.span,
-        )?;
-        let assign = "x->entries=std::move(snapshot->entries);++x->version;";
-        self.native_function("__assign__",vec![ty.clone(),ty.clone()],"Unit",|cpp|format!("void {cpp}(Obj<{native}> x,Obj<{native}> y,Loc loc){{auto snapshot=deep_copy(y,loc);{assign}}}"),&name.span)?;
         Ok(true)
     }
     pub(super) fn read_function(
@@ -121,42 +109,6 @@ impl Compiler {
         Ok(index)
     }
 
-    pub(super) fn prepare_container_copies(&mut self) -> Result<(), String> {
-        let todo = self
-            .containers
-            .iter()
-            .filter(|(ty, _)| !self.container_copies.contains_key(*ty))
-            .map(|(ty, c)| (ty.clone(), c.clone()))
-            .collect::<Vec<_>>();
-        for (ty, c) in todo {
-            let mut copies = vec![];
-            for argument in &c.arguments {
-                let span = Span {
-                    file: "<stdlib/containers>".into(),
-                    line: 1,
-                    column: 1,
-                };
-                let f = self
-                    .resolve(
-                        "copy",
-                        &[Value {
-                            ty: argument.clone(),
-                            id: ValueId::Probe,
-                        }],
-                        None,
-                        &span,
-                    )?
-                    .ok_or_else(|| {
-                        span.error(format!("container element '{argument}' requires copy"))
-                    })?;
-                self.same(argument, &self.functions[f].result, &span)?;
-                self.used.insert(f);
-                copies.push(f);
-            }
-            self.container_copies.insert(ty, copies);
-        }
-        Ok(())
-    }
     pub(super) fn container_cpp(&self) -> String {
         let mut code = String::new();
         for native in self.types.values().filter(|n| n.starts_with("RuskRecord")) {
@@ -180,17 +132,6 @@ impl Compiler {
             code += &format!("struct {native}:{base}<{args}>{{}};\n");
         }
         code
-    }
-    pub(super) fn container_declarations(&self) -> String {
-        self.containers
-            .values()
-            .map(|c| {
-                format!(
-                    "Obj<{}> deep_copy(const Obj<{}>& value,Loc loc=Loc{{\"<copy>\",0,0}});\n",
-                    c.native, c.native
-                )
-            })
-            .collect()
     }
     // Compatibility for the existing physical hash-key representation. Normal
     // Tuple comparison now resolves logical field operations in the library.
@@ -242,29 +183,6 @@ impl Compiler {
                 code += &format!("rusk_hash_combine(hash,rusk_hash_value(x->field_{i}));");
             }
             code += "return hash;}\n";
-        }
-        code
-    }
-    pub(super) fn container_copy_cpp(&self) -> String {
-        let mut code = String::new();
-        for (ty, c) in &self.containers {
-            let native = &c.native;
-            let copies = self.container_copies[ty]
-                .iter()
-                .map(|&i| self.functions[i].cpp.clone())
-                .collect::<Vec<_>>();
-            let body = match &c.shape {
-                Shape::Dict => format!(
-                    "auto result=make_obj<{native}>({native}{{}});for(const auto& entry:value->entries){{auto key={}(entry.first,loc);auto item={}(entry.second,loc);result->entries.emplace(key,item);}}return result;",
-                    copies[0], copies[1]
-                ),
-                Shape::Set => format!(
-                    "auto result=make_obj<{native}>({native}{{}});for(const auto& entry:value->entries)result->entries.insert({}(entry,loc));return result;",
-                    copies[0]
-                ),
-            };
-            code +=
-                &format!("Obj<{native}> deep_copy(const Obj<{native}>& value,Loc loc){{{body}}}\n");
         }
         code
     }

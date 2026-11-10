@@ -1707,7 +1707,9 @@ fn hash_collection_operations_work_with_unrelated_user_type_and_constructor_name
         .lines()
         .filter(|line| {
             let line = line.trim_start();
-            !line.starts_with("effects:") && !line.starts_with("representation:")
+            !line.starts_with("effects:")
+                && !line.starts_with("representation:")
+                && !line.starts_with("lower_")
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -1726,6 +1728,9 @@ let members:Members<Str>:=Members();wt members.insert("hello"),members.get("hell
 wt store.map((p:(Str,Option<Int>))=>p[1]??0).fold(0,(a:Int,b:Int)=>a+b);
 wt members.map((s:Str)=>s.len()).fold(0,(a:Int,b:Int)=>a+b);
 wt members.erase("hello"),!members;
+let saved=store;store["some"]:=Some(9);wt saved["some"]?!,store["some"]?!;
+let alias:=members;let replacement:=Members::<Str>();replacement.insert("new");
+members=replacement;replacement.clear();wt alias.contains("new"),replacement.contains("new");
 "#
     ));
     for options in [vec![], vec!["--no-opt"]] {
@@ -1737,7 +1742,7 @@ wt members.erase("hello"),!members;
         );
         assert_eq!(
             out.stdout,
-            b"Yes 3 2\nempty some\n8\nYes hello\n3\n5\nYes Yes\n"
+            b"Yes 3 2\nempty some\n8\nYes hello\n3\n5\nYes Yes\n3 9\nYes No\n"
         );
     }
 }
@@ -1852,5 +1857,144 @@ fn lazy_iterator_copy_uses_declared_vector_and_range_state_copies() {
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(out.stdout, b"3\n7 7\n8\n0\n2 4 6 2 4 6\n");
+    }
+}
+
+#[test]
+fn hash_copies_and_assignments_preserve_deep_values_outer_aliases_and_unit() {
+    let case = Case::new(include_str!(
+        "../examples/beta08/hash_collection_copies.rusk"
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"a zb\nzb!\n8 7 3\n8\nYes Yes\nYes No\nNo\n1\n");
+    }
+}
+
+#[test]
+fn hash_types_only_require_value_copy_when_copy_is_requested() {
+    let source = r#"
+extern type Token{cpp_name:"std::int64_t",}
+extern fn token()->Token{cpp_name:"uncopyable_token",code:"Obj<std::int64_t> uncopyable_token(Loc){return make_obj<std::int64_t>(7);}",}
+extern fn number(x:Token)->Int{cpp_name:"token_number",code:"Obj<std::int64_t> token_number(Obj<std::int64_t> x,Loc){return x;}",}
+let d:=Dict::<Int,Token>();d.set(1,token());wt d.len(),number(d.get(1)?!);
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 7\n");
+    }
+    let out = Case::new(&format!("{source}let duplicate=d;")).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("main.rusk:") && error.contains("copy"),
+        "{error}"
+    );
+    let sharing = format!(
+        r#"{source}
+extern fn copy(x:Token)->Token{{cpp_name:"shared_token_copy",code:"Obj<std::int64_t> shared_token_copy(Obj<std::int64_t> x,Loc){{return x;}}",}}
+let duplicate=d;let shared:=number(duplicate.get(1)?!);shared=9;wt number(d.get(1)?!);
+"#
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(&sharing).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 7\n9\n");
+    }
+}
+
+#[test]
+fn hash_copy_readonly_contract_depends_on_actual_element_copies() {
+    let source = r#"
+fn clone(readonly noescape source:Dict<Int,Vec<Int>>)->Dict<Int,Vec<Int>>{return copy(source);}
+let d:=Dict::<Int,Vec<Int>>();d.set(1,[4]);let independent:=clone(d);
+independent.get(1)?![0]=9;wt d.get(1)?!,independent.get(1)?!;
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"4 9\n");
+    }
+    let source = r#"
+extern type Token{cpp_name:"std::int64_t",}
+extern fn copy(x:Token)->Token{cpp_name:"opaque_token_copy",code:"Obj<std::int64_t> opaque_token_copy(Obj<std::int64_t> x,Loc){return x;}",}
+fn clone(readonly noescape source:Dict<Int,Token>)->Dict<Int,Token>{return copy(source);}
+"#;
+    let out = Case::new(source).compile();
+    assert!(!out.status.success());
+    let error = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        error.contains("readonly") || error.contains("noescape"),
+        "{error}"
+    );
+}
+
+#[test]
+fn hash_copy_guards_user_calls_and_deferred_source_value_cleanup() {
+    for operation in [
+        "let duplicate=d;",
+        "let target:=Dict::<Int,Leaf>();target=d;",
+    ] {
+        let source = include_str!("../examples/beta08/hash_copy_invalidation.rusk")
+            .replace("let duplicate=d;", operation);
+        for input in ["No", "Yes"] {
+            for options in [vec![], vec!["--no-opt"]] {
+                let out = Case::new(&source).run_with_options(input, &options);
+                assert!(!out.status.success());
+                assert_eq!(out.stdout, b"before\n");
+                let error = String::from_utf8_lossy(&out.stderr);
+                assert!(
+                    error.contains("main.rusk:") && error.contains("container changed during copy"),
+                    "{source}\n{error}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn hash_assignment_publishes_snapshot_before_cleanup_and_checks_reentry() {
+    let case = Case::new(include_str!(
+        "../examples/beta08/hash_assignment_lifetime.rusk"
+    ));
+    for mutate in [false, true] {
+        for options in [vec![], vec!["--no-opt"]] {
+            let out = case.run_with_options(if mutate { "Yes" } else { "No" }, &options);
+            if mutate {
+                assert!(!out.status.success());
+                assert_eq!(out.stdout, b"before\n");
+                let error = String::from_utf8_lossy(&out.stderr);
+                assert!(
+                    error.contains("main.rusk:")
+                        && error.contains("container changed during assignment"),
+                    "{error}"
+                );
+            } else {
+                assert!(
+                    out.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                assert_eq!(out.stdout, b"before\n2 2 2\n");
+            }
+        }
     }
 }

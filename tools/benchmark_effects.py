@@ -18,6 +18,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'dictionary_copy_assignment': ('let d:=Dict::<Int,Vec<Int>>();for i in 0..500{d.set(i,[i,i+1]);}'
+        'let target:=Dict::<Int,Vec<Int>>();let total:=0;for round in 0..100{let duplicate=d;'
+        'target=duplicate;total+=target.get(round%500)?![0];}wt total,target.len();'),
+    'set_copy_assignment': ('let s:=Set::<(Int,Int)>();for i in 0..1000{s.insert((i,i+1));}'
+        'let target:=Set::<(Int,Int)>();let total:=0;for round in 0..100{let duplicate=s;'
+        'target=duplicate;if target.contains((round,round+1)){total+=1;}}wt total,target.len();'),
     'dictionary_iteration': ('let d:=Dict::<Int,Int>();for i in 0..1000{d.set(i,i*3);}'
         'let total:=0;for round in 0..200{for entry in d{total+=entry[0]+entry[1];}}wt total;'),
     'set_iterator_copy': ('let s:=Set::<Int>();for i in 0..1000{s.insert(i);}'

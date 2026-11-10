@@ -1,0 +1,11 @@
+extern type Leaf{cpp_name:"std::int64_t",}
+extern symbol hash_copy_state{code:"std::function<void()> mutate_hash_owner,replace_hash_value;bool deferred_hash_cleanup=false;",}
+extern fn watch<K,V>(owner:Dict<K,V>){
+ code:"void @{fn}(Obj<@{Dict<K,V>}> owner,Loc){mutate_hash_owner=[owner](){owner->entries.clear();++owner->version;};replace_hash_value=[owner](){for(auto& entry:owner->entries)entry.second=make_obj<@{V}>(*entry.second);};}",
+}
+extern fn leaf()->Leaf{cpp_name:"hash_copy_leaf",code:"Obj<std::int64_t> hash_copy_leaf(Loc){return Obj<std::int64_t>(new std::int64_t(4),[](auto* p){delete p;if(deferred_hash_cleanup&&mutate_hash_owner)mutate_hash_owner();});}",}
+extern fn copy(x:Leaf)->Leaf{cpp_name:"hash_copy_leaf_value",code:"Obj<std::int64_t> hash_copy_leaf_value(Obj<std::int64_t> x,Loc){if(deferred_hash_cleanup)replace_hash_value();else mutate_hash_owner(); return make_obj<std::int64_t>(*x);}",}
+extern fn configure(mode:Bool){cpp_name:"configure_hash_cleanup",code:"void configure_hash_cleanup(Obj<bool> mode,Loc){deferred_hash_cleanup=*mode;}",}
+in deferred:Bool;configure(deferred);
+let d:=Dict::<Int,Leaf>();d.set(1,leaf());watch(d);wt "before";
+let duplicate=d;

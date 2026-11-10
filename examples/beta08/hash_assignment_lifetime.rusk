@@ -1,0 +1,12 @@
+extern type Leaf{cpp_name:"std::int64_t",}
+extern symbol hash_assignment_state{code:"std::function<void()> observe_displaced_value;",}
+extern fn watch<K,V>(owner:Dict<K,V>,seen:Int,mutate:Bool){
+ code:"void @{fn}(Obj<@{Dict<K,V>}> owner,Obj<@{Int}> seen,Obj<@{Bool}> mutate,Loc){observe_displaced_value=[owner,seen,mutate](){*seen=static_cast<std::int64_t>(owner->entries.size());if(*mutate){owner->entries.clear();++owner->version;}};}",
+}
+extern fn leaf()->Leaf{cpp_name:"displaced_hash_leaf",code:"Obj<std::int64_t> displaced_hash_leaf(Loc){return Obj<std::int64_t>(new std::int64_t(4),[](auto* p){delete p;if(observe_displaced_value)observe_displaced_value();});}",}
+extern fn plain()->Leaf{cpp_name:"plain_hash_leaf",code:"Obj<std::int64_t> plain_hash_leaf(Loc){return make_obj<std::int64_t>(7);}",}
+extern fn copy(x:Leaf)->Leaf{cpp_name:"displaced_hash_leaf_copy",code:"Obj<std::int64_t> displaced_hash_leaf_copy(Obj<std::int64_t> x,Loc){return make_obj<std::int64_t>(*x);}",}
+in mutate:Bool;
+let target:=Dict::<Int,Leaf>();target.set(1,leaf());let alias:=target;
+let source:=Dict::<Int,Leaf>();source.set(2,plain());source.set(3,plain());
+let seen:=0;watch(target,seen,mutate);wt "before";target=source;wt seen,alias.len(),source.len();
