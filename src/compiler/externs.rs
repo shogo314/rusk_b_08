@@ -217,7 +217,7 @@ impl Compiler {
                 ));
             }
             generics::parameters_valid(parameters)?;
-            if kind != "record_copy"
+            if !matches!(kind.as_str(), "record_copy" | "enum_copy")
                 || parameters.len() != 1
                 || arguments.len() != 1
                 || arguments[0].1.text != parameters[0].text
@@ -227,7 +227,7 @@ impl Compiler {
                     .any(|key| !matches!(key.as_str(), "code" | "derive"))
             {
                 return Err(name.span.error(
-                    "invalid native record copy derivation; expected one type parameter and (T)->T",
+                    "invalid native copy derivation; expected one type parameter and (T)->T",
                 ));
             }
             if self
@@ -403,13 +403,31 @@ impl Compiler {
                         return Err(span.error(format!("unbound native field index '{index}'")));
                     }
                 }
+                Part::Variants { ty, index, parts } => {
+                    self.validate_scoped_native_type(&ty, parameters, indices, span)?;
+                    if parameters.iter().any(|p| p.text == index) || indices.contains(&index) {
+                        return Err(span.error(format!(
+                            "native variants binding '{index}' shadows an existing binding"
+                        )));
+                    }
+                    let mut indices = indices.clone();
+                    indices.insert(index);
+                    self.validate_native_parts(parts, parameters, &indices, span)?;
+                }
                 Part::Fields {
                     ty,
+                    variant,
                     element,
                     index,
                     parts,
                 } => {
                     self.validate_scoped_native_type(&ty, parameters, indices, span)?;
+                    if let Some(variant) = variant
+                        && variant.parse::<usize>().is_err()
+                        && !indices.contains(&variant)
+                    {
+                        return Err(span.error(format!("unbound native variant index '{variant}'")));
+                    }
                     for name in [&element, &index] {
                         if parameters.iter().any(|p| &p.text == name) || indices.contains(name) {
                             return Err(span.error(format!(
@@ -548,8 +566,42 @@ impl Compiler {
                         })?;
                     output.push_str(value);
                 }
+                Part::Variants { ty, index, parts } => {
+                    let ty = generics::substitute(&ty, bindings);
+                    self.check_type(&Name {
+                        text: ty.clone(),
+                        span: span.clone(),
+                    })?;
+                    let count = self
+                        .enums
+                        .get(&ty)
+                        .ok_or_else(|| {
+                            span.error(format!(
+                                "native variants reference requires an enum; got '{ty}'"
+                            ))
+                        })?
+                        .variants
+                        .len();
+                    for i in 0..count {
+                        if *budget == 0 {
+                            return Err(span.error("native field expansion work limit exceeded"));
+                        }
+                        *budget -= 1;
+                        let mut scoped = bindings.clone();
+                        scoped.insert(index.clone(), i.to_string());
+                        output.push_str(&self.render_native_parts(
+                            parts.clone(),
+                            &scoped,
+                            function,
+                            span,
+                            owner,
+                            budget,
+                        )?);
+                    }
+                }
                 Part::Fields {
                     ty,
+                    variant,
                     element,
                     index,
                     parts,
@@ -565,19 +617,40 @@ impl Compiler {
                     {
                         return Err(span.error("callable environment fields are private"));
                     }
-                    let fields = self
-                        .records
-                        .get(&ty)
-                        .ok_or_else(|| {
-                            span.error(format!(
-                                "native fields reference requires a struct or Tuple; got '{ty}'"
-                            ))
-                        })?
-                        .fields
-                        .clone();
+                    let fields = if let Some(variant) = variant {
+                        let variant = bindings
+                            .get(&variant)
+                            .unwrap_or(&variant)
+                            .parse::<usize>()
+                            .map_err(|_| span.error("unbound native variant index"))?;
+                        self.enums
+                            .get(&ty)
+                            .ok_or_else(|| {
+                                span.error(format!(
+                                    "native payload reference requires an enum; got '{ty}'"
+                                ))
+                            })?
+                            .variants
+                            .get(variant)
+                            .ok_or_else(|| span.error("native variant index out of range"))?
+                            .1
+                            .clone()
+                    } else {
+                        self.records
+                            .get(&ty)
+                            .ok_or_else(|| {
+                                span.error(format!(
+                                    "native fields reference requires a struct or Tuple; got '{ty}'"
+                                ))
+                            })?
+                            .fields
+                            .iter()
+                            .map(|(_, field)| field.clone())
+                            .collect()
+                    };
                     // Each iteration has a lexical binding scope. Expansion
                     // reuses ordinary typed references, including dependencies.
-                    for (i, (_, field)) in fields.into_iter().enumerate() {
+                    for (i, field) in fields.into_iter().enumerate() {
                         if *budget == 0 {
                             return Err(span.error("native field expansion work limit exceeded"));
                         }
@@ -814,17 +887,17 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
             (
                 DERIVE.replace("record_copy", "unknown_role"),
                 true,
-                "invalid native record copy derivation",
+                "invalid native copy derivation",
             ),
             (
                 DERIVE.replace("->Element", "->Unit"),
                 true,
-                "invalid native record copy derivation",
+                "invalid native copy derivation",
             ),
             (
                 DERIVE.replace("<Element>", "<Element,Other>"),
                 true,
-                "invalid native record copy derivation",
+                "invalid native copy derivation",
             ),
             (
                 format!("{DERIVE}{DERIVE}"),
@@ -849,5 +922,36 @@ extern fn unrelated_template_name<Element>(value:Element)->Element {
                 .unwrap_err();
             assert!(error.contains(expected), "{error}");
         }
+    }
+    #[test]
+    fn enum_copy_derivation_uses_source_provenance_and_a_name_independent_role() {
+        let mut declarations=crate::parse(include_str!("../../lib/collections.rusk"),"other-library.rusk").unwrap().into_iter()
+            .filter(|s|matches!(s,Stmt::GenericExternFunction(_,_,_,_,p) if p.get("derive").is_some_and(|kind|kind == "enum_copy"))).collect::<Vec<_>>();
+        for statement in &mut declarations {
+            if let Stmt::GenericExternFunction(name, _, _, _, properties) = statement {
+                name.text = "renamed_sum_implementation".into();
+                properties
+                    .get_mut("code")
+                    .unwrap()
+                    .insert_str(0, "/* source_sum_derivation */ ");
+            }
+        }
+        let user = Source::user(
+            crate::parse(
+                "enum Event{Empty,Present(Int),}let a:=Event::Present(1);let b=a;",
+                "caller.rusk",
+            )
+            .unwrap(),
+        );
+        let types = Source::standard(crate::parse(TYPES, "types.rusk").unwrap());
+        let cpp = Compiler::default()
+            .compile(
+                &[types, Source::standard(declarations), user],
+                crate::backend::Emit::Cpp,
+            )
+            .unwrap();
+        assert!(cpp.contains("/* source_sum_derivation */ Obj<RuskEnum0> deep_copy"));
+        assert!(cpp.contains("field_copy(rusk_enum_payload<RuskEnum0,1>(snapshot).field_0,loc)"));
+        assert!(!cpp.contains("renamed_sum_implementation("));
     }
 }

@@ -273,34 +273,17 @@ impl Compiler {
             .enums
             .iter()
             .filter(|(ty, _)| !self.enum_copies.contains_key(*ty))
-            .map(|(ty, e)| (ty.clone(), e.clone()))
+            .map(|(ty, _)| ty.clone())
             .collect::<Vec<_>>();
-        for (ty, e) in todo {
-            let mut variants = vec![];
-            for (_, fields) in e.variants {
-                let mut copies = vec![];
-                for field in fields {
-                    let index = self
-                        .resolve(
-                            "copy",
-                            &[Value {
-                                ty: field.text.clone(),
-                                id: ValueId::Probe,
-                            }],
-                            None,
-                            &field.span,
-                        )?
-                        .ok_or_else(|| field.span.error("enum payload requires copy"))?;
-                    self.same(&field.text, &self.functions[index].result, &field.span)?;
-                    self.used.insert(index);
-                    self.abi_reference(index, true);
-                    copies.push(index);
-                }
-                variants.push(copies);
-            }
+        for ty in todo {
             let index = self.enum_copy_functions[&ty];
-            self.set_derived_copy_dependencies(index, &ty, variants.iter().flatten().copied())?;
-            self.enum_copies.insert(ty, variants);
+            let code = self.render_derived_copy(
+                "enum_copy",
+                &ty,
+                index,
+                &self.functions[index].name.span.clone(),
+            )?;
+            self.enum_copies.insert(ty, code);
         }
         Ok(())
     }
@@ -406,28 +389,6 @@ impl Compiler {
         code
     }
     pub(super) fn enum_copy_cpp(&self) -> String {
-        let mut code = String::new();
-        for (ty, variants) in &self.enum_copies {
-            let native = &self.types[ty];
-            code += &format!(
-                "Obj<{native}> deep_copy(const Obj<{native}>& value,[[maybe_unused]] Loc loc){{auto snapshot=value->value;switch(rusk_enum_index<{native}>(snapshot)){{"
-            );
-            for (i, fields) in variants.iter().enumerate() {
-                code += &format!("case {i}:{{");
-                for (j, f) in fields.iter().enumerate() {
-                    code += &format!(
-                        "auto field_{j}={}(rusk_enum_payload<{native},{i}>(snapshot).field_{j},loc);",
-                        self.abi_reference_name(*f, true)
-                    );
-                }
-                let args = (0..fields.len())
-                    .map(|j| format!("std::move(field_{j})"))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                code += &format!("return rusk_enum_make<{native},{i}>({args});}}");
-            }
-            code += "default:fail(loc,\"invalid enum tag\");}}\n";
-        }
-        code
+        self.enum_copies.values().cloned().collect()
     }
 }

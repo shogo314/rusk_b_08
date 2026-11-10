@@ -150,36 +150,13 @@ impl Compiler {
             .cloned()
             .collect();
         for record in records {
-            let definition = self
-                .native_derivations
-                .get("record_copy")
-                .cloned()
-                .ok_or_else(|| {
-                    record
-                        .name
-                        .span
-                        .error("missing standard record copy derivation")
-                })?;
             let copy_index = self.record_copy_functions[&record.name.text];
-            self.functions[copy_index].origin = definition.origin;
-            let bindings = BTreeMap::from([(
-                definition.parameters[0].text.clone(),
-                record.name.text.clone(),
-            )]);
-            let code = self.render_native(
-                &definition.foreign.as_ref().unwrap()["code"],
-                &bindings,
-                Some("deep_copy"),
-                &definition.name.span,
-                true,
-                Some(copy_index),
+            let code = self.render_derived_copy(
+                "record_copy",
+                &record.name.text,
+                copy_index,
+                &record.name.span,
             )?;
-            let dependencies = self
-                .native_contract_dependencies
-                .get(&copy_index)
-                .cloned()
-                .unwrap_or_default();
-            self.set_derived_copy_dependencies(copy_index, &record.name.text, dependencies)?;
             self.record_copies.insert(record.name.text, code);
         }
         Ok(())

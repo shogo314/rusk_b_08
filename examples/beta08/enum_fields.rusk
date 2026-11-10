@@ -1,0 +1,16 @@
+extern fn snapshot_copy<T>(value:T)->T {
+    code:"Obj<@{T}> @{fn}(Obj<@{T}> value,[[maybe_unused]] Loc loc){auto snapshot=value->value;switch(rusk_enum_index<@{T}>(snapshot)){@{variants T as V}case @{index V}:{@{fields T variant V as F,I}auto field_@{index I}=@{boxed_call copy(F)->F}(rusk_enum_payload<@{T},@{index V}>(snapshot).field_@{index I},loc);@{end}return std::apply([](auto&&... fields){return rusk_enum_make<@{T},@{index V}>(std::move(fields)...);},std::tuple{@{fields T variant V as F,I}std::move(field_@{index I}),@{end}});}@{end}default:fail(loc,\"invalid enum tag\");}}",
+}
+
+extern fn same_unit(a:Unit,b:Unit)->Bool {
+    cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",
+}
+enum State { Empty, Pair(Char,Unit), }
+let text:="abc";let unit:={};let value:=State::Pair(text[0],unit);
+let copied:=snapshot_copy(value);value:=State::Empty;text+="!";
+match copied { Pair(c,u)=>{wt text,c,same_unit(u,unit);}, _=>{}, };
+enum Reversed<T> { Missing, Present(T), }
+let present:=snapshot_copy(Reversed::Present(7));
+match present { Present(n)=>{wt n;}, _=>{}, };
+let missing:Reversed<Int>:=snapshot_copy(Reversed::Missing);
+match missing { Missing=>{wt "empty";}, _=>{}, };

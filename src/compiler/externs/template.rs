@@ -18,8 +18,14 @@ pub(super) enum InvokeKind {
 
 #[derive(Clone)]
 pub(super) enum Part {
+    Variants {
+        ty: String,
+        index: String,
+        parts: Vec<Part>,
+    },
     Fields {
         ty: String,
+        variant: Option<String>,
         element: String,
         index: String,
         parts: Vec<Part>,
@@ -219,7 +225,20 @@ fn parse_parts(
                 Err("native field expansion end without fields".into())
             };
         }
-        if body && let Some(header) = header.strip_prefix("fields ") {
+        if body && let Some(header) = header.strip_prefix("variants ") {
+            let (ty, index) = header
+                .split_once(" as ")
+                .ok_or("invalid native variants reference; expected variants Type as Index")?;
+            let (ty, index) = (ty.trim(), index.trim());
+            if !valid_type(ty) || !identifier(index) {
+                return Err("invalid native variants binding or type".into());
+            }
+            parts.push(Part::Variants {
+                ty: ty.into(),
+                index: index.into(),
+                parts: parse_parts(rest, body, depth + 1, budget)?,
+            });
+        } else if body && let Some(header) = header.strip_prefix("fields ") {
             let (ty, binders) = header
                 .split_once(" as ")
                 .ok_or("invalid native fields reference; expected fields Type as Element,Index")?;
@@ -227,11 +246,21 @@ fn parse_parts(
                 .split_once(',')
                 .ok_or("invalid native fields bindings")?;
             let (ty, element, index) = (ty.trim(), element.trim(), index.trim());
+            let (ty, variant) = if let Some((ty, variant)) = ty.split_once(" variant ") {
+                let variant = variant.trim();
+                if !identifier(variant) && variant.parse::<usize>().is_err() {
+                    return Err("invalid native variant index".into());
+                }
+                (ty.trim(), Some(variant.to_string()))
+            } else {
+                (ty, None)
+            };
             if !valid_type(ty) || !identifier(element) || !identifier(index) || element == index {
                 return Err("invalid native fields bindings or type".into());
             }
             parts.push(Part::Fields {
                 ty: ty.into(),
+                variant,
                 element: element.into(),
                 index: index.into(),
                 parts: parse_parts(rest, body, depth + 1, budget)?,

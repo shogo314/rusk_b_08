@@ -87,7 +87,7 @@ pub struct Compiler {
     types: BTreeMap<String, String>,
     enum_definitions: BTreeMap<String, enums::Definition>,
     enums: BTreeMap<String, enums::Enum>,
-    enum_copies: BTreeMap<String, Vec<Vec<usize>>>,
+    enum_copies: BTreeMap<String, String>,
     enum_copy_functions: BTreeMap<String, usize>,
     preparing_enums: Vec<String>,
     containers: BTreeMap<String, containers::Container>,

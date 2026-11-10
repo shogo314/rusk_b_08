@@ -3,6 +3,7 @@
 #include <functional>
 #include <chrono>
 #include <variant>
+#include <tuple>
 // Empty-or-one-shared-value enums use the null pointer as their empty tag.
 // This is a layout optimization for any enum of that shape, including Option.
 template<class E,class S> std::size_t rusk_enum_index(const S& value){

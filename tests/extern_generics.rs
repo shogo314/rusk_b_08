@@ -1140,3 +1140,162 @@ fn native_field_expansions_have_depth_and_work_limits() {
     );
     assert!(!case.0.join("main.cpp").exists());
 }
+
+#[test]
+fn native_variants_copy_payloads_using_logical_operations_under_an_unrelated_name() {
+    let source = include_str!("../lib/collections.rusk");
+    let start = source.find("extern fn sum_copy_body<").unwrap();
+    let end = source[start..]
+        .find("// Standard Option operations")
+        .unwrap()
+        + start;
+    let declaration = source[start..end]
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("derive:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("fn sum_copy_body<", "fn external_enum_clone<")
+        .replace("const Obj<@{T}>& value", "Obj<@{T}> value");
+    let case = Case::new(&format!(
+        r#"{declaration}
+extern type Score{{cpp_name:"std::int64_t",}}
+extern fn score(x:Int)->Score{{cpp_name:"score",code:"Obj<std::int64_t> score(Obj<std::int64_t> x,Loc){{return x;}}",}}
+extern fn copy(x:Score)->Score{{cpp_name:"copy_score",code:"Obj<std::int64_t> copy_score(Obj<std::int64_t> x,Loc){{return make_obj<std::int64_t>(*x+100);}}",}}
+extern fn number(x:Score)->Int{{cpp_name:"number",code:"Obj<std::int64_t> number(Obj<std::int64_t> x,Loc){{return x;}}",}}
+extern fn same_unit(a:Unit,b:Unit)->Bool{{cpp_name:"same_unit",code:"Obj<bool> same_unit(Obj<Unit> a,Obj<Unit> b,Loc){{return make_obj<bool>(a==b);}}",}}
+struct V{{value:Int;}}struct F{{value:Int;}}struct I{{value:Int;}}
+enum Event{{Empty,Row(Int,Score,Unit),Text(Char),}}
+let unit:={{}};let original:=Event::Row(1,score(2),unit);let copied:=external_enum_clone(original);
+original:=Event::Empty;match copied{{Row(n,s,u)=>{{wt n,number(s),same_unit(u,unit);}},_=>{{}},}};
+let text:="abc";let held:=Event::Text(text[0]);let detached:=external_enum_clone(held);held:=Event::Empty;
+text+="!";match detached{{Text(c)=>{{wt text,c;}},_=>{{}},}};
+enum Reversed<T>{{Missing,Present(T),}}
+let a:=external_enum_clone(Reversed::Present(9));match a{{Present(n)=>{{wt n;}},_=>{{}},}};
+let b:Reversed<Int>:=external_enum_clone(Reversed::Missing);match b{{Missing=>{{wt "empty";}},_=>{{}},}};
+let optional:=external_enum_clone(Some(unit));wt same_unit(optional.value(),unit);
+"#
+    ));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"1 102 No\nabc! a\n9\nempty\nNo\n");
+    }
+}
+
+#[test]
+fn native_variant_scopes_support_nested_enums_and_constant_payload_indices() {
+    let case = Case::new(
+        r#"
+extern fn shape<T>(x:T)->Int {
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}>,Loc){std::int64_t sum=0;@{variants T as V}sum+=@{index V};@{fields T variant V as F,I}@{variants F as W}sum+=10+@{index W};@{fields F variant W as G,J}sum+=100+@{index J};@{end}@{end}@{end}@{end}return make_obj<@{Int}>(sum);}",
+}
+extern fn second_width<T>(x:T)->Int {
+    code:"Obj<@{Int}> @{fn}(Obj<@{T}>,Loc){std::int64_t n=0;@{fields T variant 1 as F,I}++n;@{end}return make_obj<@{Int}>(n);}",
+}
+enum Inner{One(Int),Two(Int,Int),}enum Outer{Empty,Values(Inner,Inner),}
+wt shape(Outer::Empty),second_width(Outer::Empty);
+"#,
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"645 2\n");
+    }
+}
+
+#[test]
+fn invalid_native_variants_and_payload_scopes_fail_before_cpp() {
+    for (code, expected) in [
+        (
+            "@{variants Missing<T> as V}@{end}",
+            "unknown type constructor",
+        ),
+        ("@{variants T as T}@{end}", "shadows"),
+        (
+            "@{variants T as V}@{variants T as V}@{end}@{end}",
+            "shadows",
+        ),
+        (
+            "@{variants T as V}@{V}@{end}",
+            "index cannot be used as a type",
+        ),
+        (
+            "@{variants T as V}@{end}@{index V}",
+            "unbound native field index",
+        ),
+        (
+            "@{fields T variant V as F,I}@{end}",
+            "unbound native variant index",
+        ),
+        (
+            "@{fields T variant -1 as F,I}@{end}",
+            "invalid native variant index",
+        ),
+        (
+            "@{variants T as V}@{fields T variant V as F,V}@{end}@{end}",
+            "shadows",
+        ),
+    ] {
+        let case = Case::new(&format!("extern fn unused<T>(x:T){{code:\"{code}\",}}"));
+        let out = case.compile();
+        assert!(!out.status.success());
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(expected),
+            "{code}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+    for (code, source, expected) in [
+        ("@{variants T as V}@{end}", "bad(1);", "requires an enum"),
+        (
+            "@{fields T variant 0 as F,I}@{end}",
+            "bad((1,2));",
+            "requires an enum",
+        ),
+        (
+            "@{fields T variant 2 as F,I}@{end}",
+            "enum E{A,B}bad(E::A);",
+            "index out of range",
+        ),
+    ] {
+        let case = Case::new(&format!(
+            r#"extern fn bad<T>(x:T){{code:"void @{{fn}}(Obj<@{{T}}>,Loc){{{code}}}",}}{source}"#
+        ));
+        let out = case.compile();
+        assert!(!out.status.success());
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains(expected),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!case.0.join("main.cpp").exists());
+    }
+}
+
+#[test]
+fn native_variants_share_the_structural_expansion_work_limit() {
+    let variants = (0..70)
+        .map(|i| format!("V{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let case = Case::new(&format!(
+        r#"extern fn wide<T>(x:T){{code:"void @{{fn}}(Obj<@{{T}}>,Loc){{@{{variants T as V}}@{{variants T as W}}@{{index W}};@{{end}}@{{end}}}}",}}enum E{{{variants}}}wide(E::V0);"#
+    ));
+    let out = case.compile();
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("work limit exceeded"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!case.0.join("main.cpp").exists());
+}
