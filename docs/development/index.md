@@ -14,7 +14,7 @@
 | `build.rs` | パーサーを `OUT_DIR` に生成 |
 | `src/frontend/rusk_grammar.rs` | 生成パーサーから構文木を受け取る |
 | `src/frontend/ast.rs` | ソース位置を持つ AST への変換 |
-| `src/compiler/mod.rs` と `src/compiler/` | 名前・型・初期化・具体化の検査、HIR生成とネイティブ実装の登録 |
+| `src/compiler/` | 名前・型・初期化・具体化の検査、HIR生成とネイティブ実装の登録 |
 | `src/ir/hir/mod.rs` と `src/ir/hir/validate.rs` | 型・参照先が解決済みのHIRと整合性検査 |
 | `src/ir/lir/mod.rs` | 基本ブロック・分岐・ジャンプ・解放を持つLIRと検査 |
 | `src/analysis/` | 束縛・効果・readonly/noescapeと診断経路の解析 |

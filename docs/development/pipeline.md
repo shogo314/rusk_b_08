@@ -37,6 +37,12 @@ g++ -std=c++20 -O2 /tmp/control.cpp -o /tmp/control
 
 ダンプは内部構造の確認用で、形式を固定した交換用ファイルではありません。HIR/LIRの `main` は末尾にあり、関数一覧には外部・標準関数のシグネチャも含みます。変数は `Local(n)`、仮引数は `Parameter(n)`、呼び出しは `function: n` で参照先を確認できます。
 
+## コンパイル工程の実装
+
+`compiler/mod.rs`の`Compiler::compile`は、宣言登録、本体の準備、HIR構築、LIRへの変換と解析、指定した形式の出力を順に呼び出します。宣言登録は`compiler/declarations.rs`にまとめ、型・ジェネリック宣言、enum、型情報の検査、具体関数・外部シンボルの順序を保ちます。
+
+`compiler/pipeline.rs`は、未使用を含む関数本体とトップレベル文の検査、具体化によって増える本体・導出操作・native型の準備を完了させます。native契約の依存は不透明な状態から検証し、効果の固定点が確定してからnoescape・readonlyを検証します。HIR/LIRの整合性検査は、各解析の前後に行います。
+
 ## CSTとAST
 
 `rusk.par` から処理系のビルド時にParolのパーサーを生成し、`src/frontend/rusk_grammar.rs` が構文木を受け取ります。不要な句読点などは文法の指定で省かれるため、完全なソースの再出力を目的とした損失のないCSTではありません。
