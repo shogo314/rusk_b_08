@@ -603,7 +603,10 @@ impl Compiler {
                     indices.insert(index);
                     self.validate_native_parts(parts, &parameters, &indices, span)?;
                 }
-                Part::Type(ty) | Part::ReturnType(ty) | Part::Finish(ty) => {
+                Part::Type(ty)
+                | Part::NonUnitType(ty)
+                | Part::ReturnType(ty)
+                | Part::Finish(ty) => {
                     self.validate_scoped_native_type(&ty, parameters, indices, span)?
                 }
                 Part::Invoke {
@@ -990,6 +993,19 @@ impl Compiler {
                             .entry(current.clone())
                             .or_default()
                             .insert(ty.clone());
+                    }
+                    output.push_str(&self.types[&ty]);
+                }
+                Part::NonUnitType(ty) => {
+                    let ty = generics::substitute(&ty, bindings);
+                    self.check_type(&Name {
+                        text: ty.clone(),
+                        span: span.clone(),
+                    })?;
+                    if ty == "Unit" {
+                        return Err(span.error(
+                            "native nonunit reference requires a value type other than Unit",
+                        ));
                     }
                     output.push_str(&self.types[&ty]);
                 }

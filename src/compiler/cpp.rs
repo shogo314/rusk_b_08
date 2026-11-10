@@ -24,15 +24,10 @@ impl Compiler {
         prelude += &self.enum_forwards();
         prelude += &self.record_forwards();
         if !self.native_type_prelude.is_empty() {
-            for it in self.iterator_types.values() {
-                prelude += &format!("struct {};\n", it.native);
-            }
             prelude += &self.native_type_prelude;
         }
         prelude += &self.enum_cpp();
-        prelude += &self.lazy_cpp();
         prelude += &self.record_cpp();
-        prelude += &self.lazy_copy_declarations();
         prelude += &self.scalar_representation_checks();
         let (concrete_foreign_definitions, foreign_definitions): (Vec<_>, Vec<_>) = self
             .used
@@ -48,7 +43,7 @@ impl Compiler {
                 .map(|&id| self.functions[id].code.clone())
                 .collect()
         };
-        let epilogue = self.enum_copy_cpp() + &self.record_copy_cpp() + &self.lazy_copy_cpp();
+        let epilogue = self.enum_copy_cpp() + &self.record_copy_cpp();
         crate::backend::Context {
             types: self.types.clone(),
             functions,

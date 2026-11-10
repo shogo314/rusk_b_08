@@ -32,10 +32,6 @@ impl Compiler {
                     Type::Record(fields())
                 } else if let Some(meta) = self.native_types.get(name) {
                     meta.kind.clone()
-                } else if let Some(it) = self.iterator_types.get(name) {
-                    Type::Iterator {
-                        element: it.element.clone(),
-                    }
                 } else {
                     Type::Opaque
                 };

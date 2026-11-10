@@ -1,0 +1,68 @@
+// Lazy state and operations use ordinary type, callable, and ABI references.
+extern symbol __runtime_lazy_iterators__ {
+    code:"template<class I,class F,class R,bool Filter> struct RuskLazyIterator {\n    Obj<I> source;Obj<F> callback;Obj<R> cached;bool ready=false;bool finished=false;\n};\ntemplate<class T> void rusk_guard_iter(const Obj<T>&,Loc){}\ntemplate<class T> void rusk_guard_iter(const Obj<RuskIter<T>>& it,Loc loc){check_iter(it,loc);}\ntemplate<class I,class F,class R,bool Filter> void rusk_guard_iter(const Obj<RuskLazyIterator<I,F,R,Filter>>& it,Loc loc){if(!it->finished)rusk_guard_iter(it->source,loc);}\n",
+}
+
+extern type<I,F,T,R> Mapped {
+    cpp_name:"RuskLazyIterator<{I},{F},{R},false>",
+    representation:"iterator<R>",
+}
+
+extern fn map<S,F,I,T,R>(source:S,callback:F)->Mapped<I,F,T,R> {
+    code:"Obj<@{Mapped<I,F,T,R>}> @{fn}(Obj<@{S}> source,Obj<@{F}> callback,Loc loc){using Result [[maybe_unused]]=@{nonunit R};[[maybe_unused]]auto has=@{boxed_call __iter_has_next__(I)->Bool};[[maybe_unused]]auto next=@{boxed_call __iter_next__(I)->T};[[maybe_unused]]auto invoke=@{boxed_invoke F(T)->R};return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{boxed_call __iter__(S)->I}(source,loc),callback,{},false,false});}",
+}
+
+extern fn __iter__<I,F,T,R>(it:Mapped<I,F,T,R>)->Mapped<I,F,T,R> {
+    code:"Obj<@{Mapped<I,F,T,R>}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,[[maybe_unused]] Loc loc){return it;}",
+}
+
+extern fn __iter_has_next__<I,F,T,R>(it:Mapped<I,F,T,R>)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,Loc loc){if(it->finished)return make_obj<@{Bool}>(false);bool result=*@{boxed_call __iter_has_next__(I)->Bool}(it->source,loc);if(!result)it->finished=true;return make_obj<@{Bool}>(result);}",
+}
+
+extern fn __iter_next__<I,F,T,R>(it:Mapped<I,F,T,R>)->R {
+    return_abi:"object",
+    code:"Obj<@{nonunit R}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,Loc loc){if(!*@{boxed_call __iter_has_next__(Mapped<I,F,T,R>)->Bool}(it,loc))fail(loc,\"iterator exhausted\");auto value=@{boxed_call __iter_next__(I)->T}(it->source,loc);auto result=@{boxed_invoke F(T)->R}(it->callback,value,loc);rusk_guard_iter(it->source,loc);return result;}",
+}
+
+extern fn copy<I,F,T,R>(it:Mapped<I,F,T,R>)->Mapped<I,F,T,R> {
+    lower_owned:"([&](){auto owner=$0;auto& it=owner;return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(R)->R}(it->cached,$loc):Obj<@{R}>{},it->ready,it->finished});}())",
+    lower_rooted:"([&](){auto& it=$0;return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(R)->R}(it->cached,$loc):Obj<@{R}>{},it->ready,it->finished});}())",
+    code:"Obj<@{Mapped<I,F,T,R>}> @{fn}(Obj<@{Mapped<I,F,T,R>}> it,Loc loc){return make_obj<@{Mapped<I,F,T,R>}>(@{Mapped<I,F,T,R>}{@{owned_call copy(I)->I}(it->source,loc),@{boxed_call copy(F)->F}(it->callback,loc),it->cached?@{boxed_call copy(R)->R}(it->cached,loc):Obj<@{R}>{},it->ready,it->finished});}",
+}
+
+extern fn __assign__<I,F,T,R>(target:Mapped<I,F,T,R>,source:Mapped<I,F,T,R>)->Unit {
+    code:"void @{fn}(Obj<@{Mapped<I,F,T,R>}> target,Obj<@{Mapped<I,F,T,R>}> source,Loc loc){auto snapshot=@{rooted_call copy(Mapped<I,F,T,R>)->Mapped<I,F,T,R>}(source,loc);*target=std::move(*snapshot);}",
+}
+
+extern type<I,F,T> Filtered {
+    cpp_name:"RuskLazyIterator<{I},{F},{T},true>",
+    representation:"iterator<T>",
+}
+
+extern fn filter<S,F,I,T>(source:S,callback:F)->Filtered<I,F,T> {
+    code:"Obj<@{Filtered<I,F,T>}> @{fn}(Obj<@{S}> source,Obj<@{F}> callback,Loc loc){using Result [[maybe_unused]]=@{nonunit T};[[maybe_unused]]auto has=@{boxed_call __iter_has_next__(I)->Bool};[[maybe_unused]]auto next=@{boxed_call __iter_next__(I)->T};[[maybe_unused]]auto invoke=@{boxed_invoke F(T)->Bool};return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{boxed_call __iter__(S)->I}(source,loc),callback,{},false,false});}",
+}
+
+extern fn __iter__<I,F,T>(it:Filtered<I,F,T>)->Filtered<I,F,T> {
+    code:"Obj<@{Filtered<I,F,T>}> @{fn}(Obj<@{Filtered<I,F,T>}> it,[[maybe_unused]] Loc loc){return it;}",
+}
+
+extern fn __iter_has_next__<I,F,T>(it:Filtered<I,F,T>)->Bool {
+    code:"Obj<@{Bool}> @{fn}(Obj<@{Filtered<I,F,T>}> it,Loc loc){if(it->finished)return make_obj<@{Bool}>(false);rusk_guard_iter(it->source,loc);if(it->ready)return make_obj<@{Bool}>(true);while(*@{boxed_call __iter_has_next__(I)->Bool}(it->source,loc)){auto value=@{boxed_call __iter_next__(I)->T}(it->source,loc);auto accepted=@{boxed_invoke F(T)->Bool}(it->callback,value,loc);rusk_guard_iter(it->source,loc);if(*accepted){it->cached=value;it->ready=true;return make_obj<@{Bool}>(true);}}it->finished=true;return make_obj<@{Bool}>(false);}",
+}
+
+extern fn __iter_next__<I,F,T>(it:Filtered<I,F,T>)->T {
+    return_abi:"object",
+    code:"Obj<@{nonunit T}> @{fn}(Obj<@{Filtered<I,F,T>}> it,Loc loc){if(!*@{boxed_call __iter_has_next__(Filtered<I,F,T>)->Bool}(it,loc))fail(loc,\"iterator exhausted\");auto value=it->cached;it->cached.reset();it->ready=false;return value;}",
+}
+
+extern fn copy<I,F,T>(it:Filtered<I,F,T>)->Filtered<I,F,T> {
+    lower_owned:"([&](){auto owner=$0;auto& it=owner;return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(T)->T}(it->cached,$loc):Obj<@{T}>{},it->ready,it->finished});}())",
+    lower_rooted:"([&](){auto& it=$0;return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I}(it->source,$loc),@{boxed_call copy(F)->F}(it->callback,$loc),it->cached?@{boxed_call copy(T)->T}(it->cached,$loc):Obj<@{T}>{},it->ready,it->finished});}())",
+    code:"Obj<@{Filtered<I,F,T>}> @{fn}(Obj<@{Filtered<I,F,T>}> it,Loc loc){return make_obj<@{Filtered<I,F,T>}>(@{Filtered<I,F,T>}{@{owned_call copy(I)->I}(it->source,loc),@{boxed_call copy(F)->F}(it->callback,loc),it->cached?@{boxed_call copy(T)->T}(it->cached,loc):Obj<@{T}>{},it->ready,it->finished});}",
+}
+
+extern fn __assign__<I,F,T>(target:Filtered<I,F,T>,source:Filtered<I,F,T>)->Unit {
+    code:"void @{fn}(Obj<@{Filtered<I,F,T>}> target,Obj<@{Filtered<I,F,T>}> source,Loc loc){auto snapshot=@{rooted_call copy(Filtered<I,F,T>)->Filtered<I,F,T>}(source,loc);*target=std::move(*snapshot);}",
+}

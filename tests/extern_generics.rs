@@ -1685,3 +1685,26 @@ struct Row{value:Int;}
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("tuple fields cannot select a variant"));
 }
+
+#[test]
+fn native_nonunit_references_check_logical_types_when_instantiated() {
+    let definitions = r#"extern fn value<T>(x:T)->T{code:"Obj<@{nonunit T}> @{fn}(Obj<@{T}> x,Loc){return x;}",}"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(&format!("{definitions}wt value(3);")).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"3\n");
+    }
+    for source in [
+        format!("{definitions}value(wt_unit());fn wt_unit(){{}}"),
+        "extern fn bad<T>(x:T){code:\"@{nonunit Unknown}\",}".into(),
+        "extern type<T> Bad{cpp_name:\"@{nonunit T}\",}".into(),
+    ] {
+        let out = Case::new(&source).compile();
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("main.rusk:"));
+    }
+}

@@ -377,6 +377,7 @@ extern fn __ge__(a: Str, b: Str) -> Bool {
 extern type Range { cpp_name: "RuskRange", }
 extern type RangeIter { cpp_name: "RuskRangeIter", representation: "iterator<Int>", }
 extern fn copy(it: RangeIter) -> RangeIter {
+    lower_owned: "make_obj<RuskRangeIter>(*$0)",
     effects: "read_fresh",
     code: "Obj<RuskRangeIter> copy_range_iterator(Obj<RuskRangeIter> it, [[maybe_unused]] Loc loc) { return make_obj<RuskRangeIter>(*it); }",
     cpp_name: "copy_range_iterator",

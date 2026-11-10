@@ -88,6 +88,7 @@ extern fn __iter__<T>(a: Vec<T>) -> Iter<Vec<T>> {
 
 // Iterator copies preserve position and share the owner, regardless of T.
 extern fn copy<T>(it: Iter<Vec<T>>) -> Iter<Vec<T>> {
+    lower_owned: "make_obj<@{Iter<Vec<T>>}>(*$0)",
     code: "Obj<@{Iter<Vec<T>>}> @{fn}(Obj<@{Iter<Vec<T>>}> it, [[maybe_unused]] Loc loc) { return make_obj<@{Iter<Vec<T>>}>(*it); }",
 }
 

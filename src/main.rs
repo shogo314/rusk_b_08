@@ -140,6 +140,10 @@ fn run() -> Result<(), String> {
                 include_str!("../lib/hash_collections.rusk"),
                 "<stdlib/hash_collections.rusk>",
             )?),
+            compiler::Source::standard(parse(
+                include_str!("../lib/lazy_iterators.rusk"),
+                "<stdlib/lazy_iterators.rusk>",
+            )?),
             compiler::Source::standard(algorithms),
             compiler::Source::user(source),
         ],

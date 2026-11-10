@@ -18,6 +18,14 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
+    'lazy_pipeline': ('let values:=[0;1000];for i in 0..1000{values[i]=i;}let total:=0;'
+        'for round in 0..200{total+=values.filter((x:Int)=>x%2==0).map((x:Int)=>x*3).fold(0,(a:Int,b:Int)=>a+b);}wt total;'),
+    'lazy_cached_copy': ('let values:=[0;1000];for i in 0..1000{values[i]=i;}let total:=0;'
+        'for round in 0..200{let it:=values.filter((x:Int)=>x%2==0);__iter_has_next__(it);let duplicate=it;'
+        'total+=it.fold(0,(a:Int,b:Int)=>a+b)+duplicate.fold(0,(a:Int,b:Int)=>a+b);}wt total;'),
+    'lazy_state_assignment': ('fn even(x:Int)->Bool{return x%2==0;}let values:=[1,2,3,4];'
+        'let it:=values.filter(even);__iter_has_next__(it);let saved=it;let total:=0;'
+        'for round in 0..100000{it=saved;total+=__iter_next__(it);}wt total;'),
     'dictionary_copy_assignment': ('let d:=Dict::<Int,Vec<Int>>();for i in 0..500{d.set(i,[i,i+1]);}'
         'let target:=Dict::<Int,Vec<Int>>();let total:=0;for round in 0..100{let duplicate=d;'
         'target=duplicate;total+=target.get(round%500)?![0];}wt total,target.len();'),

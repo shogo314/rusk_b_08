@@ -2061,3 +2061,89 @@ fn hash_constructor_functions_allow_ordinary_user_overloads() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("duplicate type"));
     }
 }
+
+#[test]
+fn lazy_declarations_preserve_cached_values_captures_assignment_and_unit_inputs() {
+    let case = Case::new(include_str!("../examples/beta08/lazy_iterators.rusk"));
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = case.run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            out.stdout,
+            b"0\nYes 2\nYes 2\n2 2 2\n4 4\n4 4\n2 2 4\n6 8 6 8\na ab!\nYes\n"
+        );
+    }
+}
+
+#[test]
+fn lazy_algorithms_and_types_work_under_unrelated_user_names() {
+    let declarations = include_str!("../lib/lazy_iterators.rusk")
+        .split("\n}\n")
+        .filter(|part| !part.contains("extern symbol"))
+        .collect::<Vec<_>>()
+        .join("\n}\n")
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("representation:") && !line.starts_with("lower_")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("Mapped", "Transform")
+        .replace("Filtered", "Select")
+        .replace("extern fn map<", "extern fn convert_values<")
+        .replace("extern fn filter<", "extern fn pick_values<");
+    let source = format!(
+        r#"{declarations}
+let source:=[1,2,3,4];let visits:=0;
+let filtered:=pick_values(source,(x:Int)=>{{visits+=1;x%2==0}});
+let mapped:=convert_values(filtered,(x:Int)=>x*3);let snapshot=mapped;
+wt visits,mapped.to_vec(),visits,snapshot.to_vec(),visits;
+"#
+    );
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(&source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"0 6 12 4 6 12 4\n");
+    }
+}
+
+#[test]
+fn lazy_creation_does_not_request_unused_value_copies_and_rejects_unit_results() {
+    let source = r#"
+extern type Token{cpp_name:"std::int64_t",}
+extern fn token()->Token{cpp_name:"lazy_token",code:"Obj<std::int64_t> lazy_token(Loc){return make_obj<std::int64_t>(7);}",}
+extern fn number(x:Token)->Int{cpp_name:"lazy_token_number",code:"Obj<std::int64_t> lazy_token_number(Obj<std::int64_t> x,Loc){return x;}",}
+let values:=[token()];let mapped:=values.map((x:Token)=>x);
+wt number(mapped.to_vec()[0]);
+"#;
+    for options in [vec![], vec!["--no-opt"]] {
+        let out = Case::new(source).run_with_options("", &options);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"7\n");
+    }
+    for source in [
+        "let unused:=[1].map((x:Int)=>{});",
+        "let values:Vec<Unit>:=[];let unused:=values.filter((value:Unit)=>true);",
+    ] {
+        let out = Case::new(source).compile();
+        assert!(!out.status.success());
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            error.contains("native nonunit reference") && error.contains("main.rusk:"),
+            "{error}"
+        );
+    }
+}

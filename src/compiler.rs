@@ -14,9 +14,9 @@ mod expressions;
 mod externs;
 mod flow;
 mod generics;
-mod higher_order;
 mod input;
 mod ir_types;
+mod native_functions;
 mod patterns;
 mod records;
 mod tuples;
@@ -93,7 +93,6 @@ pub struct Compiler {
     callables: BTreeMap<String, callables::Callable>,
     function_types: BTreeMap<usize, String>,
     lambda_types: BTreeMap<String, String>,
-    iterator_types: BTreeMap<String, higher_order::IteratorType>,
     lambda_counter: usize,
     capture_contexts: Vec<callables::CaptureContext>,
     current_function: Option<usize>,
@@ -760,7 +759,7 @@ impl Compiler {
         {
             return self.read_function(ty, args.len(), span).map(Some);
         }
-        self.higher_order(name, args, span)
+        Ok(None)
     }
     fn call(
         &mut self,

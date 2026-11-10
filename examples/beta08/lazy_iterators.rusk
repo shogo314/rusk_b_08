@@ -1,0 +1,16 @@
+let checks:=0;let values:=[1,2,3,4];
+let selected:=values.filter((x:Int)=>{checks+=1;x%2==0});wt checks;
+wt __iter_has_next__(selected),checks;wt __iter_has_next__(selected),checks;
+let alias:=selected;let copied=selected;wt __iter_next__(alias),__iter_next__(copied),checks;
+wt selected.to_vec(),checks;wt copied.to_vec(),checks;
+fn twice(x:Int)->Int{return x*2;}
+let mapped:=values.map(twice);let snapshot=mapped;
+wt __iter_next__(mapped),__iter_next__(snapshot),__iter_next__(snapshot);
+let outer:=mapped;mapped=snapshot;wt outer.to_vec(),snapshot.to_vec();
+let text:="ab";let held:Char;
+{let chars:=[text[0],text[1]];let source:=chars.filter((ch:Char)=>true);
+ __iter_has_next__(source);let detached=source;held:=__iter_next__(detached);}
+text.push_back('!');wt held,text;
+extern fn Unit()->Unit{return_abi:"object",cpp_name:"lazy_unit",code:"Obj<Unit> lazy_unit(Loc){return make_obj<Unit>(Unit{});}",}
+extern fn same(a:Unit,b:Unit)->Bool{cpp_name:"lazy_same_unit",code:"Obj<bool> lazy_same_unit(Obj<Unit> a,Obj<Unit> b,Loc){return make_obj<bool>(a==b);}",}
+let unit:=Unit();let units:=[unit];wt units.map((value:Unit)=>same(unit,value)).to_vec();

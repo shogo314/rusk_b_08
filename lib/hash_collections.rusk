@@ -167,6 +167,7 @@ extern fn __iter_next__<K,V>(it:Iter<Dict<K,V>>)->Tuple<K,V> {
 }
 
 extern fn copy<K,V>(it:Iter<Dict<K,V>>)->Iter<Dict<K,V>> {
+    lower_owned:"([&](){rusk_guard_iter($0,$loc);auto result=make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}($0->owner));if($0->finished)result->finished=true;else result->position=$0->position;return result;}())",
     code:"Obj<@{Iter<Dict<K,V>>}> @{fn}(Obj<@{Iter<Dict<K,V>>}> it,Loc loc){rusk_guard_iter(it,loc);auto result=make_obj<@{Iter<Dict<K,V>>}>(@{Iter<Dict<K,V>>}(it->owner));if(it->finished)result->finished=true;else result->position=it->position;return result;}",
 }
 
@@ -193,6 +194,7 @@ extern fn __iter_next__<K>(it:Iter<Set<K>>)->K {
 }
 
 extern fn copy<K>(it:Iter<Set<K>>)->Iter<Set<K>> {
+    lower_owned:"([&](){rusk_guard_iter($0,$loc);auto result=make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}($0->owner));if($0->finished)result->finished=true;else result->position=$0->position;return result;}())",
     code:"Obj<@{Iter<Set<K>>}> @{fn}(Obj<@{Iter<Set<K>>}> it,Loc loc){rusk_guard_iter(it,loc);auto result=make_obj<@{Iter<Set<K>>}>(@{Iter<Set<K>>}(it->owner));if(it->finished)result->finished=true;else result->position=it->position;return result;}",
 }
 

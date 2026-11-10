@@ -50,6 +50,7 @@ pub(super) enum Part {
     Index(String),
     Text(String),
     Type(String),
+    NonUnitType(String),
     ReturnType(String),
     Finish(String),
     SelfName,
@@ -161,6 +162,12 @@ fn reference(text: &str, body: bool) -> Result<Part, String> {
     }
     if body && text == "fn" {
         return Ok(Part::SelfName);
+    }
+    if body && let Some(ty) = text.strip_prefix("nonunit ") {
+        if !valid_type(ty) {
+            return Err("invalid native nonunit type reference".into());
+        }
+        return Ok(Part::NonUnitType(ty.into()));
     }
     if body && let Some(ty) = text.strip_prefix("return ") {
         if !valid_type(ty) {
